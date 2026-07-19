@@ -3286,7 +3286,7 @@
         : selectedChannel
           ? `#${selectedChannel.name}`
           : undefined}
-      externalURL={selectedChannel?.external_url}
+      externalURL={selectedDirect ? undefined : selectedChannel?.external_url}
       {connected}
       platform={desktop.platform}
       {searchQuery}

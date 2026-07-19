@@ -33,7 +33,7 @@
     onPinnedItems,
   }: Props = $props();
 
-  const externalHref = $derived(safeExternalChannelURL(selectedChannel?.external_url));
+  const externalHref = $derived(selectedDirect ? undefined : safeExternalChannelURL(selectedChannel?.external_url));
 </script>
 
 <header class="topbar">

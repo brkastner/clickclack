@@ -2460,7 +2460,6 @@ components:
           default: public
         external_managed:
           type: boolean
-          default: false
         external_ref:
           type: string
           description: Opaque identity in the external managing system.
@@ -2515,8 +2514,11 @@ components:
           type: string
           description: Opaque external identity. Send an empty string to clear it.
         external_url:
-          type: string
-          format: uri
+          oneOf:
+            - type: string
+              format: uri
+            - type: string
+              maxLength: 0
           description: External deep link. Send an empty string to clear it.
         sidebar_section:
           type: string

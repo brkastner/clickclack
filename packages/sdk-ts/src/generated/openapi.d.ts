@@ -1535,8 +1535,7 @@ export interface components {
       name: string;
       /** @default public */
       kind: string;
-      /** @default false */
-      external_managed: boolean;
+      external_managed?: boolean;
       /** @description Opaque identity in the external managing system. */
       external_ref?: string;
       /**
@@ -1569,10 +1568,7 @@ export interface components {
       external_managed?: boolean;
       /** @description Opaque external identity. Send an empty string to clear it. */
       external_ref?: string;
-      /**
-       * Format: uri
-       * @description External deep link. Send an empty string to clear it.
-       */
+      /** @description External deep link. Send an empty string to clear it. */
       external_url?: string;
       /** @description Sidebar grouping label. Send an empty string to clear it. */
       sidebar_section?: string;
