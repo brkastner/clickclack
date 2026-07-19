@@ -281,6 +281,7 @@ func TestAccessJWKSCacheRefetchesUnknownAndExpiredKeys(t *testing.T) {
 	if requests.Load() != 1 {
 		t.Fatalf("cached key made %d JWKS requests, want 1", requests.Load())
 	}
+	now = now.Add(accessUnknownKidFloor)
 	mu.Lock()
 	keys = map[string]*rsa.PublicKey{"second": &secondKey.PublicKey}
 	mu.Unlock()
@@ -299,6 +300,29 @@ func TestAccessJWKSCacheRefetchesUnknownAndExpiredKeys(t *testing.T) {
 	}
 	if requests.Load() != 3 {
 		t.Fatalf("expired cache requests = %d, want 3", requests.Load())
+	}
+}
+
+func TestAccessJWKSUnknownKidRefreshFloor(t *testing.T) {
+	key := newAccessTestKey(t)
+	jwks, requests := newAccessTestJWKSServer(t, func() map[string]*rsa.PublicKey {
+		return map[string]*rsa.PublicKey{"known": &key.PublicKey}
+	})
+	now := time.Now().UTC().Truncate(time.Second)
+	verifier := newAccessVerifier(AccessConfig{TeamDomain: jwks.URL, Audience: "test-aud", HTTPClient: jwks.Client(), Now: func() time.Time { return now }})
+	claims := jwt.MapClaims{
+		"iss": jwks.URL, "aud": "test-aud",
+		"exp": now.Add(time.Hour).Unix(), "iat": now.Add(-time.Minute).Unix(),
+		"email": "cache@example.com",
+	}
+	assertion := signAccessTestToken(t, key, "unknown", jwt.SigningMethodRS256, claims)
+	for attempt := 1; attempt <= 2; attempt++ {
+		if _, err := verifier.verify(context.Background(), assertion); err == nil {
+			t.Fatalf("unknown kid verification %d unexpectedly succeeded", attempt)
+		}
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("two unknown-kid verifications made %d JWKS requests, want 1", requests.Load())
 	}
 }
 

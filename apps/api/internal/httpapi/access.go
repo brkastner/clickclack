@@ -27,6 +27,7 @@ const (
 	accessMaxCacheTTL     = 24 * time.Hour
 	accessMaxJWKSBytes    = 1 << 20
 	accessClockLeeway     = 30 * time.Second
+	accessUnknownKidFloor = 30 * time.Second
 )
 
 type AccessConfig struct {
@@ -42,9 +43,10 @@ type accessVerifier struct {
 	httpClient *http.Client
 	now        func() time.Time
 
-	mu      sync.Mutex
-	keys    map[string]*rsa.PublicKey
-	expires time.Time
+	mu        sync.Mutex
+	keys      map[string]*rsa.PublicKey
+	expires   time.Time
+	lastFetch time.Time
 }
 
 type accessClaims struct {
@@ -175,12 +177,17 @@ func (v *accessVerifier) key(ctx context.Context, kid string) (*rsa.PublicKey, e
 			return key, nil
 		}
 	}
+	if v.keys[kid] == nil && !v.lastFetch.IsZero() && now.Sub(v.lastFetch) < accessUnknownKidFloor {
+		// Bound upstream fetch amplification from forged assertions.
+		return nil, errors.New("access assertion key not found")
+	}
 	keys, expires, err := v.fetchKeys(ctx, now)
 	if err != nil {
 		return nil, err
 	}
 	v.keys = keys
 	v.expires = expires
+	v.lastFetch = now
 	key := keys[kid]
 	if key == nil {
 		return nil, errors.New("access assertion key not found")

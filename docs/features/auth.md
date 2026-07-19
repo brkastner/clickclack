@@ -112,10 +112,13 @@ the Access assertion header is ignored.
 For a request without a valid ClickClack session cookie, the server verifies
 the `Cf-Access-Jwt-Assertion` as an RS256 JWT. It fetches keys only from
 `<team-domain>/cdn-cgi/access/certs`, does not follow redirects, caches the JWKS
-with bounded expiry, and refreshes immediately when a token names an unknown
-key ID. The issuer must exactly match the configured team domain, the audience
+with bounded expiry, and refreshes an unknown key ID at most once every 30
+seconds. The issuer must exactly match the configured team domain, the audience
 must include the configured tag, expiration and issued-at claims must be valid,
 and the email claim is required.
+
+Cloudflare Access service tokens produce assertions without an email claim, so
+this path rejects them. Automation must use ClickClack bot tokens instead.
 
 After verification, ClickClack resolves or creates the human user by normalized
 email and joins the default workspace. The first Access user becomes its owner;
