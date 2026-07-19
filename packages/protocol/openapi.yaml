@@ -2517,6 +2517,7 @@ components:
           oneOf:
             - type: string
               format: uri
+              minLength: 1
             - type: string
               maxLength: 0
           description: External deep link. Send an empty string to clear it.
