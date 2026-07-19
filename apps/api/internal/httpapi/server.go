@@ -1460,6 +1460,9 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if strings.HasPrefix(r.URL.Path, "/embed/") {
+		// frame-ancestors is deliberately independent of cookie SameSite policy:
+		// allowing a cross-site ancestor never loosens cookies, so such embeds can
+		// render signed-out. Documented in docs/features/embedding.md.
 		ancestors := append([]string{"'self'"}, s.embedFrameAncestors...)
 		w.Header().Set("Content-Security-Policy", "frame-ancestors "+strings.Join(ancestors, " "))
 	}

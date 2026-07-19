@@ -231,6 +231,9 @@
     return messageID === root.id || replies.some((reply) => reply.id === messageID);
   }
 
+  // Exactly the event types that change what ThreadPanel renders: replies,
+  // bodies, deletions. Reactions and thread-state chips are not rendered in
+  // this panel, and reconnects already trigger a full refresh in connectSocket.
   function handleRealtimeEvent(event: RealtimeEvent) {
     if (
       eventBelongsToThread(event) &&
