@@ -125,8 +125,13 @@
       const data = await api<{ conversations: DirectConversation[] }>(
         `/api/dms?workspace_id=${encodeURIComponent(target.workspace_id)}`,
       );
-      const conversation = data.conversations.find((item) => item.id === target.parent_id);
-      if (!conversation) throw new APIError(404, "Thread conversation not found");
+      let conversation = data.conversations.find((item) => item.id === target.parent_id);
+      if (!conversation) {
+        const hidden = await api<{ conversation: DirectConversation }>(
+          `/api/dms/${encodeURIComponent(target.parent_id)}`,
+        );
+        conversation = hidden.conversation;
+      }
       directConversation = conversation;
       parentLabel = dmTitle(conversation, currentUser.id) || "Direct message";
       return;
@@ -438,8 +443,14 @@
   }
 
   .embed-shell :global(.thread) {
+    position: relative;
+    inset: auto;
+    z-index: auto;
     height: 100%;
+    width: 100%;
+    max-width: none;
     border-left: 0;
+    box-shadow: none;
   }
 
   .embed-shell :global(.thread > header) {

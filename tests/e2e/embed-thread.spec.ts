@@ -26,9 +26,13 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
     root: { route_id: string };
   };
 
+  await page.setViewportSize({ width: 800, height: 700 });
   await page.goto(`/embed/thread/${workspace.route_id}/${root.route_id}`);
 
   await expect(page.getByLabel("Embedded thread")).toBeVisible();
+  const threadBounds = await page.getByLabel("Embedded thread").boundingBox();
+  expect(threadBounds?.x).toBe(0);
+  expect(threadBounds?.width).toBe(800);
   await expect(page.locator(".thread-root .markdown")).toContainText(message.body);
   await expect(page.getByText(`#${channel.name}`, { exact: true })).toBeVisible();
   const openLink = page.getByRole("link", { name: "Open in ClickClack" });
