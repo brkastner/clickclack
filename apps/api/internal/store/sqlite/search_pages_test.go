@@ -314,6 +314,13 @@ func TestSearchWorkspaceFTSMigrationPreservesAndScopesRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Message creation now records mention recipients on events. Apply that
+	// independent schema addition while leaving the FTS migration under test
+	// unapplied, and record it so Migrate does not run it twice below.
+	applySQLiteMigrations(t, ctx, st, "0039_mentions_and_notifications.sql")
+	if _, err := st.db.ExecContext(ctx, `INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, "0039_mentions_and_notifications.sql", now()); err != nil {
+		t.Fatal(err)
+	}
 
 	owner, err := st.EnsureBootstrap(ctx, "Migration Owner", "search-migration@example.com")
 	if err != nil {
@@ -358,7 +365,6 @@ func TestSearchWorkspaceFTSMigrationPreservesAndScopesRows(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}

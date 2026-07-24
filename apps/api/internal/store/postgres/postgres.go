@@ -780,7 +780,11 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if input.TurnID != "" {
 		eventFields["turn_id"] = input.TurnID
 	}
-	event, err := insertEvent(ctx, tx, workspaceID, input.ChannelID, "message.created", &seq, eventPayload(ctx, eventFields, nonce))
+	mentionedIDs, err := mentionedUserIDs(ctx, qtx, workspaceID, body)
+	if err != nil {
+		return store.Message{}, store.Event{}, err
+	}
+	event, err := insertEventWithRecipientsAndMentions(ctx, tx, workspaceID, input.ChannelID, "message.created", &seq, eventPayload(ctx, eventFields, nonce), nil, mentionedIDs)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
@@ -966,7 +970,11 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
-	replyPayload := eventPayload(ctx, map[string]string{"message_id": id, "root_message_id": root.ID}, nonce)
+	replyPayload := eventPayload(ctx, map[string]string{
+		"message_id":      id,
+		"root_message_id": root.ID,
+		"author_id":       input.AuthorID,
+	}, nonce)
 	statePayload := map[string]string{"root_message_id": root.ID}
 	var recipients []string
 	if root.DirectConversationID != "" {
@@ -977,7 +985,14 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 			return store.Message{}, store.ThreadState{}, nil, err
 		}
 	}
-	replyEvent, err := insertEventWithRecipients(ctx, tx, root.WorkspaceID, root.ChannelID, "thread.reply_created", nil, replyPayload, recipients)
+	mentionedIDs, err := mentionedUserIDs(ctx, qtx, root.WorkspaceID, body)
+	if err != nil {
+		return store.Message{}, store.ThreadState{}, nil, err
+	}
+	// recipients is a privacy boundary for direct conversations, not a thread
+	// follower list. Mention metadata must never grant a workspace user access
+	// to a DM they are not already participating in.
+	replyEvent, err := insertEventWithRecipientsAndMentions(ctx, tx, root.WorkspaceID, root.ChannelID, "thread.reply_created", nil, replyPayload, recipients, mentionedIDs)
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}

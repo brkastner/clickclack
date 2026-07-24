@@ -203,6 +203,8 @@ func (s *Server) Handler() http.Handler {
 		r.Patch("/channels/{channel_id}", s.updateChannel)
 		r.Get("/channels/{channel_id}/messages", s.listMessages)
 		r.Post("/channels/{channel_id}/messages", s.createMessage)
+		r.Get("/channels/{channel_id}/notification-settings", s.getChannelNotificationSettings)
+		r.Patch("/channels/{channel_id}/notification-settings", s.updateChannelNotificationSettings)
 		r.Post("/channels/{channel_id}/read", s.markChannelRead)
 		r.Get("/messages/by-nonce", s.getMessageByNonce)
 		r.Get("/messages/{message_id}", s.getMessage)
@@ -982,7 +984,7 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {
-			s.notifyMessageCreated(r.Context(), message)
+			s.notifyMessageCreated(r.Context(), message, event.MentionedUserIDs)
 		}
 	}
 	writeMessageCreateResult(w, message, event, err)
@@ -1147,7 +1149,7 @@ func (s *Server) createThreadReply(w http.ResponseWriter, r *http.Request) {
 	message, state, events, err := s.store.CreateThreadReply(r.Context(), store.CreateThreadReplyInput{RootMessageID: chi.URLParam(r, "message_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce})
 	if err == nil && len(events) > 0 {
 		s.publishEvents(r.Context(), events)
-		s.notifyMessageCreated(r.Context(), message)
+		s.notifyMessageCreated(r.Context(), message, messageEventMentionedUserIDs(events))
 	}
 	writeThreadReplyCreateResult(w, message, state, events, err)
 }

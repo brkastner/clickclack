@@ -1068,6 +1068,35 @@ paths:
           description: Existing message returned for an idempotent nonce replay
         "201":
           description: Created message
+  /api/channels/{channel_id}/notification-settings:
+    get:
+      operationId: getChannelNotificationSettings
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+      responses:
+        "200":
+          description: Current user's notification preference for the channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelNotificationSettings"
+    patch:
+      operationId: updateChannelNotificationSettings
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChannelNotificationSettingsRequest"
+      responses:
+        "200":
+          description: Updated notification preference for the channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelNotificationSettings"
   /api/channels/{channel_id}/read:
     post:
       operationId: markChannelRead
@@ -2901,6 +2930,25 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        mentioned_user_ids:
+          type: array
+          items:
+            type: string
+          description: Workspace user IDs explicitly mentioned by a message event.
+    ChannelNotificationSettings:
+      type: object
+      required: [preference]
+      properties:
+        preference:
+          type: string
+          enum: [all, mentions, muted]
+    UpdateChannelNotificationSettingsRequest:
+      type: object
+      required: [preference]
+      properties:
+        preference:
+          type: string
+          enum: [all, mentions, muted]
     ReactionMutationResponse:
       type: object
       required: [event, reactions]

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -52,6 +53,12 @@ var ErrSetupCodeInvalid = errors.New("setup code is invalid or expired")
 // ErrUploadQuotaExceeded is returned when a user has exhausted their upload
 // budget in a workspace.
 var ErrUploadQuotaExceeded = errors.New("upload quota exceeded")
+
+const (
+	ChannelNotifyAll      = "all"
+	ChannelNotifyMentions = "mentions"
+	ChannelNotifyMuted    = "muted"
+)
 
 // ErrUploadNonceConflict is returned when a client reuses an upload nonce in
 // another workspace.
@@ -196,6 +203,12 @@ type UpdateAppearancePreferencesInput struct {
 	Patch  AppearancePreferencesPatch
 }
 
+type ChannelNotificationInput struct {
+	ChannelID  string
+	UserID     string
+	Preference string
+}
+
 type PushNotificationRecipient struct {
 	UserID          string
 	DisplayName     string
@@ -310,6 +323,7 @@ type Event struct {
 	PayloadJSON      string   `json:"-"`
 	Payload          any      `json:"payload"`
 	RecipientUserIDs []string `json:"-"`
+	MentionedUserIDs []string `json:"mentioned_user_ids,omitempty"`
 }
 
 type CreateUserInput struct {
@@ -639,6 +653,79 @@ type BotTokenAuth struct {
 	TokenID     string
 	WorkspaceID string
 	Scopes      []string
+}
+
+// ParseMessageMentions returns unique, normalized handles referenced with an
+// @ at a token boundary. Email addresses and Markdown link labels are ignored.
+func ParseMessageMentions(body string) []string {
+	seen := make(map[string]struct{})
+	mentions := make([]string, 0)
+	for i := 0; i < len(body); i++ {
+		if hasHTTPURLPrefix(body[i:]) {
+			for i < len(body) && body[i] != ' ' && body[i] != '\n' && body[i] != '\r' && body[i] != '\t' {
+				i++
+			}
+			i--
+			continue
+		}
+		if body[i] == '[' {
+			if linkEnd := markdownLinkEnd(body, i); linkEnd >= 0 {
+				i = linkEnd
+				continue
+			}
+		}
+		if body[i] != '@' || (i > 0 && !isMentionBoundary(body[i-1])) {
+			continue
+		}
+		j := i + 1
+		for j < len(body) && isMentionChar(body[j]) {
+			j++
+		}
+		if j == i+1 {
+			continue
+		}
+		handle := strings.ToLower(body[i+1 : j])
+		if _, exists := seen[handle]; exists {
+			continue
+		}
+		seen[handle] = struct{}{}
+		mentions = append(mentions, handle)
+		i = j - 1
+	}
+	return mentions
+}
+
+func hasHTTPURLPrefix(value string) bool {
+	return (len(value) >= len("http://") && strings.EqualFold(value[:len("http://")], "http://")) ||
+		(len(value) >= len("https://") && strings.EqualFold(value[:len("https://")], "https://"))
+}
+
+func markdownLinkEnd(body string, labelStart int) int {
+	labelEndOffset := strings.IndexByte(body[labelStart+1:], ']')
+	if labelEndOffset < 0 {
+		return -1
+	}
+	labelEnd := labelStart + 1 + labelEndOffset
+	if labelEnd+1 >= len(body) || body[labelEnd+1] != '(' {
+		return -1
+	}
+	targetStart := labelEnd + 2
+	targetEndOffset := strings.IndexByte(body[targetStart:], ')')
+	if targetEndOffset < 0 {
+		return -1
+	}
+	return targetStart + targetEndOffset
+}
+
+func isMentionBoundary(char byte) bool {
+	return !isMentionChar(char) && char != '@'
+}
+
+func isMentionChar(char byte) bool {
+	return char >= 'a' && char <= 'z' ||
+		char >= 'A' && char <= 'Z' ||
+		char >= '0' && char <= '9' ||
+		char == '_' || char == '-'
 }
 
 type UpsertIdentityUserInput struct {
@@ -1060,7 +1147,9 @@ type Store interface {
 	UpdateNotificationSettings(ctx context.Context, input UpdateNotificationSettingsInput) (NotificationSettings, error)
 	GetAppearancePreferences(ctx context.Context, userID string) (*AppearancePreferences, error)
 	UpdateAppearancePreferences(ctx context.Context, input UpdateAppearancePreferencesInput) (*AppearancePreferences, error)
-	ListPushNotificationRecipients(ctx context.Context, messageID string) ([]PushNotificationRecipient, error)
+	ListPushNotificationRecipients(ctx context.Context, messageID string, mentionedUserIDs []string) ([]PushNotificationRecipient, error)
+	UpsertChannelNotificationSettings(ctx context.Context, input ChannelNotificationInput) error
+	GetChannelNotificationPreference(ctx context.Context, channelID, userID string) (string, error)
 	AddWorkspaceMember(ctx context.Context, workspaceID, userID, role string) error
 	EnsureDefaultWorkspaceMember(ctx context.Context, userID string) (Workspace, error)
 	EnsureDefaultGuestWorkspaceMember(ctx context.Context, userID, role string) (Workspace, error)

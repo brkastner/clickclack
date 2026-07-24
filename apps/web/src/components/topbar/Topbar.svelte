@@ -1,7 +1,7 @@
 <script lang="ts">
   import { dmTitle } from "../../lib/chat/people";
   import { channelDisplayTitle, safeExternalChannelURL } from "../../lib/chat/channels";
-  import type { Channel, DirectConversation } from "../../lib/types";
+  import type { Channel, ChannelNotificationPreference, DirectConversation } from "../../lib/types";
 
   type Props = {
     selectedDirect?: DirectConversation;
@@ -11,12 +11,21 @@
     searchQuery: string;
     sidePanelOpen: boolean;
     threadOpen: boolean;
+    channelNotifPreference?: ChannelNotificationPreference | null;
+    channelNotifSaving?: boolean;
     onSearchQuery: (value: string) => void;
     onSearch: () => void;
     onResetSearch: () => void;
     onToggleThread: () => void;
     onPinnedItems: () => void;
+    onToggleChannelNotifications?: () => void;
   };
+
+  function notifTitle(pref: ChannelNotificationPreference): string {
+    if (pref === "muted") return "Channel muted - click to change";
+    if (pref === "mentions") return "Notifications for @mentions only - click to change";
+    return "All notifications enabled - click to change";
+  }
 
   let {
     selectedDirect,
@@ -26,11 +35,14 @@
     searchQuery,
     sidePanelOpen,
     threadOpen,
+    channelNotifPreference = undefined,
+    channelNotifSaving = false,
     onSearchQuery,
     onSearch,
     onResetSearch,
     onToggleThread,
     onPinnedItems,
+    onToggleChannelNotifications = () => {},
   }: Props = $props();
 
   const externalHref = $derived(selectedDirect ? undefined : safeExternalChannelURL(selectedChannel?.external_url));
@@ -42,6 +54,25 @@
       <h1 class="with-glyph dm">{`@${dmTitle(selectedDirect, currentUserID)}`}</h1>
     {:else if selectedChannel}
       <h1 class="with-glyph channel">{`#${channelDisplayTitle(selectedChannel)}`}</h1>
+      {#if channelNotifPreference}
+        <button
+          type="button"
+          class="notif-toggle"
+          title={notifTitle(channelNotifPreference)}
+          aria-label={notifTitle(channelNotifPreference)}
+          aria-busy={channelNotifSaving}
+          disabled={channelNotifSaving}
+          onclick={onToggleChannelNotifications}
+        >
+          {#if channelNotifPreference === "muted"}
+            <span aria-hidden="true">🔕</span>
+          {:else if channelNotifPreference === "mentions"}
+            <span aria-hidden="true">@</span>
+          {:else}
+            <span aria-hidden="true">🔔</span>
+          {/if}
+        </button>
+      {/if}
     {:else}
       <h1 class="with-glyph">ClickClack</h1>
     {/if}

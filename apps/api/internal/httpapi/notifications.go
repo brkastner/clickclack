@@ -19,11 +19,11 @@ type PushNotifier interface {
 	Notify(ctx context.Context, notification PushNotification) error
 }
 
-func (s *Server) notifyMessageCreated(ctx context.Context, message store.Message) {
+func (s *Server) notifyMessageCreated(ctx context.Context, message store.Message, mentionedUserIDs []string) {
 	if s.pushNotifier == nil {
 		return
 	}
-	recipients, err := s.store.ListPushNotificationRecipients(ctx, message.ID)
+	recipients, err := s.store.ListPushNotificationRecipients(ctx, message.ID, mentionedUserIDs)
 	if err != nil {
 		log.Printf("push notification recipient lookup failed: %v", err)
 		return
@@ -41,6 +41,15 @@ func (s *Server) notifyMessageCreated(ctx context.Context, message store.Message
 			log.Printf("push notification failed for user %s: %v", recipient.UserID, err)
 		}
 	}
+}
+
+func messageEventMentionedUserIDs(events []store.Event) []string {
+	for _, event := range events {
+		if event.Type == "message.created" || event.Type == "thread.reply_created" {
+			return event.MentionedUserIDs
+		}
+	}
+	return nil
 }
 
 func (s *Server) canNotifyMessageRecipient(ctx context.Context, message store.Message, userID string) bool {

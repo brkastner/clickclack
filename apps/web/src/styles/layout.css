@@ -9,7 +9,7 @@
     calc(32px + var(--safe-area-bottom)) calc(32px + var(--safe-area-left));
   background:
     radial-gradient(color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 1.5px) 0 0 /
-    18px 18px,
+      18px 18px,
     radial-gradient(
       700px 500px at 30% 20%,
       color-mix(in srgb, var(--brand-a) 14%, transparent),
@@ -172,8 +172,8 @@
   /* One continuous chrome plate behind title bar, rail, and sidebar — the
      content panes float on it as a card, Slack-style. */
   background:
-    radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.5px)
-    0 0 / 14px 14px,
+    radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.5px) 0 0 /
+      14px 14px,
     var(--rail);
 }
 
@@ -194,8 +194,8 @@
 @media (max-width: 820px) {
   .desktop-shell > .guild-rail {
     background:
-      radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.5px)
-      0 0 / 14px 14px,
+      radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.5px) 0 0 /
+        14px 14px,
       var(--rail);
     border-right: 1px solid var(--line);
   }
@@ -395,6 +395,29 @@
   border-radius: 50%;
   background: var(--muted-2);
   animation: presence-pulse 1.6s ease-in-out infinite;
+}
+
+.desktop-titlebar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-titlebar-actions button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.desktop-titlebar-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.desktop-titlebar-actions + .desktop-titlebar-status {
+  margin-left: 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -605,6 +628,25 @@
   box-shadow: var(--key-edge-pressed);
 }
 
+.notif-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.notif-toggle:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -626,7 +668,9 @@
   background: var(--panel);
   opacity: 1;
   transform: translateX(0);
-  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .search-results.covered {
@@ -933,5 +977,9 @@
   animation: pulse 1.2s ease-in-out infinite;
 }
 
-.search-state-loading span:nth-child(2) { animation-delay: 120ms; }
-.search-state-loading span:nth-child(3) { animation-delay: 240ms; }
+.search-state-loading span:nth-child(2) {
+  animation-delay: 120ms;
+}
+.search-state-loading span:nth-child(3) {
+  animation-delay: 240ms;
+}

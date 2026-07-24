@@ -274,21 +274,31 @@ func insertEvent(ctx context.Context, tx *sql.Tx, workspaceID, channelID, eventT
 }
 
 func insertEventWithRecipients(ctx context.Context, tx *sql.Tx, workspaceID, channelID, eventType string, seq *int64, payload any, recipientUserIDs []string) (store.Event, error) {
+	return insertEventWithRecipientsAndMentions(ctx, tx, workspaceID, channelID, eventType, seq, payload, recipientUserIDs, nil)
+}
+
+func insertEventWithRecipientsAndMentions(ctx context.Context, tx *sql.Tx, workspaceID, channelID, eventType string, seq *int64, payload any, recipientUserIDs, mentionedUserIDs []string) (store.Event, error) {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return store.Event{}, err
 	}
 	recipients := compactStrings(recipientUserIDs)
+	mentions := compactStrings(mentionedUserIDs)
+	mentionedJSON, err := json.Marshal(mentions)
+	if err != nil {
+		return store.Event{}, err
+	}
 	event := store.Event{
-		ID:          newID("evt"),
-		Cursor:      newID("cur"),
-		Type:        eventType,
-		WorkspaceID: workspaceID,
-		ChannelID:   channelID,
-		Seq:         seq,
-		CreatedAt:   now(),
-		PayloadJSON: string(payloadJSON),
-		Payload:     payload,
+		ID:               newID("evt"),
+		Cursor:           newID("cur"),
+		Type:             eventType,
+		WorkspaceID:      workspaceID,
+		ChannelID:        channelID,
+		Seq:              seq,
+		CreatedAt:        now(),
+		PayloadJSON:      string(payloadJSON),
+		Payload:          payload,
+		MentionedUserIDs: mentions,
 	}
 	isPrivate := 0
 	if len(recipients) > 0 {
@@ -296,15 +306,16 @@ func insertEventWithRecipients(ctx context.Context, tx *sql.Tx, workspaceID, cha
 	}
 	q := storedb.New(tx)
 	if err := q.InsertEvent(ctx, storedb.InsertEventParams{
-		ID:          event.ID,
-		Cursor:      event.Cursor,
-		WorkspaceID: event.WorkspaceID,
-		ChannelID:   sqlOptionalText(event.ChannelID),
-		Type:        event.Type,
-		Seq:         nullInt64FromPtr(event.Seq),
-		PayloadJson: event.PayloadJSON,
-		CreatedAt:   event.CreatedAt,
-		IsPrivate:   int64(isPrivate),
+		ID:               event.ID,
+		Cursor:           event.Cursor,
+		WorkspaceID:      event.WorkspaceID,
+		ChannelID:        sqlOptionalText(event.ChannelID),
+		Type:             event.Type,
+		Seq:              nullInt64FromPtr(event.Seq),
+		PayloadJson:      event.PayloadJSON,
+		CreatedAt:        event.CreatedAt,
+		IsPrivate:        int64(isPrivate),
+		MentionedUserIds: string(mentionedJSON),
 	}); err != nil {
 		return store.Event{}, err
 	}

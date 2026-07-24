@@ -274,6 +274,8 @@ export type RouteTarget = {
   canonical_path: string;
 };
 
+export type ChannelNotificationPreference = "all" | "mentions" | "muted";
+
 export type EventPayload = {
   message_id?: string;
   root_message_id?: string;
@@ -303,4 +305,5 @@ export type RealtimeEvent = {
   seq?: number;
   created_at: string;
   payload: EventPayload;
+  mentioned_user_ids?: string[];
 };

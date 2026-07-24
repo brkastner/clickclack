@@ -63,7 +63,71 @@ func (s *Store) getNotificationSettings(ctx context.Context, userID string) (sto
 	return storeNotificationSettingsFromDB(row), nil
 }
 
-func (s *Store) ListPushNotificationRecipients(ctx context.Context, messageID string) ([]store.PushNotificationRecipient, error) {
+func (s *Store) UpsertChannelNotificationSettings(ctx context.Context, input store.ChannelNotificationInput) error {
+	preference, err := normalizeChannelNotificationPreference(input.Preference)
+	if err != nil {
+		return err
+	}
+	if _, err := s.GetChannel(ctx, input.ChannelID, input.UserID); err != nil {
+		return err
+	}
+	timestamp := now()
+	return s.q.UpsertChannelNotificationSettings(ctx, storedb.UpsertChannelNotificationSettingsParams{
+		ChannelID:  input.ChannelID,
+		UserID:     input.UserID,
+		Preference: preference,
+		CreatedAt:  timestamp,
+		UpdatedAt:  timestamp,
+	})
+}
+
+func (s *Store) GetChannelNotificationPreference(ctx context.Context, channelID, userID string) (string, error) {
+	if _, err := s.GetChannel(ctx, channelID, userID); err != nil {
+		return "", err
+	}
+	preference, err := s.q.GetChannelNotificationPreference(ctx, storedb.GetChannelNotificationPreferenceParams{
+		ChannelID: channelID,
+		UserID:    userID,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ChannelNotifyAll, nil
+	}
+	return preference, err
+}
+
+func normalizeChannelNotificationPreference(preference string) (string, error) {
+	switch strings.TrimSpace(preference) {
+	case store.ChannelNotifyAll:
+		return store.ChannelNotifyAll, nil
+	case store.ChannelNotifyMentions:
+		return store.ChannelNotifyMentions, nil
+	case store.ChannelNotifyMuted:
+		return store.ChannelNotifyMuted, nil
+	default:
+		return "", errors.New("invalid channel notification preference")
+	}
+}
+
+func mentionedUserIDs(ctx context.Context, queries *storedb.Queries, workspaceID, body string) ([]string, error) {
+	handles := store.ParseMessageMentions(body)
+	if len(handles) == 0 {
+		return nil, nil
+	}
+	rows, err := queries.ListMentionedUserIDs(ctx, storedb.ListMentionedUserIDsParams{
+		WorkspaceID: workspaceID,
+		Handles:     handles,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids, nil
+}
+
+func (s *Store) ListPushNotificationRecipients(ctx context.Context, messageID string, mentionedUserIDs []string) ([]store.PushNotificationRecipient, error) {
 	message, err := getMessage(ctx, s.db, messageID)
 	if err != nil {
 		return nil, err
@@ -71,19 +135,32 @@ func (s *Store) ListPushNotificationRecipients(ctx context.Context, messageID st
 	if message.DirectConversationID != "" {
 		return s.listDirectPushNotificationRecipients(ctx, message)
 	}
-	return s.listWorkspacePushNotificationRecipients(ctx, message)
+	return s.listWorkspacePushNotificationRecipients(ctx, message, mentionedUserIDs)
 }
 
-func (s *Store) listWorkspacePushNotificationRecipients(ctx context.Context, message store.Message) ([]store.PushNotificationRecipient, error) {
+func (s *Store) listWorkspacePushNotificationRecipients(ctx context.Context, message store.Message, mentionedUserIDs []string) ([]store.PushNotificationRecipient, error) {
 	rows, err := s.q.ListWorkspacePushNotificationRecipients(ctx, storedb.ListWorkspacePushNotificationRecipientsParams{
+		ChannelID:   message.ChannelID,
 		WorkspaceID: message.WorkspaceID,
 		AuthorID:    message.AuthorID,
 	})
 	if err != nil {
 		return nil, err
 	}
+	mentioned := make(map[string]struct{}, len(mentionedUserIDs))
+	for _, userID := range mentionedUserIDs {
+		mentioned[userID] = struct{}{}
+	}
 	out := make([]store.PushNotificationRecipient, 0, len(rows))
 	for _, row := range rows {
+		if row.NotificationPreference == store.ChannelNotifyMuted {
+			continue
+		}
+		if row.NotificationPreference == store.ChannelNotifyMentions {
+			if _, ok := mentioned[row.UserID]; !ok {
+				continue
+			}
+		}
 		out = append(out, storePushRecipient(row.UserID, row.DisplayName, row.PushoverUserKey))
 	}
 	return out, nil

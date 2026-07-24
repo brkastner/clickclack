@@ -418,7 +418,10 @@ export type RealtimeEvent = {
   seq?: number;
   created_at: string;
   payload: RealtimeEventPayload;
+  mentioned_user_ids?: string[];
 };
+
+export type ChannelNotificationPreference = "all" | "mentions" | "muted";
 
 export type AgentProgressLine = {
   id: string;
@@ -1018,6 +1021,24 @@ export class ClickClackClient {
         body: JSON.stringify({ seq }),
       });
       return data.receipt;
+    },
+    getNotificationPreference: async (
+      channelId: string,
+    ): Promise<ChannelNotificationPreference> => {
+      const data = await this.request<{ preference: ChannelNotificationPreference }>(
+        `/api/channels/${channelId}/notification-settings`,
+      );
+      return data.preference;
+    },
+    updateNotificationPreference: async (
+      channelId: string,
+      preference: ChannelNotificationPreference,
+    ): Promise<ChannelNotificationPreference> => {
+      const data = await this.request<{ preference: ChannelNotificationPreference }>(
+        `/api/channels/${channelId}/notification-settings`,
+        { method: "PATCH", body: JSON.stringify({ preference }) },
+      );
+      return data.preference;
     },
   };
 

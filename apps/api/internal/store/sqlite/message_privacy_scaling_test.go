@@ -599,6 +599,10 @@ func TestMessagePrivacyScalingMigrationBackfillsCurrentMainDMThreadPrivacy(t *te
 	}
 
 	applySQLiteMigrations(t, ctx, st, "0010_message_privacy_scaling.sql")
+	// Bring the fixture up to the current events shape before exercising the
+	// current ListEventsAfter implementation. This test still applies 0010 in
+	// isolation so its privacy backfill remains the behavior under test.
+	applySQLiteMigrations(t, ctx, st, "0039_mentions_and_notifications.sql")
 
 	var replyDM string
 	var replyChannel any

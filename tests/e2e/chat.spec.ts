@@ -2028,11 +2028,19 @@ test("remote messages keep a live channel pinned without unread UI", async ({ pa
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
 });
 
-test("browser notifications announce incoming messages outside the active conversation", async ({
+test("channel preferences filter browser notifications outside the active conversation", async ({
   page,
 }) => {
   const meResponse = await page.request.get("/api/me");
-  const me = (await meResponse.json()) as { user: { id: string } };
+  let me = (await meResponse.json()) as {
+    user: { id: string; handle: string; display_name: string };
+  };
+  if (!me.user.handle) {
+    const handle = `captain-${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const profileResponse = await page.request.patch("/api/me", { data: { handle } });
+    expect(profileResponse.ok()).toBe(true);
+    me = (await profileResponse.json()) as typeof me;
+  }
   const storageKey = `clickclack:browser-notifications-enabled:v1:${me.user.id}`;
   await page.addInitScript((key) => {
     type CapturedNotification = {
@@ -2109,24 +2117,86 @@ test("browser notifications announce incoming messages outside the active conver
     `${channelName}@example.com`,
   ]);
 
-  const remoteResponse = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+  const muteResponse = await page.request.patch(
+    `/api/channels/${channel.channel.id}/notification-settings`,
+    { data: { preference: "muted" } },
+  );
+  expect(muteResponse.ok()).toBe(true);
+  const mutedMessageResponse = await page.request.post(
+    `/api/channels/${channel.channel.id}/messages`,
+    {
+      headers: { "X-ClickClack-User": senderID },
+      data: { body: "muted background message" },
+    },
+  );
+  expect(mutedMessageResponse.ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string }[];
+            }
+          ).__clickclackNotifications.length,
+      ),
+    )
+    .toBe(0);
+
+  await page.getByRole("link", { name: `# ${channel.channel.name}` }).click();
+  const mutedToggle = page.getByRole("button", { name: "Channel muted - click to change" });
+  await expect(mutedToggle).toBeVisible();
+  await mutedToggle.click();
+  await page.getByRole("button", { name: "All notifications enabled - click to change" }).click();
+  await expect(
+    page.getByRole("button", { name: "Notifications for @mentions only - click to change" }),
+  ).toBeVisible();
+  await page.reload();
+  await waitForAppReady(page);
+  await expect(
+    page.getByRole("button", { name: "Notifications for @mentions only - click to change" }),
+  ).toBeVisible();
+  await page.goto(`/app/${workspace.route_id}/${activeChannel.channel.route_id}`);
+  await waitForAppReady(page);
+
+  const ordinaryResponse = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
     headers: { "X-ClickClack-User": senderID },
-    data: { body: "ping from another channel" },
+    data: { body: "ordinary background message" },
   });
-  expect(remoteResponse.ok()).toBe(true);
+  expect(ordinaryResponse.ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string }[];
+            }
+          ).__clickclackNotifications.length,
+      ),
+    )
+    .toBe(0);
+
+  const mentionResponse = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+    headers: { "X-ClickClack-User": senderID },
+    data: { body: `@${me.user.handle} ping from another channel` },
+  });
+  expect(mentionResponse.ok()).toBe(true);
+  const mentionResult = (await mentionResponse.json()) as {
+    message: { id: string };
+    event: { mentioned_user_ids?: string[] };
+  };
+  expect(mentionResult.event.mentioned_user_ids).toContain(me.user.id);
 
   await expect
     .poll(() =>
       page.evaluate(
-        (name) =>
+        () =>
           (
             window as unknown as {
               __clickclackNotifications: { title: string; options?: NotificationOptions }[];
             }
-          ).__clickclackNotifications.find(
-            (notification) => notification.title === `ClickClack in #${name}`,
-          ),
-        channel.channel.name,
+          ).__clickclackNotifications[0],
       ),
     )
     .toEqual(
@@ -2138,19 +2208,149 @@ test("browser notifications announce incoming messages outside the active conver
       }),
     );
 
-  await page.evaluate((name) => {
+  // A preference changed by another tab, device, or API client must affect this
+  // already-running client without requiring a reload or channel selection.
+  const remoteMuteResponse = await page.request.patch(
+    `/api/channels/${channel.channel.id}/notification-settings`,
+    { data: { preference: "muted" } },
+  );
+  expect(remoteMuteResponse.ok()).toBe(true);
+  const remotelyMutedMessageResponse = await page.request.post(
+    `/api/channels/${channel.channel.id}/messages`,
+    {
+      headers: { "X-ClickClack-User": senderID },
+      data: { body: `@${me.user.handle} remotely muted mention` },
+    },
+  );
+  expect(remotelyMutedMessageResponse.ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string }[];
+            }
+          ).__clickclackNotifications.length,
+      ),
+    )
+    .toBe(1);
+
+  const remoteAllResponse = await page.request.patch(
+    `/api/channels/${channel.channel.id}/notification-settings`,
+    { data: { preference: "all" } },
+  );
+  expect(remoteAllResponse.ok()).toBe(true);
+  const remotelyEnabledMessageResponse = await page.request.post(
+    `/api/channels/${channel.channel.id}/messages`,
+    {
+      headers: { "X-ClickClack-User": senderID },
+      data: { body: "remote all preference takes effect without reloading" },
+    },
+  );
+  expect(remotelyEnabledMessageResponse.ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string }[];
+            }
+          ).__clickclackNotifications.length,
+      ),
+    )
+    .toBe(2);
+
+  const threadReplyResponse = await page.request.post(
+    `/api/messages/${mentionResult.message.id}/thread/replies`,
+    {
+      headers: { "X-ClickClack-User": senderID },
+      data: { body: `@${me.user.handle} reply notification` },
+    },
+  );
+  expect(threadReplyResponse.ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string }[];
+            }
+          ).__clickclackNotifications.length,
+      ),
+    )
+    .toBe(3);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { options?: NotificationOptions }[];
+            }
+          ).__clickclackNotifications[2]?.options?.body,
+      ),
+    )
+    .toBe(`@${me.user.handle} reply notification`);
+
+  await page.evaluate(() => {
     const notification = (
       window as unknown as {
         __clickclackNotifications: { title: string; onclick?: (() => void) | null }[];
       }
-    ).__clickclackNotifications.find((candidate) => candidate.title === `ClickClack in #${name}`);
+    ).__clickclackNotifications[0];
     if (!notification) {
       throw new Error("Expected a channel notification");
     }
     notification.onclick?.();
-  }, channel.channel.name);
+  });
 
   await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
+
+  const failureChannelResponse = await page.request.post(
+    `/api/workspaces/${workspace.id}/channels`,
+    { data: { name: `notify-failure-${randomUUID()}`, kind: "public" } },
+  );
+  expect(failureChannelResponse.ok()).toBe(true);
+  const failureChannel = (await failureChannelResponse.json()) as {
+    channel: { id: string };
+  };
+  await page.route(`**/api/channels/${failureChannel.channel.id}/notification-settings`, (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: '{"error":"unavailable"}',
+    }),
+  );
+  await page.evaluate(() => {
+    (
+      window as unknown as {
+        __clickclackNotifications: { title: string }[];
+      }
+    ).__clickclackNotifications = [];
+  });
+  const unresolvedPreferenceResponse = await page.request.post(
+    `/api/channels/${failureChannel.channel.id}/messages`,
+    {
+      headers: { "X-ClickClack-User": senderID },
+      data: { body: "unresolved preferences retain the compatibility default" },
+    },
+  );
+  expect(unresolvedPreferenceResponse.ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __clickclackNotifications: { title: string }[];
+            }
+          ).__clickclackNotifications.length,
+      ),
+    )
+    .toBe(1);
 });
 
 test("clicking the active conversation does not refetch its messages", async ({ page }) => {
