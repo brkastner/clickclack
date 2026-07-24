@@ -50,7 +50,7 @@
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
-  import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
@@ -73,6 +73,7 @@
   const editController = new MessageEditController(revealEditSession);
   let workspaces: Workspace[] = [];
   let channels: Channel[] = [];
+  let topics: Topic[] = [];
   let directConversations: DirectConversation[] = [];
   let messages: Message[] = [];
   let replies: Message[] = [];
@@ -80,6 +81,10 @@
   let selectedChannelID = "";
   let selectedDirectID = "";
   let selectedThread: Message | null = null;
+  let selectedComposerTopicID = "";
+  let activeTopicFilterID = "";
+  let topicFilterGeneration = 0;
+  let topicConversationKey = "";
   let selectedThreadState: ThreadState | null = null;
   let selectedProfile: User | null = null;
   let moderationMembers: MemberModeration[] = [];
@@ -178,6 +183,7 @@
   let messageLoadGeneration = 0;
   let workspacesLoadSerial = 0;
   let channelsLoadSerial = 0;
+  let topicsLoadSerial = 0;
   let directConversationsLoadSerial = 0;
   let moderationMembersLoadSerial = 0;
   let slashCommandsLoadSerial = 0;
@@ -216,9 +222,14 @@
     ? moderationMembers.find((member) => member.user.id === selectedProfile?.id)
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
+  $: eligibleTopics = selectedChannelID
+    ? topics.filter((topic) => !topic.archived_at && (!topic.channel_id || topic.channel_id === selectedChannelID))
+    : [];
+  $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
   $: selectedDirectWritable = selectedDirect?.can_send ?? true;
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
+  $: resetTopicStateForConversation(activeConversationKey);
   // Slash-dispatch notices are scoped to the conversation they fired in.
   $: clearComposerNoticeFor(activeConversationKey);
   // Bot-declared menus surface in channels; in DMs only for bots that are
@@ -257,6 +268,23 @@
     { hideCommentary, hideToolCalls },
     activityClock,
   );
+
+  function resetTopicStateForConversation(conversationKey: string) {
+    if (conversationKey === topicConversationKey) return;
+    topicConversationKey = conversationKey;
+    selectedComposerTopicID = "";
+    updateActiveTopicFilter("");
+  }
+
+  function updateActiveTopicFilter(topicID: string) {
+    if (topicID === activeTopicFilterID) return;
+    activeTopicFilterID = topicID;
+    topicFilterGeneration += 1;
+  }
+
+  function activeMessageScopeKey(): string {
+    return `${selectedWorkspaceID}:${currentConversationKey()}:${activeTopicFilterID}:${topicFilterGeneration}`;
+  }
   // High-level "agent turn is live" signal: any tracked turn that still has an
   // unfinalized line. Drives the compact AgentResponding status above the
   // composer; clears as soon as every line finalizes or the turn is cleared.
@@ -659,10 +687,12 @@
       captureScrollMemory();
       editController.clear();
       selectedWorkspaceID = workspace.id;
+      topicsLoadSerial += 1;
       slashCommandsLoadSerial += 1;
       botCommandsLoadSerial += 1;
       slashCommands = [];
       botCommands = [];
+      topics = [];
       selectedChannelID = "";
       selectedDirectID = "";
       selectedThread = null;
@@ -684,6 +714,7 @@
         loadModerationMembers(),
         loadSlashCommands(workspace.id),
         loadBotCommands(workspace.id),
+        loadTopics(workspace.id),
       ]);
     }
     if (serial !== routeApplySerial) return;
@@ -718,6 +749,7 @@
         connectPendingRealtime(workspace.id);
         return;
       }
+      resetTopicStateForConversation(targetID);
       await loadMessages();
       if (serial !== routeApplySerial) return;
       appliedRouteKey = canonicalRouteKey;
@@ -738,6 +770,7 @@
         connectPendingRealtime(workspace.id);
         return;
       }
+      resetTopicStateForConversation(targetID);
       await loadMessages();
       if (serial !== routeApplySerial) return;
       appliedRouteKey = canonicalRouteKey;
@@ -760,6 +793,7 @@
     if (!fallbackTargetID) {
       selectedChannelID = "";
       selectedDirectID = "";
+      resetTopicStateForConversation("");
       await loadMessages();
       appliedRouteKey = requestedRouteKey;
       if (workspaceIDParam !== workspace.route_id || targetIDParam) await navigateToApp(workspace.id, "", true);
@@ -882,6 +916,21 @@
       replies = [];
     }
     if (loadInitialMessages) await loadMessages();
+  }
+
+  async function loadTopics(workspaceID = selectedWorkspaceID) {
+    const serial = ++topicsLoadSerial;
+    if (!workspaceID) {
+      topics = [];
+      return;
+    }
+    try {
+      const data = await api<{ topics: Topic[] }>(`/api/workspaces/${workspaceID}/topics`);
+      if (serial !== topicsLoadSerial || workspaceID !== selectedWorkspaceID) return;
+      topics = data.topics;
+    } catch {
+      if (serial === topicsLoadSerial && workspaceID === selectedWorkspaceID) topics = [];
+    }
   }
 
   async function loadModerationMembers(workspaceID = selectedWorkspaceID) {
@@ -1073,7 +1122,20 @@
     const base = selectedDirectID
       ? `/api/dms/${selectedDirectID}/messages`
       : `/api/channels/${selectedChannelID}/messages`;
-    return query ? `${base}?${query}` : base;
+    const params = new URLSearchParams(query);
+    if (!selectedDirectID && activeTopicFilterID) params.set("topic_id", activeTopicFilterID);
+    const resolvedQuery = params.toString();
+    return resolvedQuery ? `${base}?${resolvedQuery}` : base;
+  }
+
+  async function setTopicFilter(topicID: string) {
+    if (!selectedChannelID || topicID === activeTopicFilterID) return;
+    updateActiveTopicFilter(topicID);
+    if (topicID) selectedComposerTopicID = topicID;
+    scrollMemory.delete(currentConversationKey());
+    messageWindows.delete(currentConversationKey());
+    messagesLoading = true;
+    await loadMessages(false);
   }
 
   function pageToWindow(page: MessagePage): MessageWindow {
@@ -1233,8 +1295,9 @@
 
   async function loadOlderMessages() {
     const key = currentConversationKey();
+    const scopeKey = activeMessageScopeKey();
     const window = messageWindows.get(key);
-    const loadKey = `${key}:older`;
+    const loadKey = `${scopeKey}:older`;
     if (olderPageState !== "idle") {
       pendingOlderPageIntent = true;
       return;
@@ -1247,7 +1310,7 @@
     let committed = false;
     try {
       const data = await api<MessagePage>(messagePagePath(`before_seq=${encodeURIComponent(String(window.oldest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== key) return;
+      if (activeMessageScopeKey() !== scopeKey) return;
       const merged = mergeMessageWindows(data.messages, messages);
       commitMessageWindow(key, {
         messages: merged,
@@ -1259,19 +1322,20 @@
       committed = true;
       setHistoryEdgeState("older", "settling");
     } catch (error) {
-      if (currentConversationKey() === key) {
+      if (activeMessageScopeKey() === scopeKey) {
         status = error instanceof Error ? error.message : "Could not load older messages";
       }
     } finally {
       loadingMessagePages.delete(loadKey);
-      if (currentConversationKey() === key && !committed) setHistoryEdgeState("older", "idle");
+      if (activeMessageScopeKey() === scopeKey && !committed) setHistoryEdgeState("older", "idle");
     }
   }
 
   async function loadNewerMessages() {
     const key = currentConversationKey();
+    const scopeKey = activeMessageScopeKey();
     const window = messageWindows.get(key);
-    const loadKey = `${key}:newer`;
+    const loadKey = `${scopeKey}:newer`;
     if (newerPageState !== "idle") {
       pendingNewerPageIntent = true;
       return;
@@ -1287,7 +1351,7 @@
     let committed = false;
     try {
       const data = await api<MessagePage>(messagePagePath(`after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== key) return;
+      if (activeMessageScopeKey() !== scopeKey) return;
       if (data.messages.length === 0) {
         commitMessageWindow(key, { ...window, has_newer: data.has_newer }, "append");
         committed = true;
@@ -1309,18 +1373,19 @@
       committed = true;
       setHistoryEdgeState("newer", "settling");
     } catch (error) {
-      if (currentConversationKey() === key) {
+      if (activeMessageScopeKey() === scopeKey) {
         status = error instanceof Error ? error.message : "Could not load newer messages";
       }
     } finally {
       loadingMessagePages.delete(loadKey);
-      if (currentConversationKey() === key && !committed) setHistoryEdgeState("newer", "idle");
+      if (activeMessageScopeKey() === scopeKey && !committed) setHistoryEdgeState("newer", "idle");
     }
   }
 
   function loadNewerMessagesFromRealtime(): Promise<void> {
     const targetWorkspaceID = selectedWorkspaceID;
     const targetKey = currentConversationKey();
+    const targetScopeKey = activeMessageScopeKey();
     if (!targetWorkspaceID || !targetKey) return Promise.resolve();
 
     // Serialize only the active message-window fetch. Rendering and scrolling
@@ -1329,7 +1394,11 @@
     const load = realtimeMessageLoadQueue
       .catch(() => undefined)
       .then(async () => {
-        if (selectedWorkspaceID !== targetWorkspaceID || currentConversationKey() !== targetKey) {
+        if (
+          selectedWorkspaceID !== targetWorkspaceID ||
+          currentConversationKey() !== targetKey ||
+          activeMessageScopeKey() !== targetScopeKey
+        ) {
           return;
         }
         const window = messageWindows.get(targetKey);
@@ -1342,7 +1411,11 @@
             `after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`,
           ),
         );
-        if (selectedWorkspaceID !== targetWorkspaceID || currentConversationKey() !== targetKey) {
+        if (
+          selectedWorkspaceID !== targetWorkspaceID ||
+          currentConversationKey() !== targetKey ||
+          activeMessageScopeKey() !== targetScopeKey
+        ) {
           return;
         }
         const currentWindow = messageWindows.get(targetKey);
@@ -1502,6 +1575,7 @@
     if (!options.all && Date.now() < suppressAutoReadUntil) return;
     const key = currentConversationKey() || viewKey;
     if (!key) return;
+    if (activeTopicFilterID && channels.some((channel) => channel.id === key)) return;
     if (!options.all && !options.seq) {
       const boundarySeq = unreadBoundarySeqForKey(key);
       if (boundarySeq >= 0 && !unreadBoundaryLoadedForKey(key, boundarySeq)) return;
@@ -1857,6 +1931,7 @@
     workspaceID: string;
     channelID?: string;
     directConversationID?: string;
+    topicID?: string;
     viewKey: string;
   };
 
@@ -1876,6 +1951,7 @@
       workspace_id: draft.workspaceID,
       channel_id: draft.channelID,
       direct_conversation_id: draft.directConversationID,
+      topic_id: draft.topicID,
       author_id: user?.id || "",
       thread_root_id: id,
       body: draft.body,
@@ -1932,6 +2008,7 @@
       workspaceID: selectedWorkspaceID,
       channelID: selectedChannelID || undefined,
       directConversationID: selectedDirectID || undefined,
+      topicID: selectedChannelID ? selectedComposerTopicID || undefined : undefined,
       viewKey: currentConversationKey(),
     };
     messageBody = "";
@@ -1992,13 +2069,15 @@
     const nonce = existingNonce ?? newNonce();
     const tmpID = `tmp_${nonce}`;
     const localID = existingMessageID ?? tmpID;
-    const shouldRevealSentMessage = !existingNonce && currentConversationKey() === draft.viewKey;
+    const matchesTopicFilter = !activeTopicFilterID || draft.topicID === activeTopicFilterID;
+    const shouldRevealSentMessage =
+      !existingNonce && currentConversationKey() === draft.viewKey && matchesTopicFilter;
     const shouldRefreshLatestAfterSend = shouldRevealSentMessage && activeHasNewer;
     pendingDrafts.set(nonce, draft);
     const placeholder = buildOptimisticMessage(nonce, draft, localID);
     if (existingNonce) {
       setActiveMessages(messages.map((m) => (m.id === localID ? placeholder : m)));
-    } else if (currentConversationKey() === draft.viewKey) {
+    } else if (currentConversationKey() === draft.viewKey && matchesTopicFilter) {
       setActiveMessages([...messages, placeholder]);
       void revealOwnSentMessage();
     }
@@ -2007,6 +2086,7 @@
       : `/api/channels/${draft.channelID}/messages`;
     const payload: Record<string, unknown> = { body: draft.body, nonce };
     if (draft.quotedMessageID) payload.quoted_message_id = draft.quotedMessageID;
+    if (draft.topicID) payload.topic_id = draft.topicID;
     try {
       const data = await api<{ message: Message }>(path, {
         method: "POST",
@@ -2045,6 +2125,7 @@
         setActiveMessages(messages.map((m) => (m.id === message.id ? message : m)));
       } else if (
         belongsToView(message, currentConversationKey()) &&
+        (!activeTopicFilterID || message.topic_id === activeTopicFilterID) &&
         !messages.some((m) => m.id === message.id)
       ) {
         setActiveMessages([...messages, message]);
@@ -2472,6 +2553,12 @@
   async function loadMessagesAroundSeq(seq: number, targetMessageID = "") {
     const targetKey = currentConversationKey();
     if (!targetKey) return;
+    if (activeTopicFilterID) {
+      updateActiveTopicFilter("");
+      messageWindows.delete(targetKey);
+      messagesLoading = true;
+    }
+    const targetScopeKey = activeMessageScopeKey();
     if (targetMessageID) {
       scrollMemory.set(targetKey, { atBottom: false, anchorMessageID: targetMessageID, anchorPixelOffset: 0 });
     }
@@ -2482,7 +2569,7 @@
     }
     try {
       const data = await api<MessagePage>(messagePagePath(`around_seq=${encodeURIComponent(String(seq))}&limit=${INITIAL_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== targetKey) return;
+      if (currentConversationKey() !== targetKey || activeMessageScopeKey() !== targetScopeKey) return;
       commitMessageWindow(targetKey, pageToWindow(data), "around");
       await tick();
       if (targetMessageID) {
@@ -2798,8 +2885,15 @@
       return;
     }
     if (messageEventAlreadyAccounted(event)) return;
-    const affectsActiveView =
+    const affectsConversation =
       event.channel_id === selectedChannelID || event.payload.direct_conversation_id === selectedDirectID;
+    const affectsActiveView =
+      affectsConversation &&
+      !(
+        event.type === "message.created" &&
+        activeTopicFilterID &&
+        event.payload.topic_id !== activeTopicFilterID
+      );
     if (
       affectsActiveView &&
       (event.type === "reaction.added" || event.type === "reaction.removed")
@@ -2960,7 +3054,8 @@
     const { channelID, dmID } = messageEventScope(event);
     if (channelID) {
       const isActive = channelID === selectedChannelID && !selectedDirectID;
-      const activeAtBottom = isActive ? activeWasAtBottom ?? isAtLiveEdge() : false;
+      const activeAtBottom =
+        isActive && !activeTopicFilterID ? activeWasAtBottom ?? isAtLiveEdge() : false;
       const channel = channels.find((c) => c.id === channelID);
       const incomingSeq = seq > 0 ? seq : (channel?.last_seq || 0) + 1;
       if (isActive && !activeAtBottom && (channel?.unread_count || 0) === 0) {
@@ -3536,6 +3631,13 @@
       />
     {/if}
 
+    {#if activeTopic}
+      <div class="topic-filter" role="status">
+        <span>Showing topic <strong>{activeTopic.name}</strong></span>
+        <button type="button" onclick={() => void setTopicFilter("")}>Clear filter</button>
+      </div>
+    {/if}
+
     <MessageList
       messages={visibleMessages}
       {selectedDirect}
@@ -3581,6 +3683,8 @@
       {editController}
       editScope={activeConversationKey}
       onMessageEdited={applyEditedMessage}
+      {topics}
+      onSelectTopic={(topicID) => void setTopicFilter(topicID)}
     />
 
     <AgentProgress turns={agentProgressTurns} />
@@ -3608,6 +3712,22 @@
           onclick={() => (composerNotice = null)}
         >×</button>
       </div>
+    {/if}
+
+    {#if selectedChannelID && eligibleTopics.length > 0}
+      <label class="topic-picker">
+        <span>Topic</span>
+        <select
+          aria-label="Message topic"
+          value={selectedComposerTopicID}
+          onchange={(event) => (selectedComposerTopicID = event.currentTarget.value)}
+        >
+          <option value="">No topic</option>
+          {#each eligibleTopics as topic (topic.id)}
+            <option value={topic.id}>{topic.name}</option>
+          {/each}
+        </select>
+      </label>
     {/if}
 
     <ChatComposer

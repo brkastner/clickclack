@@ -2,7 +2,7 @@
   import Avatar from "../avatar/Avatar.svelte";
   import { handleLabel } from "../../lib/chat/people";
   import { time } from "../../lib/format";
-  import type { Message, Upload } from "../../lib/types";
+  import type { Message, Topic, Upload } from "../../lib/types";
   import type { MessageGroup as MessageGroupType } from "../../lib/chat/messages";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
@@ -29,6 +29,8 @@
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
+    topics?: Topic[];
+    onSelectTopic?: (topicID: string) => void;
   };
 
   let {
@@ -52,6 +54,8 @@
     editController,
     editScope = "",
     onMessageEdited,
+    topics = [],
+    onSelectTopic = () => {},
   }: Props = $props();
 
   const author = $derived(group.messages[0]?.author);
@@ -114,6 +118,8 @@
         {onRetry}
         {onDiscard}
         {onDeleteMessage}
+        {topics}
+        {onSelectTopic}
       />
     {/each}
   </div>

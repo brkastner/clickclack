@@ -1809,6 +1809,7 @@ export interface components {
       author_id: string;
       parent_message_id?: string;
       thread_root_id: string;
+      topic_id?: string;
       /** Format: int64 */
       channel_seq?: number;
       /** Format: int64 */
@@ -1840,6 +1841,15 @@ export interface components {
     };
     MessageResponse: {
       message: components["schemas"]["Message"];
+    };
+    MessagePage: {
+      messages: components["schemas"]["Message"][];
+      /** Format: int64 */
+      oldest_seq: number;
+      /** Format: int64 */
+      newest_seq: number;
+      has_older: boolean;
+      has_newer: boolean;
     };
     SearchHighlight: {
       /** @description Inclusive Unicode code-point offset into snippet. */
@@ -3697,6 +3707,12 @@ export interface operations {
     parameters: {
       query?: {
         after_seq?: number;
+        before_seq?: number;
+        around_seq?: number;
+        /** @description Return only root messages assigned to this active workspace or channel topic. */
+        topic_id?: string;
+        /** @description Explicitly request the latest window. Mutually exclusive with cursor parameters. */
+        mode?: "latest";
         limit?: number;
       };
       header?: never;
@@ -3712,7 +3728,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["MessagePage"];
+        };
       };
     };
   };

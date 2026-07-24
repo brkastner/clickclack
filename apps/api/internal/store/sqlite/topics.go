@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -89,6 +90,27 @@ func requireTopicTx(ctx context.Context, tx *sql.Tx, workspaceID, channelID, top
 	}
 	if topicChannel != "" && topicChannel != channelID {
 		return errors.New("topic is not available in this channel")
+	}
+	return nil
+}
+
+func (s *Store) requireTopic(ctx context.Context, workspaceID, channelID, topicID string) error {
+	topicID = strings.TrimSpace(topicID)
+	if topicID == "" {
+		return nil
+	}
+	var topicWorkspace, topicChannel string
+	if err := s.db.QueryRowContext(ctx, `SELECT workspace_id, COALESCE(channel_id, '') FROM topics WHERE id = ? AND archived_at IS NULL`, topicID).Scan(&topicWorkspace, &topicChannel); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: topic is unavailable", store.ErrInvalidMessagePage)
+		}
+		return err
+	}
+	if topicWorkspace != workspaceID {
+		return fmt.Errorf("%w: topic is unavailable", store.ErrInvalidMessagePage)
+	}
+	if topicChannel != "" && topicChannel != channelID {
+		return fmt.Errorf("%w: topic is unavailable", store.ErrInvalidMessagePage)
 	}
 	return nil
 }

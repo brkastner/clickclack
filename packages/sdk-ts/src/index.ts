@@ -330,6 +330,23 @@ export type Message = {
   reactions?: ReactionSummary[];
 };
 
+export type MessagePage = {
+  messages: Message[];
+  oldest_seq: number;
+  newest_seq: number;
+  has_older: boolean;
+  has_newer: boolean;
+};
+
+export type MessagePageOptions = {
+  mode?: "latest";
+  limit?: number;
+  before_seq?: number;
+  after_seq?: number;
+  around_seq?: number;
+  topic_id?: string;
+};
+
 export type SearchHighlight = {
   start: number;
   end: number;
@@ -996,11 +1013,29 @@ export class ClickClackClient {
       });
       return data.channel;
     },
-    messages: async (channelId: string, afterSeq = 0): Promise<Message[]> => {
-      const data = await this.request<{ messages: Message[] }>(
-        `/api/channels/${channelId}/messages?after_seq=${afterSeq}`,
-      );
+    messages: async (
+      channelId: string,
+      afterSeqOrOptions: number | MessagePageOptions = 0,
+    ): Promise<Message[]> => {
+      const options =
+        typeof afterSeqOrOptions === "number"
+          ? { after_seq: afterSeqOrOptions }
+          : afterSeqOrOptions;
+      const data = await this.channels.messagePage(channelId, options);
       return data.messages;
+    },
+    messagePage: async (
+      channelId: string,
+      options: MessagePageOptions = {},
+    ): Promise<MessagePage> => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(options)) {
+        if (value !== undefined) params.set(key, String(value));
+      }
+      const query = params.toString();
+      return this.request<MessagePage>(
+        `/api/channels/${channelId}/messages${query ? `?${query}` : ""}`,
+      );
     },
     sendMessage: async (
       channelId: string,

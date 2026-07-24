@@ -16,7 +16,7 @@ on the same row via `quoted_message_id` and friends, documented in
 ## Endpoints
 
 ```http
-GET    /api/channels/{channel_id}/messages?after_seq=&before_seq=&around_seq=&limit=
+GET    /api/channels/{channel_id}/messages?after_seq=&before_seq=&around_seq=&topic_id=&limit=
 POST   /api/channels/{channel_id}/messages
 POST   /api/channels/{channel_id}/read
 GET    /api/messages/by-nonce?workspace_id=...&nonce=...
@@ -29,7 +29,9 @@ DELETE /api/messages/{message_id}
   channel, ordered by `channel_seq` ascending. `after_seq` and `before_seq` are
   exclusive cursor windows; `around_seq` returns context around a target
   sequence. Cursor params are mutually exclusive, and `limit` is clamped to
-  `1..200` (default 100). Every returned root includes `thread_state`, including
+  `1..200` (default 100). Optional `topic_id` restricts every cursor mode and
+  page-metadata check to one active topic available in the channel. Every
+  returned root includes `thread_state`, including
   a zero-reply state, so clients can render thread activity without fetching
   each thread.
 - `POST /messages` accepts
@@ -109,7 +111,9 @@ POST /api/workspaces/{workspace_id}/topics
 `POST /topics` accepts `{name, channel_id?}`. A topic without `channel_id` can
 be used by any channel in the workspace. A channel-scoped topic can only be
 used when posting to that channel. Message responses include `topic_id` when a
-topic was supplied.
+topic was supplied. The web channel composer lists the active topics available
+to that channel. Root-message topic labels can be clicked to filter the
+timeline; clearing the visible filter returns to the unfiltered channel.
 
 ## Sequence numbers
 

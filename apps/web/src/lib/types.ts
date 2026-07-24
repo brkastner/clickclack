@@ -59,6 +59,16 @@ export type Channel = {
   unread_count?: number;
 };
 
+export type Topic = {
+  id: string;
+  workspace_id: string;
+  channel_id?: string;
+  name: string;
+  created_by?: string;
+  created_at: string;
+  archived_at?: string;
+};
+
 // One commentary prose segment inside a coalesced preamble block.
 export type PreambleCommentaryItem = {
   type: "commentary";
@@ -104,6 +114,7 @@ export type Message = {
   author_id: string;
   parent_message_id?: string;
   thread_root_id: string;
+  topic_id?: string;
   channel_seq?: number;
   thread_seq?: number;
   body: string;
