@@ -274,6 +274,7 @@ func storeEventFromListEventsAfter(row storedb.ListEventsAfterRow) store.Event {
 	var payload any
 	_ = json.Unmarshal([]byte(event.PayloadJSON), &payload)
 	event.Payload = payload
+	_ = json.Unmarshal([]byte(row.MentionedUserIds), &event.MentionedUserIDs)
 	return event
 }
 

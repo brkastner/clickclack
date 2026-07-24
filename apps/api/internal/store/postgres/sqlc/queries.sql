@@ -252,11 +252,35 @@ UPDATE user_appearance_preferences
 SET density = sqlc.arg(density)
 WHERE user_id = sqlc.arg(user_id);
 
+-- name: UpsertChannelNotificationSettings :exec
+INSERT INTO channel_notification_settings (channel_id, user_id, preference, created_at, updated_at)
+VALUES (sqlc.arg(channel_id), sqlc.arg(user_id), sqlc.arg(preference), sqlc.arg(created_at), sqlc.arg(updated_at))
+ON CONFLICT(channel_id, user_id) DO UPDATE SET
+  preference = excluded.preference,
+  updated_at = excluded.updated_at;
+
+-- name: GetChannelNotificationPreference :one
+SELECT preference
+FROM channel_notification_settings
+WHERE channel_id = sqlc.arg(channel_id)
+  AND user_id = sqlc.arg(user_id);
+
+-- name: ListMentionedUserIDs :many
+SELECT u.id, lower(u.handle) AS handle
+FROM users u
+JOIN workspace_members wm ON wm.user_id = u.id
+WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND lower(u.handle) = ANY(sqlc.arg(handles)::text[])
+ORDER BY u.id;
+
 -- name: ListWorkspacePushNotificationRecipients :many
-SELECT u.id AS user_id, u.display_name, uns.pushover_user_key
+SELECT u.id AS user_id, u.display_name, uns.pushover_user_key,
+       COALESCE(cns.preference, 'all') AS notification_preference
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 JOIN user_notification_settings uns ON uns.user_id = u.id
+LEFT JOIN channel_notification_settings cns
+  ON cns.channel_id = sqlc.arg(channel_id) AND cns.user_id = u.id
 WHERE wm.workspace_id = sqlc.arg(workspace_id)
   AND u.id <> sqlc.arg(author_id)
   AND uns.pushover_enabled = 1
@@ -1360,7 +1384,7 @@ SELECT EXISTS (
 );
 
 -- name: ListEventsAfter :many
-SELECT e.id, e.cursor, e.workspace_id, COALESCE(e.channel_id, '') AS channel_id, e.type, e.seq, e.payload_json, e.created_at
+SELECT e.id, e.cursor, e.workspace_id, COALESCE(e.channel_id, '') AS channel_id, e.type, e.seq, e.payload_json, e.created_at, e.mentioned_user_ids::text AS mentioned_user_ids
 FROM events e
 JOIN workspace_members viewer ON viewer.workspace_id = e.workspace_id AND viewer.user_id = sqlc.arg(user_id)
 LEFT JOIN channels event_channel ON event_channel.id = e.channel_id AND event_channel.workspace_id = e.workspace_id
@@ -1491,8 +1515,8 @@ ORDER BY e.cursor DESC
 LIMIT 1;
 
 -- name: InsertEvent :exec
-INSERT INTO events (id, cursor, workspace_id, channel_id, type, seq, payload_json, created_at, is_private)
-VALUES (sqlc.arg(id), sqlc.arg(cursor), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(type), sqlc.arg(seq), sqlc.arg(payload_json), sqlc.arg(created_at), sqlc.arg(is_private));
+INSERT INTO events (id, cursor, workspace_id, channel_id, type, seq, payload_json, created_at, is_private, mentioned_user_ids)
+VALUES (sqlc.arg(id), sqlc.arg(cursor), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(type), sqlc.arg(seq), sqlc.arg(payload_json), sqlc.arg(created_at), sqlc.arg(is_private), sqlc.arg(mentioned_user_ids)::text::jsonb);
 
 -- name: InsertEventRecipient :exec
 INSERT INTO event_recipients (event_id, user_id)

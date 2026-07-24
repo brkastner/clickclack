@@ -6,6 +6,7 @@ package storedb
 
 import (
 	"database/sql"
+	"encoding/json"
 )
 
 type AppInstallation struct {
@@ -118,6 +119,14 @@ type Channel struct {
 	SidebarSection  sql.NullString `json:"sidebar_section"`
 }
 
+type ChannelNotificationSetting struct {
+	ChannelID  string `json:"channel_id"`
+	UserID     string `json:"user_id"`
+	Preference string `json:"preference"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
 type ChannelRead struct {
 	ChannelID   string `json:"channel_id"`
 	UserID      string `json:"user_id"`
@@ -175,15 +184,16 @@ type DirectRead struct {
 }
 
 type Event struct {
-	ID          string         `json:"id"`
-	Cursor      string         `json:"cursor"`
-	WorkspaceID string         `json:"workspace_id"`
-	ChannelID   sql.NullString `json:"channel_id"`
-	Type        string         `json:"type"`
-	Seq         sql.NullInt64  `json:"seq"`
-	PayloadJson string         `json:"payload_json"`
-	CreatedAt   string         `json:"created_at"`
-	IsPrivate   int64          `json:"is_private"`
+	ID               string          `json:"id"`
+	Cursor           string          `json:"cursor"`
+	WorkspaceID      string          `json:"workspace_id"`
+	ChannelID        sql.NullString  `json:"channel_id"`
+	Type             string          `json:"type"`
+	Seq              sql.NullInt64   `json:"seq"`
+	PayloadJson      string          `json:"payload_json"`
+	CreatedAt        string          `json:"created_at"`
+	IsPrivate        int64           `json:"is_private"`
+	MentionedUserIds json.RawMessage `json:"mentioned_user_ids"`
 }
 
 type EventDeliveryAttempt struct {

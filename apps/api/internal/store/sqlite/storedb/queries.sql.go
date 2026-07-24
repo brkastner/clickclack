@@ -1192,6 +1192,25 @@ func (q *Queries) GetChannelByRouteIDAndWorkspace(ctx context.Context, arg GetCh
 	return i, err
 }
 
+const getChannelNotificationPreference = `-- name: GetChannelNotificationPreference :one
+SELECT preference
+FROM channel_notification_settings
+WHERE channel_id = ?1
+  AND user_id = ?2
+`
+
+type GetChannelNotificationPreferenceParams struct {
+	ChannelID string `json:"channel_id"`
+	UserID    string `json:"user_id"`
+}
+
+func (q *Queries) GetChannelNotificationPreference(ctx context.Context, arg GetChannelNotificationPreferenceParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getChannelNotificationPreference, arg.ChannelID, arg.UserID)
+	var preference string
+	err := row.Scan(&preference)
+	return preference, err
+}
+
 const getChannelWorkspace = `-- name: GetChannelWorkspace :one
 SELECT workspace_id
 FROM channels
@@ -2417,20 +2436,21 @@ func (q *Queries) InsertDirectMessage(ctx context.Context, arg InsertDirectMessa
 }
 
 const insertEvent = `-- name: InsertEvent :exec
-INSERT INTO events (id, cursor, workspace_id, channel_id, type, seq, payload_json, created_at, is_private)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+INSERT INTO events (id, cursor, workspace_id, channel_id, type, seq, payload_json, created_at, is_private, mentioned_user_ids)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
 `
 
 type InsertEventParams struct {
-	ID          string         `json:"id"`
-	Cursor      string         `json:"cursor"`
-	WorkspaceID string         `json:"workspace_id"`
-	ChannelID   sql.NullString `json:"channel_id"`
-	Type        string         `json:"type"`
-	Seq         sql.NullInt64  `json:"seq"`
-	PayloadJson string         `json:"payload_json"`
-	CreatedAt   string         `json:"created_at"`
-	IsPrivate   int64          `json:"is_private"`
+	ID               string         `json:"id"`
+	Cursor           string         `json:"cursor"`
+	WorkspaceID      string         `json:"workspace_id"`
+	ChannelID        sql.NullString `json:"channel_id"`
+	Type             string         `json:"type"`
+	Seq              sql.NullInt64  `json:"seq"`
+	PayloadJson      string         `json:"payload_json"`
+	CreatedAt        string         `json:"created_at"`
+	IsPrivate        int64          `json:"is_private"`
+	MentionedUserIds string         `json:"mentioned_user_ids"`
 }
 
 func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error {
@@ -2444,6 +2464,7 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error 
 		arg.PayloadJson,
 		arg.CreatedAt,
 		arg.IsPrivate,
+		arg.MentionedUserIds,
 	)
 	return err
 }
@@ -3496,7 +3517,7 @@ func (q *Queries) ListEventDeliveryAttemptsPage(ctx context.Context, arg ListEve
 }
 
 const listEventsAfter = `-- name: ListEventsAfter :many
-SELECT e.id, e.cursor, e.workspace_id, COALESCE(e.channel_id, '') AS channel_id, e.type, e.seq, e.payload_json, e.created_at
+SELECT e.id, e.cursor, e.workspace_id, COALESCE(e.channel_id, '') AS channel_id, e.type, e.seq, e.payload_json, e.created_at, e.mentioned_user_ids
 FROM events e
 JOIN workspace_members viewer ON viewer.workspace_id = e.workspace_id AND viewer.user_id = ?1
 LEFT JOIN channels event_channel ON event_channel.id = e.channel_id AND event_channel.workspace_id = e.workspace_id
@@ -3570,14 +3591,15 @@ type ListEventsAfterParams struct {
 }
 
 type ListEventsAfterRow struct {
-	ID          string        `json:"id"`
-	Cursor      string        `json:"cursor"`
-	WorkspaceID string        `json:"workspace_id"`
-	ChannelID   string        `json:"channel_id"`
-	Type        string        `json:"type"`
-	Seq         sql.NullInt64 `json:"seq"`
-	PayloadJson string        `json:"payload_json"`
-	CreatedAt   string        `json:"created_at"`
+	ID               string        `json:"id"`
+	Cursor           string        `json:"cursor"`
+	WorkspaceID      string        `json:"workspace_id"`
+	ChannelID        string        `json:"channel_id"`
+	Type             string        `json:"type"`
+	Seq              sql.NullInt64 `json:"seq"`
+	PayloadJson      string        `json:"payload_json"`
+	CreatedAt        string        `json:"created_at"`
+	MentionedUserIds string        `json:"mentioned_user_ids"`
 }
 
 func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams) ([]ListEventsAfterRow, error) {
@@ -3603,7 +3625,53 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 			&i.Seq,
 			&i.PayloadJson,
 			&i.CreatedAt,
+			&i.MentionedUserIds,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMentionedUserIDs = `-- name: ListMentionedUserIDs :many
+SELECT u.id, CAST(clickclack_lower(u.handle) AS TEXT) AS handle
+FROM users u
+JOIN workspace_members wm ON wm.user_id = u.id
+WHERE wm.workspace_id = ?1
+  AND u.handle IN (
+    SELECT CAST(value AS TEXT)
+    FROM json_each(?2)
+  )
+ORDER BY u.id
+`
+
+type ListMentionedUserIDsParams struct {
+	WorkspaceID string      `json:"workspace_id"`
+	HandlesJson interface{} `json:"handles_json"`
+}
+
+type ListMentionedUserIDsRow struct {
+	ID     string `json:"id"`
+	Handle string `json:"handle"`
+}
+
+func (q *Queries) ListMentionedUserIDs(ctx context.Context, arg ListMentionedUserIDsParams) ([]ListMentionedUserIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMentionedUserIDs, arg.WorkspaceID, arg.HandlesJson)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMentionedUserIDsRow
+	for rows.Next() {
+		var i ListMentionedUserIDsRow
+		if err := rows.Scan(&i.ID, &i.Handle); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -4212,30 +4280,35 @@ func (q *Queries) ListWorkspaceMembersForModeration(ctx context.Context, workspa
 }
 
 const listWorkspacePushNotificationRecipients = `-- name: ListWorkspacePushNotificationRecipients :many
-SELECT u.id AS user_id, u.display_name, uns.pushover_user_key
+SELECT u.id AS user_id, u.display_name, uns.pushover_user_key,
+       COALESCE(cns.preference, 'all') AS notification_preference
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 JOIN user_notification_settings uns ON uns.user_id = u.id
-WHERE wm.workspace_id = ?1
-  AND u.id <> ?2
+LEFT JOIN channel_notification_settings cns
+  ON cns.channel_id = ?1 AND cns.user_id = u.id
+WHERE wm.workspace_id = ?2
+  AND u.id <> ?3
   AND uns.pushover_enabled = 1
   AND uns.pushover_user_key <> ''
 ORDER BY u.id
 `
 
 type ListWorkspacePushNotificationRecipientsParams struct {
+	ChannelID   string `json:"channel_id"`
 	WorkspaceID string `json:"workspace_id"`
 	AuthorID    string `json:"author_id"`
 }
 
 type ListWorkspacePushNotificationRecipientsRow struct {
-	UserID          string `json:"user_id"`
-	DisplayName     string `json:"display_name"`
-	PushoverUserKey string `json:"pushover_user_key"`
+	UserID                 string `json:"user_id"`
+	DisplayName            string `json:"display_name"`
+	PushoverUserKey        string `json:"pushover_user_key"`
+	NotificationPreference string `json:"notification_preference"`
 }
 
 func (q *Queries) ListWorkspacePushNotificationRecipients(ctx context.Context, arg ListWorkspacePushNotificationRecipientsParams) ([]ListWorkspacePushNotificationRecipientsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listWorkspacePushNotificationRecipients, arg.WorkspaceID, arg.AuthorID)
+	rows, err := q.db.QueryContext(ctx, listWorkspacePushNotificationRecipients, arg.ChannelID, arg.WorkspaceID, arg.AuthorID)
 	if err != nil {
 		return nil, err
 	}
@@ -4243,7 +4316,12 @@ func (q *Queries) ListWorkspacePushNotificationRecipients(ctx context.Context, a
 	var items []ListWorkspacePushNotificationRecipientsRow
 	for rows.Next() {
 		var i ListWorkspacePushNotificationRecipientsRow
-		if err := rows.Scan(&i.UserID, &i.DisplayName, &i.PushoverUserKey); err != nil {
+		if err := rows.Scan(
+			&i.UserID,
+			&i.DisplayName,
+			&i.PushoverUserKey,
+			&i.NotificationPreference,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -5267,6 +5345,33 @@ func (q *Queries) UploadHasOtherDirectMessageAttachment(ctx context.Context, arg
 	var has_other_direct_message_attachment bool
 	err := row.Scan(&has_other_direct_message_attachment)
 	return has_other_direct_message_attachment, err
+}
+
+const upsertChannelNotificationSettings = `-- name: UpsertChannelNotificationSettings :exec
+INSERT INTO channel_notification_settings (channel_id, user_id, preference, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5)
+ON CONFLICT(channel_id, user_id) DO UPDATE SET
+  preference = excluded.preference,
+  updated_at = excluded.updated_at
+`
+
+type UpsertChannelNotificationSettingsParams struct {
+	ChannelID  string `json:"channel_id"`
+	UserID     string `json:"user_id"`
+	Preference string `json:"preference"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
+func (q *Queries) UpsertChannelNotificationSettings(ctx context.Context, arg UpsertChannelNotificationSettingsParams) error {
+	_, err := q.db.ExecContext(ctx, upsertChannelNotificationSettings,
+		arg.ChannelID,
+		arg.UserID,
+		arg.Preference,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
 }
 
 const upsertChannelRead = `-- name: UpsertChannelRead :execrows

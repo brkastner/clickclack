@@ -732,6 +732,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/channels/{channel_id}/notification-settings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getChannelNotificationSettings"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateChannelNotificationSettings"];
+    trace?: never;
+  };
   "/api/channels/{channel_id}/read": {
     parameters: {
       query?: never;
@@ -1794,6 +1810,16 @@ export interface components {
       payload: {
         [key: string]: unknown;
       } | null;
+      /** @description Workspace user IDs explicitly mentioned by a message event. */
+      mentioned_user_ids?: string[];
+    };
+    ChannelNotificationSettings: {
+      /** @enum {string} */
+      preference: "all" | "mentions" | "muted";
+    };
+    UpdateChannelNotificationSettingsRequest: {
+      /** @enum {string} */
+      preference: "all" | "mentions" | "muted";
     };
     ReactionMutationResponse: {
       event: components["schemas"]["Event"];
@@ -3762,6 +3788,54 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  getChannelNotificationSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current user's notification preference for the channel */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChannelNotificationSettings"];
+        };
+      };
+    };
+  };
+  updateChannelNotificationSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateChannelNotificationSettingsRequest"];
+      };
+    };
+    responses: {
+      /** @description Updated notification preference for the channel */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChannelNotificationSettings"];
+        };
       };
     };
   };

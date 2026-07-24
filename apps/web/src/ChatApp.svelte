@@ -50,12 +50,13 @@
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
-  import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
   const BROWSER_NOTIFICATIONS_STORAGE_PREFIX = "clickclack:browser-notifications-enabled:v1:";
+  const CHANNEL_NOTIFICATION_STORAGE_PREFIX = "clickclack:channel-notification:v1:";
   const MOBILE_NAV_MEDIA_QUERY = "(max-width: 820px)";
   const SHOW_AGENT_ACTIVITY_STORAGE_KEY = "clickclack:show-agent-activity:v1";
   const HIDE_COMMENTARY_STORAGE_KEY = "clickclack:hide-commentary:v1";
@@ -74,6 +75,9 @@
   let workspaces: Workspace[] = [];
   let channels: Channel[] = [];
   let topics: Topic[] = [];
+  let channelNotifPreference: ChannelNotificationPreference | null = null;
+  let channelNotifPreferences = new Map<string, ChannelNotificationPreference>();
+  let channelNotifSaving = false;
   let directConversations: DirectConversation[] = [];
   let messages: Message[] = [];
   let replies: Message[] = [];
@@ -190,6 +194,7 @@
   let moderationMembersLoadSerial = 0;
   let slashCommandsLoadSerial = 0;
   let botCommandsLoadSerial = 0;
+  let channelNotifLoadSerial = 0;
   let realtimeReconcileSerial = 0;
   let slashDispatchGeneration = 0;
   let hiddenDirectUndo: HiddenDirectUndo | null = null;
@@ -226,6 +231,7 @@
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
   $: eligibleTopics = topicsForChannel(topics, selectedChannelID);
   $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
+  $: void loadChannelNotifPreference(selectedChannelID, selectedDirectID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
   $: selectedDirectWritable = selectedDirect?.can_send ?? true;
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
@@ -1097,6 +1103,53 @@
     await navigateToApp(selectedWorkspaceID, channelID);
   }
 
+  async function loadChannelNotifPreference(channelID: string, directID: string) {
+    const serial = ++channelNotifLoadSerial;
+    channelNotifPreference = null;
+    if (!channelID || directID) return;
+    try {
+      const data = await api<{ preference: ChannelNotificationPreference }>(
+        `/api/channels/${channelID}/notification-settings`,
+      );
+      if (serial !== channelNotifLoadSerial || channelID !== selectedChannelID || selectedDirectID) return;
+      rememberChannelNotifPreference(channelID, data.preference);
+      channelNotifPreference = data.preference;
+    } catch {
+      if (serial === channelNotifLoadSerial && channelID === selectedChannelID && !selectedDirectID) {
+        const fallback = storedChannelNotifPreference(channelID) || "all";
+        rememberChannelNotifPreference(channelID, fallback);
+        channelNotifPreference = fallback;
+      }
+    }
+  }
+
+  async function cycleChannelNotifPreference() {
+    const channelID = selectedChannelID;
+    if (!channelID || selectedDirectID || channelNotifSaving || !channelNotifPreference) return;
+    const serial = ++channelNotifLoadSerial;
+    const cycle: ChannelNotificationPreference[] = ["all", "mentions", "muted"];
+    const current = channelNotifPreference;
+    const next = cycle[(cycle.indexOf(current) + 1) % cycle.length];
+    channelNotifPreference = next;
+    rememberChannelNotifPreference(channelID, next);
+    channelNotifSaving = true;
+    try {
+      await api(`/api/channels/${channelID}/notification-settings`, {
+        method: "PATCH",
+        body: JSON.stringify({ preference: next }),
+      });
+    } catch {
+      if (channelNotifPreferences.get(channelID) === next) {
+        rememberChannelNotifPreference(channelID, current);
+      }
+      if (serial === channelNotifLoadSerial && channelID === selectedChannelID && !selectedDirectID) {
+        channelNotifPreference = current;
+      }
+    } finally {
+      channelNotifSaving = false;
+    }
+  }
+
   function isCurrentMessageLoad(generation: number, targetKey: string): boolean {
     return generation === messageLoadGeneration && currentConversationKey() === targetKey;
   }
@@ -1803,22 +1856,90 @@
     };
   }
 
-  function maybeShowBrowserNotification(event: RealtimeEvent, affectsActiveView: boolean) {
-    if (event.type !== "message.created") return;
+  async function notificationPreferenceForChannel(channelID: string): Promise<ChannelNotificationPreference | null> {
+    try {
+      const data = await api<{ preference: ChannelNotificationPreference }>(
+        `/api/channels/${channelID}/notification-settings`,
+      );
+      rememberChannelNotifPreference(channelID, data.preference);
+      if (channelID === selectedChannelID && !selectedDirectID && !channelNotifSaving) {
+        channelNotifPreference = data.preference;
+      }
+      return data.preference;
+    } catch {
+      // Preserve a last-known restrictive choice; otherwise retain the historical all default.
+      return channelNotifPreferences.get(channelID) || storedChannelNotifPreference(channelID) || "all";
+    }
+  }
+
+  function channelNotifStorageKey(channelID: string): string {
+    return user?.id && channelID ? `${CHANNEL_NOTIFICATION_STORAGE_PREFIX}${user.id}:${channelID}` : "";
+  }
+
+  function storedChannelNotifPreference(channelID: string): ChannelNotificationPreference | null {
+    const key = channelNotifStorageKey(channelID);
+    if (!key) return null;
+    try {
+      const value = window.localStorage.getItem(key);
+      return value === "all" || value === "mentions" || value === "muted" ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function rememberChannelNotifPreference(
+    channelID: string,
+    preference: ChannelNotificationPreference,
+  ) {
+    channelNotifPreferences = new Map(channelNotifPreferences).set(channelID, preference);
+    const key = channelNotifStorageKey(channelID);
+    if (!key) return;
+    try {
+      window.localStorage.setItem(key, preference);
+    } catch {
+      // The in-memory value remains authoritative for this session.
+    }
+  }
+
+  async function maybeShowBrowserNotification(event: RealtimeEvent, affectsActiveView: boolean) {
+    if (event.type !== "message.created" && event.type !== "thread.reply_created") return;
     const payload = event.payload as Record<string, unknown>;
     const kind = typeof payload.kind === "string" ? payload.kind : "";
     if (kind === "agent_commentary" || kind === "agent_tool") return;
     if (!browserNotificationsEnabled) return;
     if (document.visibilityState === "visible" && affectsActiveView) return;
-    const authorID = typeof payload.author_id === "string" ? payload.author_id : "";
+    const messageID =
+      typeof payload.message_id === "string"
+        ? payload.message_id
+        : `${event.channel_id || ""}:${event.seq || Date.now()}`;
+    let authorID = typeof payload.author_id === "string" ? payload.author_id : "";
+    let rawBody = typeof payload.body === "string" ? payload.body : "New message";
+    if (event.type === "thread.reply_created" && typeof payload.message_id === "string") {
+      try {
+        const data = await api<{ message: Message }>(`/api/messages/${payload.message_id}`);
+        authorID = data.message.author_id;
+        rawBody = data.message.body;
+      } catch {
+        // Keep the durable event metadata fallback when message hydration fails.
+      }
+    }
     if (authorID && authorID === user?.id) return;
     const { channelID, dmID } = messageEventScope(event);
+    if (channelID) {
+      const preference = await notificationPreferenceForChannel(channelID);
+      if (!preference) return;
+      if (!browserNotificationsEnabled) return;
+      const stillAffectsActiveView =
+        (Boolean(channelID) && channelID === selectedChannelID) ||
+        (Boolean(dmID) && dmID === selectedDirectID);
+      if (document.visibilityState === "visible" && stillAffectsActiveView) return;
+      if (preference === "muted") return;
+      if (preference === "mentions" && !event.mentioned_user_ids?.includes(user?.id || "")) return;
+    }
     const channel = channels.find((candidate) => candidate.id === channelID);
     const author = lookupUser(authorID);
     const authorName = author?.display_name || "ClickClack";
     const place = channel ? `#${channelDisplayTitle(channel)}` : "Direct message";
-    const rawBody = typeof payload.body === "string" ? payload.body : "New message";
-    const messageID = typeof payload.message_id === "string" ? payload.message_id : `${channelID || dmID}:${event.seq || Date.now()}`;
     if (desktop) {
       void desktop.notify({
         body: notificationBody(rawBody),
@@ -3130,7 +3251,7 @@
       reactionController.applyEvent(event);
       return;
     }
-    maybeShowBrowserNotification(event, affectsActiveView);
+    void maybeShowBrowserNotification(event, affectsActiveView);
     if (event.type === "message.created" && !affectsActiveView) {
       const loadedConversation = await loadUnknownDirectConversationFromEvent(event);
       if (!loadedConversation) handleUnreadBump(event);
@@ -3755,6 +3876,8 @@
 >
   {#if integratedTitleBar && desktop}
     <DesktopTitlebar
+      channelNotifPreference={selectedChannel ? channelNotifPreference : null}
+      {channelNotifSaving}
       channelTitle={selectedDirect
         ? `@${dmTitle(selectedDirect, user?.id)}`
         : selectedChannel
@@ -3773,6 +3896,7 @@
       onSearch={() => void searchMessages()}
       onSearchQuery={(value) => (searchQuery = value)}
       onToggleSidebar={handleSidebarCollapse}
+      onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
     />
   {/if}
 
@@ -3852,11 +3976,14 @@
         {searchQuery}
         {sidePanelOpen}
         threadOpen={selectedThread !== null}
+        {channelNotifPreference}
+        {channelNotifSaving}
         onSearchQuery={(value) => (searchQuery = value)}
         onSearch={() => void searchMessages()}
         onResetSearch={resetSearch}
         onToggleThread={toggleSidePanelFromTopbar}
         onPinnedItems={() => (status = "no pinned items")}
+        onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
       />
     {/if}
 
