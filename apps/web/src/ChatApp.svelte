@@ -43,6 +43,7 @@
   import GuildRail from "./components/navigation/GuildRail.svelte";
   import Sidebar from "./components/navigation/Sidebar.svelte";
   import ProfilePane from "./components/profile/ProfilePane.svelte";
+  import PinnedPanel from "./components/pins/PinnedPanel.svelte";
   import SearchResults from "./components/search/SearchResults.svelte";
   import SettingsModal from "./components/settings/SettingsModal.svelte";
   import ThreadEmptyState from "./components/thread/ThreadEmptyState.svelte";
@@ -94,6 +95,13 @@
   let recoverableDraftMessages = new Map<string, Message[]>();
   let selectedThreadState: ThreadState | null = null;
   let selectedProfile: User | null = null;
+  let pinnedPanelOpen = false;
+  let openPinnedPanelAfterRoute = false;
+  let pinnedMessages: Message[] = [];
+  let pinnedMessagesLoading = false;
+  let pinnedMessagesError = "";
+  let pinnedMessageIDs = new Set<string>();
+  let pinnedMessagesLoadSerial = 0;
   let moderationMembers: MemberModeration[] = [];
   let workspaceMemberUsers: User[] = [];
   let slashCommands: SlashCommand[] = [];
@@ -309,7 +317,8 @@
   $: agentResponding = agentProgressTurns.some((turn) =>
     turn.lines.some((line) => !line.finalized),
   );
-  $: sidePanelOpen = selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
+  $: pinnedMessageIDs = new Set(pinnedMessages.map((message) => message.id));
+  $: sidePanelOpen = pinnedPanelOpen || selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
   $: searchPaneVisible = searchSession !== null && !searchThreadDetour;
   $: if (selectedArtifact && artifactConversationKey && artifactConversationKey !== activeConversationKey) {
@@ -611,6 +620,7 @@
     selectedThread = null;
     selectedThreadState = null;
     selectedProfile = null;
+    pinnedPanelOpen = false;
     activeComposerContext = "message";
     replies = [];
     mobileNavOpen = false;
@@ -774,15 +784,19 @@
       selectedDirectID = "";
       rememberLastChannel(workspace.id, targetID);
       clearRoutePanelState();
+      const shouldOpenPinnedPanel = openPinnedPanelAfterRoute;
+      openPinnedPanelAfterRoute = false;
       if (sameConversation) {
+        pinnedPanelOpen = shouldOpenPinnedPanel;
         appliedRouteKey = canonicalRouteKey;
         updateActiveMessageWindowFlags(targetID);
         connectPendingRealtime(workspace.id);
         return;
       }
       resetTopicStateForConversation(targetID);
-      await loadMessages();
+      await Promise.all([loadMessages(), loadPinnedMessages(targetID, "")]);
       if (serial !== routeApplySerial) return;
+      pinnedPanelOpen = shouldOpenPinnedPanel;
       appliedRouteKey = canonicalRouteKey;
       connectPendingRealtime(workspace.id);
       return;
@@ -899,6 +913,7 @@
     activeComposerContext = "thread";
     mobileNavOpen = false;
     await refreshThread(route.target_id);
+    if (parentChannelID) await loadPinnedMessages(parentChannelID, "");
     if (!sameThread && selectedThread) await loadMessagesAround(selectedThread);
     return true;
   }
@@ -2597,6 +2612,7 @@
 
   async function openThread(message: Message) {
     resetSearch();
+    pinnedPanelOpen = false;
     await refreshThread(message.id, message);
     if (selectedWorkspaceID && selectedThread?.route_id && window.location.pathname !== appHref(selectedWorkspaceID, selectedThread.id)) {
       await navigateToApp(selectedWorkspaceID, selectedThread.id);
@@ -3188,6 +3204,8 @@
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     await loadMessages(preserveScroll);
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
+    await loadPinnedMessages();
+    if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     if (selectedThreadID && selectedThread?.id === selectedThreadID) {
       await refreshThread(selectedThreadID, selectedThread);
     }
@@ -3198,6 +3216,14 @@
   }
 
   async function handleEvent(event: RealtimeEvent) {
+    if (
+      (event.type === "pin.added" || event.type === "pin.removed") &&
+      event.channel_id === selectedChannelID &&
+      !selectedDirectID
+    ) {
+      await loadPinnedMessages();
+      return;
+    }
     if (event.type === "typing.started" || event.type === "typing.stopped") {
       handleTypingEvent(event);
       return;
@@ -3267,6 +3293,13 @@
       await loadTopics(event.workspace_id);
     }
     if (messageEventAlreadyAccounted(event)) return;
+    const affectsConversation =
+    if (
+      (event.type === "message.updated" || event.type === "message.deleted") &&
+      pinnedMessageIDs.has(event.payload.message_id || "")
+    ) {
+      await loadPinnedMessages();
+    }
     const affectsConversation =
       event.channel_id === selectedChannelID || event.payload.direct_conversation_id === selectedDirectID;
     const affectsActiveView =
@@ -3615,6 +3648,7 @@
     selectedArtifact = null;
     artifactConversationKey = "";
     selectedThread = null;
+    pinnedPanelOpen = false;
     selectedProfile = profile;
     if (
       (currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator") &&
@@ -3751,6 +3785,10 @@
       closeArtifactViewer();
       return;
     }
+    if (pinnedPanelOpen) {
+      pinnedPanelOpen = false;
+      return;
+    }
     const threadWasOpen = selectedThread !== null;
     const searchDetourWasOpen = searchThreadDetour;
     const parentTargetID = currentConversationKey();
@@ -3770,6 +3808,77 @@
   function toggleSidePanelFromTopbar() {
     if (sidePanelOpen) closeSidePanel();
     else status = "pick a message to open its thread";
+  }
+
+  async function loadPinnedMessages(channelID = selectedChannelID, directID = selectedDirectID) {
+    const serial = ++pinnedMessagesLoadSerial;
+    if (!channelID || directID) {
+      pinnedMessages = [];
+      pinnedMessagesError = "";
+      pinnedMessagesLoading = false;
+      return;
+    }
+    pinnedMessagesLoading = true;
+    pinnedMessagesError = "";
+    try {
+      const data = await api<{ messages: Message[] }>(`/api/channels/${channelID}/pins?limit=100`);
+      if (serial !== pinnedMessagesLoadSerial || channelID !== selectedChannelID || selectedDirectID) return;
+      pinnedMessages = data.messages;
+    } catch (error) {
+      if (serial !== pinnedMessagesLoadSerial) return;
+      pinnedMessagesError = error instanceof Error ? error.message : "Could not load pinned messages";
+    } finally {
+      if (serial === pinnedMessagesLoadSerial) pinnedMessagesLoading = false;
+    }
+  }
+
+  async function toggleMessagePin(message: Message, pinned: boolean) {
+    const channelID = selectedChannelID;
+    if (!channelID || selectedDirectID) throw new Error("Pins are available in channels only");
+    if (pinned) {
+      await api(`/api/channels/${channelID}/pins/${message.id}`, { method: "DELETE" });
+    } else {
+      await api(`/api/channels/${channelID}/pins`, {
+        method: "POST",
+        body: JSON.stringify({ message_id: message.id }),
+      });
+    }
+    await loadPinnedMessages(channelID, "");
+  }
+
+  async function togglePinnedPanel() {
+    if (pinnedPanelOpen) {
+      pinnedPanelOpen = false;
+      return;
+    }
+    if (!selectedChannelID || selectedDirectID) return;
+    const threadWasOpen = selectedThread !== null;
+    const searchDetourWasOpen = searchThreadDetour;
+    const parentTargetID = currentConversationKey();
+    resetSearch();
+    selectedThread = null;
+    selectedThreadState = null;
+    selectedProfile = null;
+    replies = [];
+    if ((threadWasOpen || searchDetourWasOpen) && selectedWorkspaceID && parentTargetID) {
+      openPinnedPanelAfterRoute = true;
+      await navigateToApp(selectedWorkspaceID, parentTargetID);
+      return;
+    }
+    pinnedPanelOpen = true;
+    void loadPinnedMessages();
+  }
+
+  async function openPinnedMessageThread(message: Message) {
+    pinnedPanelOpen = false;
+    await refreshThread(message.thread_root_id, message.parent_message_id ? undefined : message);
+    if (
+      selectedWorkspaceID &&
+      selectedThread?.route_id &&
+      window.location.pathname !== appHref(selectedWorkspaceID, selectedThread.id)
+    ) {
+      await navigateToApp(selectedWorkspaceID, selectedThread.id);
+    }
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
@@ -3931,6 +4040,7 @@
       onSearchQuery={(value) => (searchQuery = value)}
       onToggleSidebar={handleSidebarCollapse}
       onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
+      onPinnedItems={togglePinnedPanel}
     />
   {/if}
 
@@ -3998,9 +4108,7 @@
 
   <main class="timeline" inert={mobileNavOpen}>
     <!-- The integrated title bar owns the conversation title, so desktop drops
-         this header row entirely. Its thread toggle only closes an open pane
-         (the pane has its own close button) and pinned items is a stub, so
-         neither moves up. -->
+         this header row entirely. -->
     {#if !integratedTitleBar}
       <Topbar
         {selectedDirect}
@@ -4016,8 +4124,8 @@
         onSearch={() => void searchMessages()}
         onResetSearch={resetSearch}
         onToggleThread={toggleSidePanelFromTopbar}
-        onPinnedItems={() => (status = "no pinned items")}
         onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
+        onPinnedItems={togglePinnedPanel}
       />
     {/if}
 
@@ -4029,6 +4137,9 @@
     {/if}
 
     <MessageList
+      channelID={selectedChannelID}
+      {pinnedMessageIDs}
+      onTogglePin={toggleMessagePin}
       messages={visibleMessages}
       {selectedDirect}
       {selectedChannel}
@@ -4190,9 +4301,20 @@
     class:covered={selectedArtifact !== null}
     inert={mobileNavOpen || selectedArtifact !== null}
     aria-hidden={selectedArtifact ? "true" : undefined}
-    aria-label={selectedProfile ? "Profile pane" : "Thread pane"}
+    aria-label={pinnedPanelOpen ? "Pinned messages pane" : selectedProfile ? "Profile pane" : "Thread pane"}
   >
-    {#if selectedThread}
+    {#if pinnedPanelOpen}
+      <PinnedPanel
+        messages={pinnedMessages}
+        loading={pinnedMessagesLoading}
+        error={pinnedMessagesError}
+        onClose={closeSidePanel}
+        onOpenThread={(message) => void openPinnedMessageThread(message)}
+        onOpenImage={openImageViewer}
+        onOpenArtifact={openArtifactViewer}
+        onUnpin={(message) => toggleMessagePin(message, true)}
+      />
+    {:else if selectedThread}
       <ThreadPanel
         root={selectedThread}
         {replies}
@@ -4217,6 +4339,9 @@
         canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
         {deletingMessageIDs}
         onDeleteMessage={requestMessageDelete}
+        channelID={selectedChannelID}
+        {pinnedMessageIDs}
+        onTogglePin={toggleMessagePin}
         {editController}
         editScope={activeConversationKey}
         onMessageEdited={applyEditedMessage}

@@ -764,6 +764,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/channels/{channel_id}/pins": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listPinnedMessages"];
+    put?: never;
+    post: operations["pinMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/channels/{channel_id}/pins/{message_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["unpinMessage"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/messages/by-nonce": {
     parameters: {
       query?: never;
@@ -1824,6 +1856,22 @@ export interface components {
     ReactionMutationResponse: {
       event: components["schemas"]["Event"];
       reactions: components["schemas"]["ReactionSummary"][];
+    };
+    PinnedMessage: {
+      id: string;
+      workspace_id: string;
+      channel_id: string;
+      message_id: string;
+      pinned_by: string;
+      /** Format: date-time */
+      created_at: string;
+    };
+    PinMessageRequest: {
+      message_id: string;
+    };
+    PinMessageResponse: {
+      pinned_message: components["schemas"]["PinnedMessage"];
+      event: components["schemas"]["Event"];
     };
     Message: {
       id: string;
@@ -3860,6 +3908,83 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  listPinnedMessages: {
+    parameters: {
+      query?: {
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Messages pinned in the channel, newest pin first */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            messages: components["schemas"]["Message"][];
+          };
+        };
+      };
+    };
+  };
+  pinMessage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PinMessageRequest"];
+      };
+    };
+    responses: {
+      /** @description Pinned the message */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PinMessageResponse"];
+        };
+      };
+    };
+  };
+  unpinMessage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+        message_id: components["parameters"]["message_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Unpinned the message */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            event: components["schemas"]["Event"];
+          };
+        };
       };
     };
   };

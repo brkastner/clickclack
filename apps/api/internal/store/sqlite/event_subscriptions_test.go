@@ -9,6 +9,41 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 )
 
+func TestPinEventsAreDiscoverableAndSubscribable(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Pin Subscriber", "pin-subscriber@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, eventType := range []string{"pin.added", "pin.removed"} {
+		if !store.IsDurableEventType(eventType) {
+			t.Fatalf("expected %s in durable event registry", eventType)
+		}
+		subscription, err := st.CreateEventSubscription(ctx, store.CreateEventSubscriptionInput{
+			WorkspaceID: workspaces[0].ID,
+			EventTypes:  []string{eventType},
+			CallbackURL: "https://example.com/pins",
+			CreatedBy:   owner.ID,
+		})
+		if err != nil {
+			t.Fatalf("subscribe to %s: %v", eventType, err)
+		}
+		matches, err := st.ListEventSubscriptionsForEvent(ctx, store.Event{
+			ID: "evt_" + eventType, Cursor: "cur_" + eventType,
+			Type: eventType, WorkspaceID: workspaces[0].ID,
+		})
+		if err != nil || len(matches) != 1 || matches[0].ID != subscription.ID {
+			t.Fatalf("expected exact %s subscription match, got %#v: %v", eventType, matches, err)
+		}
+	}
+}
+
 func TestListEventSubscriptionsForEventExcludesRecipientScopedEvents(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

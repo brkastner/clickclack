@@ -73,6 +73,7 @@ Inserted in the same transaction as the underlying mutation:
 - `channel.read`, `dm.read`
 - `thread.reply_created`, `thread.state_updated`
 - `reaction.added`, `reaction.removed`
+- `pin.added`, `pin.removed`
 - `member.moderation_updated`
 
 Direct messages also publish into the workspace event stream so DM lists stay

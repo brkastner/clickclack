@@ -47,6 +47,9 @@
     deletingMessageIDs?: ReadonlySet<string>;
     onSetReplyTarget: (message: Message, context: "thread") => void;
     onDeleteMessage?: (message: Message) => void;
+    channelID?: string;
+    pinnedMessageIDs?: ReadonlySet<string>;
+    onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
@@ -84,6 +87,9 @@
     deletingMessageIDs = new Set<string>(),
     onSetReplyTarget,
     onDeleteMessage,
+    channelID = "",
+    pinnedMessageIDs = new Set<string>(),
+    onTogglePin,
     editController,
     editScope = "",
     onMessageEdited,
@@ -150,6 +156,7 @@
   let actionMessage = $state<Message>();
   let actionSheetReturnFocus = $state<HTMLElement>();
   let actionCopyStatus = $state<"copied" | "failed" | "">("");
+  let pinSaving = $state(false);
   let longPressTimer: number | undefined;
   let longPressCleanup: (() => void) | undefined;
   let sheetCloseTimer: number | undefined;
@@ -296,6 +303,23 @@
     if (message) onDeleteMessage?.(message);
   }
 
+  async function togglePin(message: Message) {
+    if (!channelID || !onTogglePin || pinSaving) return;
+    pinSaving = true;
+    try {
+      await onTogglePin(message, pinnedMessageIDs.has(message.id));
+    } finally {
+      pinSaving = false;
+    }
+  }
+
+  async function sheetTogglePin() {
+    const message = actionMessage;
+    if (!message) return;
+    await togglePin(message);
+    closeActionSheet();
+  }
+
   onDestroy(() => {
     destroyed = true;
     clearSheetCloseTimer();
@@ -382,6 +406,20 @@
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
             </svg>
           </button>
+          {#if channelID && onTogglePin}
+            <button
+              type="button"
+              class="thread-action-btn"
+              aria-label={pinnedMessageIDs.has(root.id) ? "Unpin message" : "Pin message"}
+              data-tooltip={pinnedMessageIDs.has(root.id) ? "Unpin message" : "Pin message"}
+              disabled={pinSaving}
+              onclick={() => void togglePin(root)}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z"/>
+              </svg>
+            </button>
+          {/if}
           {#if canEdit(root) && editController && editScope}
             <button
               type="button"
@@ -513,6 +551,20 @@
                   <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
                 </svg>
               </button>
+              {#if channelID && onTogglePin}
+                <button
+                  type="button"
+                  class="thread-action-btn"
+                  aria-label={pinnedMessageIDs.has(reply.id) ? "Unpin message" : "Pin message"}
+                  data-tooltip={pinnedMessageIDs.has(reply.id) ? "Unpin message" : "Pin message"}
+                  disabled={pinSaving}
+                  onclick={() => void togglePin(reply)}
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                    <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z"/>
+                  </svg>
+                </button>
+              {/if}
               {#if canEdit(reply) && editController && editScope}
                 <button
                   type="button"
@@ -615,6 +667,9 @@
     canReply={!replyDisabled}
     showOpenThread={false}
     canEdit={canEdit(actionMessage) && Boolean(editController) && Boolean(editScope)}
+    canPin={Boolean(channelID && onTogglePin)}
+    pinned={pinnedMessageIDs.has(actionMessage.id)}
+    pinning={pinSaving}
     canDelete={canDelete(actionMessage) && Boolean(onDeleteMessage)}
     deleting={deletingMessageIDs.has(actionMessage.id)}
     copyStatus={actionCopyStatus}
@@ -623,6 +678,7 @@
     onReply={sheetReply}
     onCopy={sheetCopy}
     onEdit={sheetEdit}
+    onTogglePin={sheetTogglePin}
     onDelete={sheetDelete}
     onClose={closeActionSheet}
     returnFocus={actionSheetReturnFocus}

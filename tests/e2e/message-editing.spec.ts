@@ -51,9 +51,12 @@ test("message action menu supports standard keyboard navigation", async ({ page 
   await trigger.click();
 
   const copy = row.getByRole("menuitem", { name: "Copy text" });
+  const pin = row.getByRole("menuitem", { name: "Pin message" });
   const edit = row.getByRole("menuitem", { name: "Edit message" });
   const remove = row.getByRole("menuitem", { name: "Delete message" });
   await expect(copy).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(pin).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(edit).toBeFocused();
   await page.keyboard.press("ArrowDown");
