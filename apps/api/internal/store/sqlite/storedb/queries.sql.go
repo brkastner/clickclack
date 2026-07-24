@@ -229,6 +229,39 @@ func (q *Queries) CountOAuthTransactionsForBinding(ctx context.Context, browserB
 	return count, err
 }
 
+const countPinnedMessage = `-- name: CountPinnedMessage :one
+SELECT COUNT(*) FROM pinned_messages
+WHERE channel_id = ?1
+  AND message_id = ?2
+`
+
+type CountPinnedMessageParams struct {
+	ChannelID string `json:"channel_id"`
+	MessageID string `json:"message_id"`
+}
+
+func (q *Queries) CountPinnedMessage(ctx context.Context, arg CountPinnedMessageParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPinnedMessage, arg.ChannelID, arg.MessageID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPinnedMessages = `-- name: CountPinnedMessages :one
+SELECT COUNT(*)
+FROM pinned_messages p
+JOIN messages m ON m.id = p.message_id
+WHERE p.channel_id = ?1
+  AND m.deleted_at IS NULL
+`
+
+func (q *Queries) CountPinnedMessages(ctx context.Context, channelID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPinnedMessages, channelID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRecentWorkspaceMessagesByAuthor = `-- name: CountRecentWorkspaceMessagesByAuthor :one
 SELECT COUNT(*)
 FROM messages m
@@ -3627,6 +3660,53 @@ func (q *Queries) ListPendingUploadCleanups(ctx context.Context, rowLimit int64)
 	return items, nil
 }
 
+const listPinnedMessages = `-- name: ListPinnedMessages :many
+SELECT p.id, p.workspace_id, p.channel_id, p.message_id, p.pinned_by, p.created_at
+FROM pinned_messages p
+JOIN messages m ON m.id = p.message_id
+WHERE p.workspace_id = ?1
+  AND p.channel_id = ?2
+  AND m.deleted_at IS NULL
+ORDER BY p.created_at DESC
+LIMIT ?3
+`
+
+type ListPinnedMessagesParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	LimitCount  int64  `json:"limit_count"`
+}
+
+func (q *Queries) ListPinnedMessages(ctx context.Context, arg ListPinnedMessagesParams) ([]PinnedMessage, error) {
+	rows, err := q.db.QueryContext(ctx, listPinnedMessages, arg.WorkspaceID, arg.ChannelID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PinnedMessage
+	for rows.Next() {
+		var i PinnedMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ChannelID,
+			&i.MessageID,
+			&i.PinnedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReactionsForMessages = `-- name: ListReactionsForMessages :many
 SELECT
   r.message_id,
@@ -4447,6 +4527,42 @@ func (q *Queries) MembershipRolesForUpdate(ctx context.Context, arg MembershipRo
 	return items, nil
 }
 
+const pinMessageWithinLimit = `-- name: PinMessageWithinLimit :execrows
+INSERT OR IGNORE INTO pinned_messages (id, workspace_id, channel_id, message_id, pinned_by, created_at)
+SELECT ?1, ?2, ?3, ?4, ?5, ?6
+WHERE (
+  SELECT COUNT(*)
+  FROM pinned_messages p
+  JOIN messages m ON m.id = p.message_id
+  WHERE p.channel_id = ?3
+    AND m.deleted_at IS NULL
+) < 100
+`
+
+type PinMessageWithinLimitParams struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	MessageID   string `json:"message_id"`
+	PinnedBy    string `json:"pinned_by"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func (q *Queries) PinMessageWithinLimit(ctx context.Context, arg PinMessageWithinLimitParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, pinMessageWithinLimit,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.ChannelID,
+		arg.MessageID,
+		arg.PinnedBy,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const pruneEvents = `-- name: PruneEvents :execrows
 DELETE FROM events AS e
 WHERE e.workspace_id = ?1
@@ -4896,6 +5012,25 @@ WHERE conversation_id = ?1
 func (q *Queries) UnhideDirectConversationForMembers(ctx context.Context, conversationID string) error {
 	_, err := q.db.ExecContext(ctx, unhideDirectConversationForMembers, conversationID)
 	return err
+}
+
+const unpinMessage = `-- name: UnpinMessage :execrows
+DELETE FROM pinned_messages
+WHERE channel_id = ?1
+  AND message_id = ?2
+`
+
+type UnpinMessageParams struct {
+	ChannelID string `json:"channel_id"`
+	MessageID string `json:"message_id"`
+}
+
+func (q *Queries) UnpinMessage(ctx context.Context, arg UnpinMessageParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, unpinMessage, arg.ChannelID, arg.MessageID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateAppearanceBoardTheme = `-- name: UpdateAppearanceBoardTheme :exec

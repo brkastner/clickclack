@@ -53,6 +53,14 @@ var ErrSetupCodeInvalid = errors.New("setup code is invalid or expired")
 // budget in a workspace.
 var ErrUploadQuotaExceeded = errors.New("upload quota exceeded")
 
+var (
+	ErrAlreadyPinned         = errors.New("message is already pinned")
+	ErrPinnedMessageNotFound = errors.New("pinned message not found")
+	ErrPinnedMessageLimit    = errors.New("channel pin limit reached")
+)
+
+const MaxPinnedMessagesPerChannel = 100
+
 // ErrUploadNonceConflict is returned when a client reuses an upload nonce in
 // another workspace.
 var ErrUploadNonceConflict = errors.New("upload nonce was already used in another workspace")
@@ -233,6 +241,15 @@ type ReactionSummary struct {
 	Emoji       string `json:"emoji"`
 	Count       int64  `json:"count"`
 	ReactedByMe bool   `json:"reacted_by_me"`
+}
+
+type PinnedMessage struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	MessageID   string `json:"message_id"`
+	PinnedBy    string `json:"pinned_by"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type Message struct {
@@ -1102,6 +1119,9 @@ type Store interface {
 	CreateThreadReply(ctx context.Context, input CreateThreadReplyInput) (Message, ThreadState, []Event, error)
 	AddReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	RemoveReaction(ctx context.Context, input CreateReactionInput) (Event, error)
+	PinMessage(ctx context.Context, channelID, messageID, userID string) (PinnedMessage, Event, error)
+	UnpinMessage(ctx context.Context, channelID, messageID, userID string) (Event, error)
+	ListPinnedMessages(ctx context.Context, channelID, userID string, limit int) ([]Message, error)
 	LatestEventCursor(ctx context.Context, workspaceID, userID string) (string, error)
 	EventCursorExists(ctx context.Context, workspaceID, userID, cursor string) (bool, error)
 	ListEventsAfter(ctx context.Context, workspaceID, userID, cursor string, limit int) ([]Event, error)

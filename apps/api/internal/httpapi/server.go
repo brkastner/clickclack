@@ -203,6 +203,9 @@ func (s *Server) Handler() http.Handler {
 		r.Patch("/channels/{channel_id}", s.updateChannel)
 		r.Get("/channels/{channel_id}/messages", s.listMessages)
 		r.Post("/channels/{channel_id}/messages", s.createMessage)
+		r.Get("/channels/{channel_id}/pins", s.listPinnedMessages)
+		r.Post("/channels/{channel_id}/pins", s.pinMessage)
+		r.Delete("/channels/{channel_id}/pins/{message_id}", s.unpinMessage)
 		r.Post("/channels/{channel_id}/read", s.markChannelRead)
 		r.Get("/messages/by-nonce", s.getMessageByNonce)
 		r.Get("/messages/{message_id}", s.getMessage)
@@ -1720,6 +1723,10 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrUploadNonceConflict):
 		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrSetupNonceConflict):
+		writeError(w, http.StatusConflict, err)
+	case errors.Is(err, store.ErrAlreadyPinned):
+		writeError(w, http.StatusConflict, err)
+	case errors.Is(err, store.ErrPinnedMessageLimit):
 		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrSetupCodeInvalid):
 		writeError(w, http.StatusNotFound, err)

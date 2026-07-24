@@ -1358,6 +1358,62 @@ SELECT EXISTS (
   SELECT 1 FROM events WHERE workspace_id = sqlc.arg(workspace_id) AND cursor = sqlc.arg(cursor)
 );
 
+-- name: PinMessage :execrows
+INSERT INTO pinned_messages (id, workspace_id, channel_id, message_id, pinned_by, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(message_id), sqlc.arg(pinned_by), sqlc.arg(created_at))
+ON CONFLICT(channel_id, message_id) DO NOTHING;
+
+-- name: LockChannelForPinning :one
+SELECT id FROM channels WHERE id = sqlc.arg(channel_id) FOR UPDATE;
+
+-- name: CountPinnedMessages :one
+SELECT COUNT(*)
+FROM pinned_messages p
+JOIN messages m ON m.id = p.message_id
+WHERE p.channel_id = sqlc.arg(channel_id)
+  AND m.deleted_at IS NULL;
+
+-- name: CountPinnedMessage :one
+SELECT COUNT(*) FROM pinned_messages
+WHERE channel_id = sqlc.arg(channel_id)
+  AND message_id = sqlc.arg(message_id);
+
+-- name: UnpinMessage :execrows
+DELETE FROM pinned_messages
+WHERE channel_id = sqlc.arg(channel_id)
+  AND message_id = sqlc.arg(message_id);
+
+-- name: ListPinnedMessages :many
+SELECT m.id, COALESCE(m.route_id, '') AS route_id, m.workspace_id,
+       COALESCE(m.channel_id, '') AS channel_id,
+       COALESCE(m.direct_conversation_id, '') AS direct_conversation_id,
+       m.author_id, m.parent_message_id, m.thread_root_id,
+       COALESCE(m.topic_id, '') AS topic_id, m.channel_seq, m.thread_seq,
+       m.body, m.body_format, m.created_at, m.edited_at, m.deleted_at,
+       u.id AS user_id, u.kind AS user_kind, u.owner_user_id,
+       u.display_name, u.handle, u.avatar_url, u.created_at AS user_created_at,
+       author_tombstone.former_handle AS author_former_handle,
+       author_tombstone.deleted_at AS author_deleted_at,
+       m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id,
+       qu.id AS quoted_user_id, qu.kind AS quoted_user_kind,
+       qu.owner_user_id AS quoted_owner_user_id,
+       qu.display_name AS quoted_display_name, qu.handle AS quoted_handle,
+       qu.avatar_url AS quoted_avatar_url, qu.created_at AS quoted_user_created_at,
+       quoted_tombstone.former_handle AS quoted_former_handle,
+       quoted_tombstone.deleted_at AS quoted_deleted_at,
+       m.client_nonce, m.kind AS message_kind, COALESCE(m.turn_id, '') AS turn_id
+FROM pinned_messages p
+JOIN messages m ON m.id = p.message_id
+JOIN users u ON u.id = m.author_id
+LEFT JOIN bot_tombstones author_tombstone ON author_tombstone.bot_user_id = u.id
+LEFT JOIN users qu ON qu.id = m.quoted_author_id
+LEFT JOIN bot_tombstones quoted_tombstone ON quoted_tombstone.bot_user_id = qu.id
+WHERE p.workspace_id = sqlc.arg(workspace_id)
+  AND p.channel_id = sqlc.arg(channel_id)
+  AND m.deleted_at IS NULL
+ORDER BY p.created_at DESC
+LIMIT sqlc.arg(limit_count);
+
 -- name: ListEventsAfter :many
 SELECT e.id, e.cursor, e.workspace_id, COALESCE(e.channel_id, '') AS channel_id, e.type, e.seq, e.payload_json, e.created_at
 FROM events e

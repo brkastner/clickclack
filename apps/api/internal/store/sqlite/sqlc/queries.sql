@@ -1324,6 +1324,44 @@ SELECT EXISTS (
   SELECT 1 FROM events WHERE workspace_id = sqlc.arg(workspace_id) AND cursor = sqlc.arg(cursor)
 );
 
+-- name: PinMessageWithinLimit :execrows
+INSERT OR IGNORE INTO pinned_messages (id, workspace_id, channel_id, message_id, pinned_by, created_at)
+SELECT sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(message_id), sqlc.arg(pinned_by), sqlc.arg(created_at)
+WHERE (
+  SELECT COUNT(*)
+  FROM pinned_messages p
+  JOIN messages m ON m.id = p.message_id
+  WHERE p.channel_id = sqlc.arg(channel_id)
+    AND m.deleted_at IS NULL
+) < 100;
+
+-- name: CountPinnedMessages :one
+SELECT COUNT(*)
+FROM pinned_messages p
+JOIN messages m ON m.id = p.message_id
+WHERE p.channel_id = sqlc.arg(channel_id)
+  AND m.deleted_at IS NULL;
+
+-- name: CountPinnedMessage :one
+SELECT COUNT(*) FROM pinned_messages
+WHERE channel_id = sqlc.arg(channel_id)
+  AND message_id = sqlc.arg(message_id);
+
+-- name: UnpinMessage :execrows
+DELETE FROM pinned_messages
+WHERE channel_id = sqlc.arg(channel_id)
+  AND message_id = sqlc.arg(message_id);
+
+-- name: ListPinnedMessages :many
+SELECT p.id, p.workspace_id, p.channel_id, p.message_id, p.pinned_by, p.created_at
+FROM pinned_messages p
+JOIN messages m ON m.id = p.message_id
+WHERE p.workspace_id = sqlc.arg(workspace_id)
+  AND p.channel_id = sqlc.arg(channel_id)
+  AND m.deleted_at IS NULL
+ORDER BY p.created_at DESC
+LIMIT sqlc.arg(limit_count);
+
 -- name: ListEventsAfter :many
 SELECT e.id, e.cursor, e.workspace_id, COALESCE(e.channel_id, '') AS channel_id, e.type, e.seq, e.payload_json, e.created_at
 FROM events e

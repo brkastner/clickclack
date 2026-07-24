@@ -288,6 +288,15 @@ type PendingUploadCleanup struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type PinnedMessage struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	MessageID   string `json:"message_id"`
+	PinnedBy    string `json:"pinned_by"`
+	CreatedAt   string `json:"created_at"`
+}
+
 type Reaction struct {
 	MessageID string `json:"message_id"`
 	UserID    string `json:"user_id"`

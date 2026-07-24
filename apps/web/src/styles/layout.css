@@ -388,6 +388,19 @@
   white-space: nowrap;
 }
 
+.desktop-titlebar-pin {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border-radius: 8px;
+  color: var(--muted);
+  -webkit-app-region: no-drag;
+}
+
 .desktop-titlebar-status::before {
   content: "";
   width: 7px;

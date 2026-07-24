@@ -103,6 +103,29 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	if len(notifier.notifications) != 1 || notifier.notifications[0].RecipientKey != "u12345678901234567890123456789" {
 		t.Fatalf("expected one pushover notification, got %#v", notifier.notifications)
 	}
+	pinResult := postJSON[struct {
+		PinnedMessage store.PinnedMessage `json:"pinned_message"`
+		Event         store.Event         `json:"event"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins", map[string]string{"message_id": message.ID})
+	if pinResult.PinnedMessage.MessageID != message.ID || pinResult.Event.Type != "pin.added" {
+		t.Fatalf("unexpected pin response: %#v", pinResult)
+	}
+	pinned := getJSON[struct {
+		Messages []store.Message `json:"messages"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins")
+	if len(pinned.Messages) != 1 || pinned.Messages[0].ID != message.ID {
+		t.Fatalf("unexpected pinned messages response: %#v", pinned)
+	}
+	expectStatus(t, http.MethodPost, server.URL+"/api/channels/"+channels[0].ID+"/pins", strings.NewReader(`{`), http.StatusBadRequest)
+	expectStatus(t, http.MethodPost, server.URL+"/api/channels/"+channels[0].ID+"/pins", strings.NewReader(`{}`), http.StatusBadRequest)
+	expectStatus(t, http.MethodDelete, server.URL+"/api/channels/"+channels[0].ID+"/pins/"+message.ID, nil, http.StatusOK)
+	expectStatus(t, http.MethodDelete, server.URL+"/api/channels/"+channels[0].ID+"/pins/"+message.ID, nil, http.StatusNotFound)
+	emptyPins := getJSON[struct {
+		Messages []store.Message `json:"messages"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins")
+	if emptyPins.Messages == nil || len(emptyPins.Messages) != 0 {
+		t.Fatalf("expected an empty pinned messages array, got %#v", emptyPins)
+	}
 	updatedMessage := patchJSON[struct {
 		Message store.Message `json:"message"`
 		Event   store.Event   `json:"event"`
@@ -117,6 +140,7 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	if deletedMessage.Message.DeletedAt == nil || deletedMessage.Event.Type != "message.deleted" {
 		t.Fatalf("unexpected message delete: %#v", deletedMessage)
 	}
+	expectStatus(t, http.MethodPost, server.URL+"/api/channels/"+channels[0].ID+"/pins", strings.NewReader(`{"message_id":"`+message.ID+`"}`), http.StatusBadRequest)
 	ephemeral := postJSON[struct {
 		Event store.Event `json:"event"`
 	}](t, server.URL+"/api/realtime/ephemeral", map[string]any{"workspace_id": workspaces[0].ID, "channel_id": channels[0].ID, "type": "typing.started"})

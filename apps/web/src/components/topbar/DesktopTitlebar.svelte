@@ -16,6 +16,7 @@
     onSearch: () => void;
     onSearchQuery: (value: string) => void;
     onToggleSidebar: () => void;
+    onPinnedItems: () => void;
   };
 
   let {
@@ -33,6 +34,7 @@
     onSearch,
     onSearchQuery,
     onToggleSidebar,
+    onPinnedItems,
   }: Props = $props();
 
   const externalHref = $derived(safeExternalChannelURL(externalURL));
@@ -124,6 +126,11 @@
       <button type="submit" class="search-submit">Search</button>
     </form>
 
+    <button type="button" class="desktop-titlebar-pin" title="Pinned items" aria-label="Pinned items" onclick={onPinnedItems}>
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
+      </svg>
+    </button>
     {#if !connected}
       <span class="desktop-titlebar-status" role="status">Connecting…</span>
     {/if}

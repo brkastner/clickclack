@@ -1082,6 +1082,65 @@ paths:
       responses:
         "200":
           description: Updated channel read receipt
+  /api/channels/{channel_id}/pins:
+    get:
+      operationId: listPinnedMessages
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+      responses:
+        "200":
+          description: Messages pinned in the channel, newest pin first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages]
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Message"
+    post:
+      operationId: pinMessage
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PinMessageRequest"
+      responses:
+        "201":
+          description: Pinned the message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PinMessageResponse"
+  /api/channels/{channel_id}/pins/{message_id}:
+    delete:
+      operationId: unpinMessage
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+        - $ref: "#/components/parameters/message_id"
+      responses:
+        "200":
+          description: Unpinned the message
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [event]
+                properties:
+                  event:
+                    $ref: "#/components/schemas/Event"
   /api/messages/by-nonce:
     get:
       operationId: getMessageByNonce
@@ -2902,6 +2961,37 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReactionSummary"
+    PinnedMessage:
+      type: object
+      required: [id, workspace_id, channel_id, message_id, pinned_by, created_at]
+      properties:
+        id:
+          type: string
+        workspace_id:
+          type: string
+        channel_id:
+          type: string
+        message_id:
+          type: string
+        pinned_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    PinMessageRequest:
+      type: object
+      required: [message_id]
+      properties:
+        message_id:
+          type: string
+    PinMessageResponse:
+      type: object
+      required: [pinned_message, event]
+      properties:
+        pinned_message:
+          $ref: "#/components/schemas/PinnedMessage"
+        event:
+          $ref: "#/components/schemas/Event"
     Message:
       type: object
       required: [id, workspace_id, author_id, thread_root_id, body, body_format, created_at]
