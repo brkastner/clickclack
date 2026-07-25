@@ -933,6 +933,11 @@
     }
   }
 
+  function activateMessageComposer() {
+    activeComposerContext = "message";
+    if (selectedChannelID) void loadTopics();
+  }
+
   async function loadModerationMembers(workspaceID = selectedWorkspaceID) {
     const serial = ++moderationMembersLoadSerial;
     if (!workspaceID || workspaceID !== selectedWorkspaceID || (currentWorkspaceRole !== "owner" && currentWorkspaceRole !== "moderator")) {
@@ -2789,6 +2794,7 @@
       loadModerationMembers(workspaceID),
       loadSlashCommands(workspaceID),
       loadBotCommands(workspaceID, true),
+      loadTopics(workspaceID),
     ]);
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     if (selectedChannelID && !channels.some((channel) => channel.id === selectedChannelID)) {
@@ -2883,6 +2889,13 @@
         await loadMessages();
       }
       return;
+    }
+    if (
+      event.workspace_id === selectedWorkspaceID &&
+      event.payload.topic_id &&
+      !topics.some((topic) => topic.id === event.payload.topic_id)
+    ) {
+      await loadTopics(event.workspace_id);
     }
     if (messageEventAlreadyAccounted(event)) return;
     const affectsConversation =
@@ -3661,7 +3674,7 @@
       canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
       {deletingMessageIDs}
       onListRef={(handle) => (messageList = handle)}
-      onActivateMessageComposer={() => (activeComposerContext = "message")}
+      onActivateMessageComposer={activateMessageComposer}
       onInlineImagePointerUp={handleInlineImagePointerUp}
       onOpenProfile={openUserProfile}
       onReply={setReplyTarget}
@@ -3754,7 +3767,7 @@
       }}
       onSubmit={() => void sendMessage()}
       onKeydown={handleComposerKey}
-      onFocus={() => (activeComposerContext = "message")}
+      onFocus={activateMessageComposer}
       onInputRef={(node) => (messageInput = node)}
       onUploadFile={uploadFile}
       onRemoveUpload={() => (pendingUpload = null)}

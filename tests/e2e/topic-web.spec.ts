@@ -89,6 +89,12 @@ test("topic selector, labels, filter, clear, and realtime stay coherent", async 
 
   const topicSelect = page.getByLabel("Message topic");
   await expect(topicSelect).toBeVisible();
+  const refreshedTopicResponse = await page.request.post(`/api/workspaces/${workspace.id}/topics`, {
+    data: { name: "Operations" },
+  });
+  expect(refreshedTopicResponse.ok()).toBe(true);
+  await page.getByLabel("Message body").focus();
+  await expect(topicSelect.locator("option", { hasText: "Operations" })).toHaveCount(1);
   await topicSelect.selectOption({ label: "Release" });
   await page.getByLabel("Message body").fill("release from composer");
   await page.getByRole("button", { name: "Send", exact: true }).click();
