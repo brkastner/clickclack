@@ -2,6 +2,7 @@
 
 ## 0.2.2 - Unreleased
 
+- Added agent-friendly CLI commands for adding and removing message reactions through the existing public APIs, with exact JSON output and terminal-safe human output. Thanks @PollyBot13.
 - Removed the redundant "Open in ClickClack" link from embedded channel headers, leaving external navigation to the host's own control.
 - Fixed the embedded channel view overflowing narrow host panels (such as OpenClaw's discussion sidebar), where long session channel names clipped the header link and send button off the right edge.
 - Fixed the thread panel enforcing a ~370px minimum width, which clipped the thread embed and full-screen mobile threads in hosts narrower than 370px.
