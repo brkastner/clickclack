@@ -1600,3 +1600,7 @@ WHERE workspace_id = sqlc.arg(workspace_id)
   AND archived_at IS NULL
 ORDER BY CASE WHEN name = 'general' THEN 0 ELSE 1 END, created_at, id
 LIMIT 1;
+-- name: GetAvailableTopic :one
+SELECT workspace_id, COALESCE(channel_id, '') AS channel_id
+FROM topics
+WHERE id = sqlc.arg(topic_id) AND archived_at IS NULL;

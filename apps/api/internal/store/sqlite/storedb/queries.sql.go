@@ -937,6 +937,24 @@ func (q *Queries) GetAppearancePreferences(ctx context.Context, userID string) (
 	return i, err
 }
 
+const getAvailableTopic = `-- name: GetAvailableTopic :one
+SELECT workspace_id, COALESCE(channel_id, '') AS channel_id
+FROM topics
+WHERE id = ?1 AND archived_at IS NULL
+`
+
+type GetAvailableTopicRow struct {
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+}
+
+func (q *Queries) GetAvailableTopic(ctx context.Context, topicID string) (GetAvailableTopicRow, error) {
+	row := q.db.QueryRowContext(ctx, getAvailableTopic, topicID)
+	var i GetAvailableTopicRow
+	err := row.Scan(&i.WorkspaceID, &i.ChannelID)
+	return i, err
+}
+
 const getBotSetupCodeByHash = `-- name: GetBotSetupCodeByHash :one
 SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, defaults_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
 FROM bot_setup_codes

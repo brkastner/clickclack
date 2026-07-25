@@ -99,17 +99,17 @@ func (s *Store) requireTopic(ctx context.Context, workspaceID, channelID, topicI
 	if topicID == "" {
 		return nil
 	}
-	var topicWorkspace, topicChannel string
-	if err := s.db.QueryRowContext(ctx, `SELECT workspace_id, COALESCE(channel_id, '') FROM topics WHERE id = ? AND archived_at IS NULL`, topicID).Scan(&topicWorkspace, &topicChannel); err != nil {
+	topic, err := s.q.GetAvailableTopic(ctx, topicID)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: topic is unavailable", store.ErrInvalidMessagePage)
 		}
 		return err
 	}
-	if topicWorkspace != workspaceID {
+	if topic.WorkspaceID != workspaceID {
 		return fmt.Errorf("%w: topic is unavailable", store.ErrInvalidMessagePage)
 	}
-	if topicChannel != "" && topicChannel != channelID {
+	if topic.ChannelID != "" && topic.ChannelID != channelID {
 		return fmt.Errorf("%w: topic is unavailable", store.ErrInvalidMessagePage)
 	}
 	return nil
