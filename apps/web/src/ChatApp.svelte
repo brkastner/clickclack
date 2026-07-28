@@ -2122,6 +2122,9 @@
     replies = replies.map((reply) =>
       reply.id === updated.id ? { ...reply, ...updated } : reply,
     );
+    pinnedMessages = pinnedMessages.map((current) =>
+      current.id === updated.id ? { ...current, ...updated } : current,
+    );
     if (selectedThread?.id === updated.id) selectedThread = { ...selectedThread, ...updated };
   }
 
@@ -2142,6 +2145,7 @@
       editController.cancelMessage(currentConversationKey(), deleted.id);
       setActiveMessages(messages.map((current) => (current.id === deleted.id ? { ...current, ...deleted } : current)));
       replies = replies.map((reply) => (reply.id === deleted.id ? { ...reply, ...deleted } : reply));
+      pinnedMessages = pinnedMessages.filter((current) => current.id !== deleted.id);
       if (selectedThread?.id === deleted.id) selectedThread = { ...selectedThread, ...deleted };
       if (replyTarget?.id === deleted.id) clearReplyTarget();
       status = "";
@@ -3545,6 +3549,7 @@
           ? `#${channelDisplayTitle(selectedChannel)}`
           : undefined}
       externalURL={selectedDirect ? undefined : selectedChannel?.external_url}
+      pinsAvailable={Boolean(selectedChannel)}
       {connected}
       platform={desktop.platform}
       {searchQuery}

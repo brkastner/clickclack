@@ -1116,7 +1116,7 @@ type Store interface {
 	EnsureThreadRouteID(ctx context.Context, userID, rootMessageID string) (Message, error)
 	CreateMessage(ctx context.Context, input CreateMessageInput) (Message, Event, error)
 	UpdateMessage(ctx context.Context, input UpdateMessageInput) (Message, Event, error)
-	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, Event, error)
+	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, []Event, error)
 	GetThread(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
 	GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
 	CreateThreadReply(ctx context.Context, input CreateThreadReplyInput) (Message, ThreadState, []Event, error)

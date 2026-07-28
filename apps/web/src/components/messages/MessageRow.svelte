@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
+  import { readableAPIError } from "../../lib/api";
   import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { time, markdown } from "../../lib/format";
@@ -479,7 +480,7 @@
       await onTogglePin(message, pinned);
       closeMenu();
     } catch (error) {
-      pinError = error instanceof Error ? error.message : "Could not update pin";
+      pinError = readableAPIError(error, "Could not update pin");
     } finally {
       pinSaving = false;
     }
@@ -813,6 +814,7 @@
       canPin={Boolean(channelID && onTogglePin)}
       {pinned}
       pinning={pinSaving}
+      {pinError}
       canDelete={canDeleteMessage && Boolean(onDeleteMessage)}
       {deleting}
       {copyStatus}

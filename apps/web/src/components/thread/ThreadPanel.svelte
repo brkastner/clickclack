@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
+  import { readableAPIError } from "../../lib/api";
   import Avatar from "../avatar/Avatar.svelte";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import {
@@ -154,6 +155,7 @@
   let actionSheetReturnFocus = $state<HTMLElement>();
   let actionCopyStatus = $state<"copied" | "failed" | "">("");
   let pinSaving = $state(false);
+  let pinError = $state("");
   let longPressTimer: number | undefined;
   let longPressCleanup: (() => void) | undefined;
   let sheetCloseTimer: number | undefined;
@@ -303,8 +305,11 @@
   async function togglePin(message: Message) {
     if (!channelID || !onTogglePin || pinSaving) return;
     pinSaving = true;
+    pinError = "";
     try {
       await onTogglePin(message, pinnedMessageIDs.has(message.id));
+    } catch (error) {
+      pinError = readableAPIError(error, "Could not update pin");
     } finally {
       pinSaving = false;
     }
@@ -314,7 +319,7 @@
     const message = actionMessage;
     if (!message) return;
     await togglePin(message);
-    closeActionSheet();
+    if (!pinError) closeActionSheet();
   }
 
   onDestroy(() => {
@@ -342,6 +347,9 @@
   <div>
     <p>{headerLabel}</p>
     <strong>{headerDetail ?? `${threadState?.reply_count ?? replies.length} ${(threadState?.reply_count ?? replies.length) === 1 ? "reply" : "replies"}`}</strong>
+    {#if pinError}
+      <span class="thread-pin-error" role="status" aria-live="polite">{pinError}</span>
+    {/if}
   </div>
   {#if openHref}
     <a class="thread-open-link" href={openHref} target="_blank" rel="noopener">Open in ClickClack</a>
@@ -659,6 +667,7 @@
     canPin={Boolean(channelID && onTogglePin)}
     pinned={pinnedMessageIDs.has(actionMessage.id)}
     pinning={pinSaving}
+    {pinError}
     canDelete={canDelete(actionMessage) && Boolean(onDeleteMessage)}
     deleting={deletingMessageIDs.has(actionMessage.id)}
     copyStatus={actionCopyStatus}
