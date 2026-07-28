@@ -4694,6 +4694,17 @@ func (q *Queries) LockChannelForPinning(ctx context.Context, channelID string) (
 	return id, err
 }
 
+const lockMessageForPinning = `-- name: LockMessageForPinning :one
+SELECT id FROM messages WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockMessageForPinning(ctx context.Context, messageID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockMessageForPinning, messageID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockMessageForReaction = `-- name: LockMessageForReaction :one
 SELECT id
 FROM messages

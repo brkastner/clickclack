@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
 )
 
 func TestPinnedMessagesMigrationUpgradesExistingDatabase(t *testing.T) {
@@ -96,6 +97,51 @@ func TestPinnedMessageLifecycle(t *testing.T) {
 	}
 	if _, err := st.UnpinMessage(ctx, channels[0].ID, message.ID, owner.ID); err != store.ErrPinnedMessageNotFound {
 		t.Fatalf("expected ErrPinnedMessageNotFound, got %v", err)
+	}
+}
+
+func TestDeletePinnedMessageRemovesPinAndOrdersEvents(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "pin-delete-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.EnsureDefaultWorkspaceMember(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspace.ID, owner.ID)
+	if err != nil || len(channels) == 0 {
+		t.Fatalf("expected a channel, got %v: %v", channels, err)
+	}
+	message, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "delete this pin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.PinMessage(ctx, channels[0].ID, message.ID, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	deleted, events, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted.DeletedAt == nil || len(events) != 2 || events[0].Type != "pin.removed" || events[1].Type != "message.deleted" {
+		t.Fatalf("unexpected delete result: %#v %#v", deleted, events)
+	}
+	count, err := st.q.CountPinnedMessage(ctx, storedb.CountPinnedMessageParams{
+		ChannelID: channels[0].ID,
+		MessageID: message.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected deleted message pin to be removed, got %d rows", count)
 	}
 }
 

@@ -15,6 +15,7 @@
     canPin = false,
     pinned = false,
     pinning = false,
+    pinError = "",
     canDelete = false,
     deleting = false,
     copyStatus = "",
@@ -37,6 +38,7 @@
     canPin?: boolean;
     pinned?: boolean;
     pinning?: boolean;
+    pinError?: string;
     canDelete?: boolean;
     deleting?: boolean;
     copyStatus?: CopyStatus;
@@ -188,6 +190,9 @@
           </svg>
           {pinned ? "Unpin message" : "Pin message"}
         </button>
+        {#if pinError}
+          <p class="sheet-action-error" role="status" aria-live="polite">{pinError}</p>
+        {/if}
       {/if}
       {#if canEdit}
         <button type="button" onclick={() => runAndClose(onEdit)}>

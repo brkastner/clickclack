@@ -1392,6 +1392,9 @@ ON CONFLICT(channel_id, message_id) DO NOTHING;
 -- name: LockChannelForPinning :one
 SELECT id FROM channels WHERE id = sqlc.arg(channel_id) FOR UPDATE;
 
+-- name: LockMessageForPinning :one
+SELECT id FROM messages WHERE id = sqlc.arg(message_id) FOR UPDATE;
+
 -- name: CountPinnedMessages :one
 SELECT COUNT(*)
 FROM pinned_messages p

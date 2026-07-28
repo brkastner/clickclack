@@ -15,6 +15,10 @@ func (s *Store) PinMessage(ctx context.Context, channelID, messageID, userID str
 	}
 	defer tx.Rollback()
 
+	qtx := s.q.WithTx(tx)
+	if _, err := qtx.LockMessageForPinning(ctx, messageID); err != nil {
+		return store.PinnedMessage{}, store.Event{}, err
+	}
 	msg, err := getMessageTx(ctx, tx, messageID)
 	if err != nil {
 		return store.PinnedMessage{}, store.Event{}, err
@@ -34,7 +38,6 @@ func (s *Store) PinMessage(ctx context.Context, channelID, messageID, userID str
 		return store.PinnedMessage{}, store.Event{}, errors.New("deleted messages cannot be pinned")
 	}
 
-	qtx := s.q.WithTx(tx)
 	if _, err := qtx.LockChannelForPinning(ctx, channelID); err != nil {
 		return store.PinnedMessage{}, store.Event{}, err
 	}

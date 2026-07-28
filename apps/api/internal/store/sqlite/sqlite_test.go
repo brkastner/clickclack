@@ -59,7 +59,11 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID}); err == nil {
 		t.Fatal("expected empty message error")
 	}
-	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "read me"}); err != nil {
+	exportMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "read me"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.PinMessage(ctx, channel.ID, exportMessage.ID, owner.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := st.MarkChannelRead(ctx, channel.ID, owner.ID, 1); err != nil {
@@ -183,6 +187,9 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	}
 	if len(exportBody["channel_reads"]) == 0 || len(exportBody["direct_reads"]) == 0 {
 		t.Fatalf("expected read receipt tables in export, got keys %#v", exportBody)
+	}
+	if len(exportBody["pinned_messages"]) != 1 || exportBody["pinned_messages"][0]["message_id"] != exportMessage.ID {
+		t.Fatalf("expected pinned message in export, got %#v", exportBody["pinned_messages"])
 	}
 	if string(exported.Bytes()) == "" || bytes.Contains(exported.Bytes(), []byte(link.Token)) || bytes.Contains(exported.Bytes(), []byte(session.Token)) || bytes.Contains(exported.Bytes(), []byte(invite.Token)) {
 		t.Fatalf("export leaked bearer token: %s", exported.String())
