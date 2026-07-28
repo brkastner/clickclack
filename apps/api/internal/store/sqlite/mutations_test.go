@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -56,19 +57,19 @@ func TestMutationsCreateDurableEvents(t *testing.T) {
 	if updatedMessage.Body != "after" || updatedMessage.EditedAt == nil || updateEvent.Type != "message.updated" {
 		t.Fatalf("unexpected message update: %#v %#v", updatedMessage, updateEvent)
 	}
-	deletedMessage, deleteEvent, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
+	deletedMessage, deleteEvents, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if deletedMessage.DeletedAt == nil || deleteEvent.Type != "message.deleted" {
-		t.Fatalf("unexpected message delete: %#v %#v", deletedMessage, deleteEvent)
+	if deletedMessage.DeletedAt == nil || len(deleteEvents) != 1 || deleteEvents[0].Type != "message.deleted" {
+		t.Fatalf("unexpected message delete: %#v %#v", deletedMessage, deleteEvents)
 	}
-	repeatedDelete, repeatedDeleteEvent, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
+	repeatedDelete, repeatedDeleteEvents, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if repeatedDelete.DeletedAt == nil || *repeatedDelete.DeletedAt != *deletedMessage.DeletedAt || repeatedDeleteEvent.ID != "" {
-		t.Fatalf("expected repeated delete to preserve state without event, got %#v %#v", repeatedDelete, repeatedDeleteEvent)
+	if repeatedDelete.DeletedAt == nil || *repeatedDelete.DeletedAt != *deletedMessage.DeletedAt || len(repeatedDeleteEvents) != 0 {
+		t.Fatalf("expected repeated delete to preserve state without event, got %#v %#v", repeatedDelete, repeatedDeleteEvents)
 	}
 	second, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Second", Email: "second@example.com"})
 	if err != nil {
@@ -193,6 +194,78 @@ func TestManagedChannelFieldsRoundTripAndClear(t *testing.T) {
 	payload, ok := event.Payload.(map[string]any)
 	if !ok || payload["archived"] != true || payload["channel_id"] != channel.ID {
 		t.Fatalf("channel.updated archive metadata missing: %#v", event.Payload)
+	}
+}
+
+func TestChannelDisplayTitleRoundTripAndClear(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+	owner, err := st.EnsureBootstrap(ctx, "Display Owner", "display-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	longTitle := "  " + strings.Repeat("界", 205) + "  "
+	channel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
+		WorkspaceID:  workspaces[0].ID,
+		UserID:       owner.ID,
+		Name:         "display-session",
+		DisplayTitle: longTitle,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if channel.DisplayTitle == nil || len([]rune(*channel.DisplayTitle)) != 200 || strings.Contains(*channel.DisplayTitle, " ") {
+		t.Fatalf("display title was not trimmed and rune-truncated: %#v", channel.DisplayTitle)
+	}
+	listed, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, candidate := range listed {
+		if candidate.ID == channel.ID {
+			found = candidate.DisplayTitle != nil && *candidate.DisplayTitle == *channel.DisplayTitle
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("display title missing from channel list: %#v", listed)
+	}
+	got, err := st.GetChannel(ctx, channel.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DisplayTitle == nil || *got.DisplayTitle != *channel.DisplayTitle {
+		t.Fatalf("display title missing from channel get: %#v", got)
+	}
+	trailingBoundary := strings.Repeat("界", 199) + "  X"
+	updated, _, err := st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &trailingBoundary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle == nil || len([]rune(*updated.DisplayTitle)) != 199 || strings.HasSuffix(*updated.DisplayTitle, " ") {
+		t.Fatalf("truncated display title retained boundary whitespace: %#v", updated.DisplayTitle)
+	}
+	next := "  Sensible Work Tree Naming Scheme  "
+	updated, _, err = st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &next})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle == nil || *updated.DisplayTitle != "Sensible Work Tree Naming Scheme" {
+		t.Fatalf("display title was not updated: %#v", updated.DisplayTitle)
+	}
+	clear := "  "
+	updated, _, err = st.UpdateChannel(ctx, store.UpdateChannelInput{ChannelID: channel.ID, UserID: owner.ID, DisplayTitle: &clear})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayTitle != nil {
+		t.Fatalf("display title was not cleared: %#v", updated.DisplayTitle)
 	}
 }
 
@@ -478,12 +551,12 @@ func TestMutationsRejectInvalidInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deletedByAuthor, deleteEvent, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: memberMessage.ID, UserID: member.ID})
+	deletedByAuthor, deleteEvents, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: memberMessage.ID, UserID: member.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if deletedByAuthor.DeletedAt == nil || deleteEvent.Type != "message.deleted" {
-		t.Fatalf("expected author delete to soft-delete the message, got %#v %#v", deletedByAuthor, deleteEvent)
+	if deletedByAuthor.DeletedAt == nil || len(deleteEvents) != 1 || deleteEvents[0].Type != "message.deleted" {
+		t.Fatalf("expected author delete to soft-delete the message, got %#v %#v", deletedByAuthor, deleteEvents)
 	}
 	anotherMemberMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: member.ID, Body: "owner moderate me"})
 	if err != nil {

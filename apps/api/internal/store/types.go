@@ -225,6 +225,7 @@ type Channel struct {
 	RouteID         string  `json:"route_id"`
 	WorkspaceID     string  `json:"workspace_id"`
 	Name            string  `json:"name"`
+	DisplayTitle    *string `json:"display_title,omitempty"`
 	Kind            string  `json:"kind"`
 	CreatedAt       string  `json:"created_at"`
 	ArchivedAt      *string `json:"archived_at,omitempty"`
@@ -716,6 +717,7 @@ type TransferWorkspaceOwnershipInput struct {
 type CreateChannelInput struct {
 	WorkspaceID     string
 	Name            string
+	DisplayTitle    string
 	Kind            string
 	UserID          string
 	ExternalManaged bool
@@ -728,6 +730,7 @@ type UpdateChannelInput struct {
 	ChannelID       string
 	UserID          string
 	Name            string
+	DisplayTitle    *string
 	Kind            string
 	Archived        *bool
 	ExternalManaged *bool
@@ -1113,7 +1116,7 @@ type Store interface {
 	EnsureThreadRouteID(ctx context.Context, userID, rootMessageID string) (Message, error)
 	CreateMessage(ctx context.Context, input CreateMessageInput) (Message, Event, error)
 	UpdateMessage(ctx context.Context, input UpdateMessageInput) (Message, Event, error)
-	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, Event, error)
+	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, []Event, error)
 	GetThread(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
 	GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
 	CreateThreadReply(ctx context.Context, input CreateThreadReplyInput) (Message, ThreadState, []Event, error)

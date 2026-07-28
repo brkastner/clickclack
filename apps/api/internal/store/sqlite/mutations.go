@@ -239,6 +239,10 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	if name != ch.Name && (name == store.GuestChannelName || ch.Name == store.GuestChannelName) {
 		return store.Channel{}, store.Event{}, errors.New("guest channel name is reserved")
 	}
+	displayTitle := ch.DisplayTitle
+	if input.DisplayTitle != nil {
+		displayTitle = normalizedDisplayTitle(*input.DisplayTitle)
+	}
 	kind := strings.TrimSpace(input.Kind)
 	if kind == "" {
 		kind = ch.Kind
@@ -269,6 +273,7 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	}
 	if err := qtx.UpdateChannel(ctx, storedb.UpdateChannelParams{
 		Name:            name,
+		DisplayTitle:    nullFromPtr(displayTitle),
 		Kind:            kind,
 		ArchivedAt:      nullFromPtr(archivedValue),
 		ExternalManaged: databaseBool(externalManaged),
@@ -284,6 +289,7 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 		return store.Channel{}, store.Event{}, err
 	}
 	ch.Name = name
+	ch.DisplayTitle = displayTitle
 	ch.Kind = kind
 	ch.ArchivedAt = archivedValue
 	ch.ExternalManaged = externalManaged
@@ -341,62 +347,85 @@ func (s *Store) UpdateMessage(ctx context.Context, input store.UpdateMessageInpu
 	return msg, event, tx.Commit()
 }
 
-func (s *Store) DeleteMessage(ctx context.Context, input store.DeleteMessageInput) (store.Message, store.Event, error) {
+func (s *Store) DeleteMessage(ctx context.Context, input store.DeleteMessageInput) (store.Message, []store.Event, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return store.Message{}, store.Event{}, err
+		return store.Message{}, nil, err
 	}
 	defer tx.Rollback()
 	msg, err := getMessageTx(ctx, tx, input.MessageID)
 	if err != nil {
-		return store.Message{}, store.Event{}, err
+		return store.Message{}, nil, err
 	}
 	if err := requireMessageAccessTx(ctx, tx, msg, input.UserID); err != nil {
-		return store.Message{}, store.Event{}, err
+		return store.Message{}, nil, err
 	}
 	if err := requireNoModerationBlockTx(ctx, tx, msg.WorkspaceID, input.UserID); err != nil {
-		return store.Message{}, store.Event{}, err
+		return store.Message{}, nil, err
 	}
 	if msg.AuthorID != input.UserID {
 		if msg.DirectConversationID != "" {
-			return store.Message{}, store.Event{}, store.ErrMessageNotWritable
+			return store.Message{}, nil, store.ErrMessageNotWritable
 		}
 		if err := requireWorkspaceOwnerTx(ctx, tx, msg.WorkspaceID, input.UserID); err != nil {
 			if errors.Is(err, store.ErrWorkspaceOwnerRequired) {
-				return store.Message{}, store.Event{}, store.ErrMessageNotWritable
+				return store.Message{}, nil, store.ErrMessageNotWritable
 			}
-			return store.Message{}, store.Event{}, err
+			return store.Message{}, nil, err
 		}
 	}
 	if msg.DeletedAt != nil {
-		return msg, store.Event{}, tx.Commit()
+		return msg, nil, tx.Commit()
 	}
 	deletedAt := now()
-	affected, err := s.q.WithTx(tx).DeleteMessageBody(ctx, storedb.DeleteMessageBodyParams{DeletedAt: sqlText(deletedAt), ID: msg.ID})
+	qtx := s.q.WithTx(tx)
+	affected, err := qtx.DeleteMessageBody(ctx, storedb.DeleteMessageBodyParams{DeletedAt: sqlText(deletedAt), ID: msg.ID})
 	if err != nil {
-		return store.Message{}, store.Event{}, err
+		return store.Message{}, nil, err
 	}
 	if affected == 0 {
 		msg, err := getMessageTx(ctx, tx, input.MessageID)
 		if err != nil {
-			return store.Message{}, store.Event{}, err
+			return store.Message{}, nil, err
 		}
-		return msg, store.Event{}, tx.Commit()
+		return msg, nil, tx.Commit()
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM message_attachments WHERE message_id = ?`, msg.ID); err != nil {
-		return store.Message{}, store.Event{}, err
+		return store.Message{}, nil, err
+	}
+	events := make([]store.Event, 0, 2)
+	if msg.ChannelID != "" {
+		removed, err := qtx.UnpinMessage(ctx, storedb.UnpinMessageParams{
+			ChannelID: msg.ChannelID,
+			MessageID: msg.ID,
+		})
+		if err != nil {
+			return store.Message{}, nil, err
+		}
+		if removed > 0 {
+			event, err := insertEvent(ctx, tx, msg.WorkspaceID, msg.ChannelID, "pin.removed", msg.ChannelSeq, map[string]string{
+				"channel_id": msg.ChannelID,
+				"message_id": msg.ID,
+				"pinned_by":  input.UserID,
+			})
+			if err != nil {
+				return store.Message{}, nil, err
+			}
+			events = append(events, event)
+		}
 	}
 	recipients, err := eventRecipientsForMessageTx(ctx, tx, msg)
 	if err != nil {
-		return store.Message{}, store.Event{}, err
+		return store.Message{}, nil, err
 	}
 	event, err := insertEventWithRecipients(ctx, tx, msg.WorkspaceID, msg.ChannelID, "message.deleted", msg.ChannelSeq, messagePayload(msg), recipients)
 	if err != nil {
-		return store.Message{}, store.Event{}, err
+		return store.Message{}, nil, err
 	}
+	events = append(events, event)
 	msg.Body = ""
 	msg.DeletedAt = &deletedAt
-	return msg, event, tx.Commit()
+	return msg, events, tx.Commit()
 }
 
 func messagePayload(msg store.Message) map[string]string {

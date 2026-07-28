@@ -261,6 +261,7 @@ export type Channel = {
   route_id: string;
   workspace_id: string;
   name: string;
+  display_title?: string;
   kind: string;
   created_at: string;
   archived_at?: string;
@@ -961,6 +962,7 @@ export class ClickClackClient {
       workspaceId: string,
       input: {
         name: string;
+        display_title?: string;
         kind?: string;
         external_managed?: boolean;
         external_ref?: string;
@@ -981,6 +983,7 @@ export class ClickClackClient {
       channelId: string,
       input: {
         name?: string;
+        display_title?: string;
         kind?: string;
         archived?: boolean;
         external_managed?: boolean;

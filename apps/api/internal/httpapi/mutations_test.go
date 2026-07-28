@@ -73,13 +73,21 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 		Channel store.Channel `json:"channel"`
 	}](t, server.URL+"/api/workspaces/"+workspaces[0].ID+"/channels", map[string]any{
 		"name":             "managed-http",
+		"display_title":    "  Managed HTTP Session  ",
 		"external_managed": true,
 		"external_ref":     "session:http",
 		"external_url":     "https://control.example.com/sessions/http",
 		"sidebar_section":  "Sessions",
 	}).Channel
-	if !managedChannel.ExternalManaged || managedChannel.ExternalRef == nil || managedChannel.ExternalURL == nil || managedChannel.SidebarSection == nil {
+	if managedChannel.DisplayTitle == nil || *managedChannel.DisplayTitle != "Managed HTTP Session" || !managedChannel.ExternalManaged || managedChannel.ExternalRef == nil || managedChannel.ExternalURL == nil || managedChannel.SidebarSection == nil {
 		t.Fatalf("managed channel fields missing from create response: %#v", managedChannel)
+	}
+	nextDisplayTitle := "Renamed HTTP Session"
+	renamedManaged := patchJSON[struct {
+		Channel store.Channel `json:"channel"`
+	}](t, server.URL+"/api/channels/"+managedChannel.ID, map[string]any{"display_title": nextDisplayTitle}).Channel
+	if renamedManaged.DisplayTitle == nil || *renamedManaged.DisplayTitle != nextDisplayTitle {
+		t.Fatalf("display title missing from patch response: %#v", renamedManaged)
 	}
 	clear := ""
 	archivedManaged := patchJSON[struct {
@@ -87,11 +95,12 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 		Event   store.Event   `json:"event"`
 	}](t, server.URL+"/api/channels/"+managedChannel.ID, map[string]any{
 		"archived":        true,
+		"display_title":   clear,
 		"external_ref":    clear,
 		"external_url":    clear,
 		"sidebar_section": clear,
 	})
-	if archivedManaged.Channel.ArchivedAt == nil || archivedManaged.Channel.ExternalRef != nil || archivedManaged.Channel.ExternalURL != nil || archivedManaged.Channel.SidebarSection != nil {
+	if archivedManaged.Channel.ArchivedAt == nil || archivedManaged.Channel.DisplayTitle != nil || archivedManaged.Channel.ExternalRef != nil || archivedManaged.Channel.ExternalURL != nil || archivedManaged.Channel.SidebarSection != nil {
 		t.Fatalf("managed channel fields not updated through HTTP: %#v", archivedManaged.Channel)
 	}
 	if payload, ok := archivedManaged.Event.Payload.(map[string]any); !ok || payload["archived"] != true {
@@ -275,6 +284,69 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	expectStatus(t, http.MethodPost, server.URL+"/api/realtime/ephemeral", bytes.NewReader([]byte(`{`)), http.StatusBadRequest)
 	expectStatus(t, http.MethodPost, server.URL+"/api/realtime/ephemeral", bytes.NewReader([]byte(`{"workspace_id":"`+workspaces[0].ID+`","type":"bad"}`)), http.StatusBadRequest)
 	expectStatus(t, http.MethodPost, server.URL+"/api/realtime/ephemeral", bytes.NewReader([]byte(`{"workspace_id":"missing","type":"typing.started"}`)), http.StatusForbidden)
+}
+
+func TestDeletePinnedMessagePublishesPinRemovalBeforeDeletion(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "pin-delete-http@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil || len(channels) == 0 {
+		t.Fatalf("expected a channel, got %v: %v", channels, err)
+	}
+	hub := realtime.NewHub()
+	server := httptest.NewServer(New(st, hub, Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	message := postJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/messages", map[string]string{"body": "delete pinned over http"}).Message
+	postJSON[struct {
+		PinnedMessage store.PinnedMessage `json:"pinned_message"`
+		Event         store.Event         `json:"event"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins", map[string]string{"message_id": message.ID})
+
+	events, unsubscribe := hub.Subscribe(workspaces[0].ID)
+	t.Cleanup(unsubscribe)
+	deleted := deleteJSONBody[struct {
+		Message store.Message `json:"message"`
+		Event   store.Event   `json:"event"`
+	}](t, server.URL+"/api/messages/"+message.ID)
+	if deleted.Message.DeletedAt == nil || deleted.Event.Type != "message.deleted" {
+		t.Fatalf("unexpected delete response: %#v", deleted)
+	}
+	for index, want := range []string{"pin.removed", "message.deleted"} {
+		select {
+		case event := <-events:
+			if event.Type != want || event.Payload == nil {
+				t.Fatalf("event %d: expected %s with payload, got %#v", index, want, event)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for event %d (%s)", index, want)
+		}
+	}
+	pinned := getJSON[struct {
+		Messages []store.Message `json:"messages"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins")
+	if len(pinned.Messages) != 0 {
+		t.Fatalf("expected deleted message to be absent from pins, got %#v", pinned.Messages)
+	}
 }
 
 func TestDirectTypingEphemeralIsLimitedToConversationMembers(t *testing.T) {

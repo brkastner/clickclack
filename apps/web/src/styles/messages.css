@@ -1464,6 +1464,13 @@
   color: var(--danger);
 }
 
+.message-action-sheet .sheet-action-error {
+  margin: -4px 12px 4px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .message-actions .message-action-react {
   font-size: 15px;
   line-height: 1;

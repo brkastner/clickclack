@@ -22,6 +22,7 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Name            string  `json:"name"`
+		DisplayTitle    *string `json:"display_title"`
 		Kind            string  `json:"kind"`
 		Archived        *bool   `json:"archived"`
 		ExternalManaged *bool   `json:"external_managed"`
@@ -40,6 +41,7 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 		ChannelID:       chi.URLParam(r, "channel_id"),
 		UserID:          act.user.ID,
 		Name:            body.Name,
+		DisplayTitle:    body.DisplayTitle,
 		Kind:            body.Kind,
 		Archived:        body.Archived,
 		ExternalManaged: body.ExternalManaged,
@@ -93,9 +95,13 @@ func (s *Server) deleteMessage(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireBotMessageResource(w, r, act, chi.URLParam(r, "message_id"), "dms:write"); !ok {
 		return
 	}
-	message, event, err := s.store.DeleteMessage(r.Context(), store.DeleteMessageInput{MessageID: chi.URLParam(r, "message_id"), UserID: act.user.ID})
+	message, events, err := s.store.DeleteMessage(r.Context(), store.DeleteMessageInput{MessageID: chi.URLParam(r, "message_id"), UserID: act.user.ID})
+	var event store.Event
 	if err == nil {
-		s.publishEvent(r.Context(), event)
+		s.publishEvents(r.Context(), events)
+		if len(events) > 0 {
+			event = events[len(events)-1]
+		}
 	}
 	writeResult(w, map[string]any{"message": message, "event": event}, err)
 }

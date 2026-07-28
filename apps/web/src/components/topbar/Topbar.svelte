@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dmTitle } from "../../lib/chat/people";
-  import { safeExternalChannelURL } from "../../lib/chat/channels";
+  import { channelDisplayTitle, safeExternalChannelURL } from "../../lib/chat/channels";
   import type { Channel, DirectConversation } from "../../lib/types";
 
   type Props = {
@@ -41,7 +41,7 @@
     {#if selectedDirect}
       <h1 class="with-glyph dm">{`@${dmTitle(selectedDirect, currentUserID)}`}</h1>
     {:else if selectedChannel}
-      <h1 class="with-glyph channel">{`#${selectedChannel.name}`}</h1>
+      <h1 class="with-glyph channel">{`#${channelDisplayTitle(selectedChannel)}`}</h1>
     {:else}
       <h1 class="with-glyph">ClickClack</h1>
     {/if}
@@ -89,10 +89,12 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z" />
       </svg>
     </button>
-    <button type="button" title="Pinned items" aria-label="Pinned items" onclick={onPinnedItems}>
-      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
-      </svg>
-    </button>
+    {#if selectedChannel}
+      <button type="button" title="Pinned items" aria-label="Pinned items" onclick={onPinnedItems}>
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
+        </svg>
+      </button>
+    {/if}
   </div>
 </header>
