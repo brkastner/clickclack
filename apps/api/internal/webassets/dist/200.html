@@ -11,7 +11,12 @@
       // board, and message-layout choices never flash. Keys and attribute
       // names mirror src/lib/appearance.ts, which owns them afterwards.
       try {
-        var ccMode = localStorage.getItem("clickclack:color-mode:v1");
+        var ccMode;
+        if (/^\/embed\/(?:channel|thread)\//.test(location.pathname)) {
+          var ccHostMode = new URLSearchParams(location.search).get("theme");
+          if (ccHostMode === "light" || ccHostMode === "dark") ccMode = ccHostMode;
+        }
+        if (!ccMode) ccMode = localStorage.getItem("clickclack:color-mode:v1");
         if (ccMode === "light" || ccMode === "dark") {
           document.documentElement.setAttribute("data-color-mode", ccMode);
         }
@@ -29,16 +34,17 @@
         }
       } catch (e) {}
     </script>
-    <link href="/_app/immutable/entry/start.wvRykHGQ.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/0MLs41xV.js" rel="modulepreload">
+    <link href="/_app/immutable/entry/start.BJgyZiDJ.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DGQW1sK7.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/CySd1wef.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/DK3Fl9T5.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/BuFlayix.js" rel="modulepreload">
-		<link href="/_app/immutable/entry/app.D3xeExri.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.rLUFGSPX.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/HclGiUj8.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/xihTtKlq.js" rel="modulepreload">
-		<link href="/_app/immutable/nodes/0.CWn4auE_.js" rel="modulepreload">
-		<link href="/_app/immutable/chunks/CDuOLCxG.js" rel="modulepreload">
+		<link href="/_app/immutable/nodes/0.DNzuMmb4.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/M3UdkkP6.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DiELhALK.js" rel="modulepreload">
 		<link href="/_app/immutable/chunks/BEqsQr3A.js" rel="modulepreload">
 
 		<link href="/_app/immutable/assets/0.DMQbOJlk.css" rel="stylesheet">
@@ -54,8 +60,8 @@
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/_app/immutable/entry/start.wvRykHGQ.js"),
-						import("/_app/immutable/entry/app.D3xeExri.js")
+						import("/_app/immutable/entry/start.BJgyZiDJ.js"),
+						import("/_app/immutable/entry/app.rLUFGSPX.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
