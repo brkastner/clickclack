@@ -1094,6 +1094,76 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expect.poll(() => messageSide(agentMessage)).toBe("right");
 });
 
+test("keeps Markdown lists and blockquotes inside right-aligned messages", async ({ page }) => {
+  const route = await createGeneralChannelRoute(page, "Right aligned Markdown");
+  const markdownBody = [
+    "Right-aligned Markdown:",
+    "",
+    "- Chat ID: `channel`",
+    "- Message ID: `message`",
+    "",
+    "> Quoted context stays on the message side.",
+  ].join("\n");
+
+  await page.goto(route);
+  await waitForAppReady(page);
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await page.getByLabel("Message body").fill(markdownBody);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await page.getByRole("button", { name: /Account settings for/ }).click({ button: "right" });
+  const settings = page.getByLabel("Account settings");
+  const userAlign = settings.getByLabel("Your message alignment");
+  await userAlign.selectOption("right");
+
+  const row = page.locator(".message-row", {
+    has: page.getByText("Right-aligned Markdown:", { exact: true }),
+  });
+  const markdown = row.locator(":scope > .message-content > .markdown");
+  await expect(markdown).toBeVisible();
+  await expect(markdown.locator("ul")).toHaveCount(1);
+  await expect(markdown.locator("blockquote")).toHaveCount(1);
+
+  const layout = await markdown.evaluate((element) => {
+    const list = element.querySelector("ul");
+    const quote = element.querySelector("blockquote");
+    if (!list || !quote) throw new Error("Expected Markdown list and blockquote");
+    const listStyle = getComputedStyle(list);
+    const quoteStyle = getComputedStyle(quote);
+    const firstItem = list.querySelector("li");
+    if (!firstItem) throw new Error("Expected Markdown list item");
+    const messageRect = element.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    const itemRect = firstItem.getBoundingClientRect();
+    return {
+      textAlign: getComputedStyle(element).textAlign,
+      listPaddingLeft: listStyle.paddingLeft,
+      listPaddingRight: listStyle.paddingRight,
+      listStylePosition: listStyle.listStylePosition,
+      listRightInset: messageRect.right - listRect.right,
+      itemRightInset: listRect.right - itemRect.right,
+      quoteBorderLeft: quoteStyle.borderLeftWidth,
+      quoteBorderRight: quoteStyle.borderRightWidth,
+      quotePaddingLeft: quoteStyle.paddingLeft,
+      quotePaddingRight: quoteStyle.paddingRight,
+    };
+  });
+  expect(layout).toEqual({
+    textAlign: "right",
+    listPaddingLeft: "0px",
+    listPaddingRight: "0px",
+    listStylePosition: "inside",
+    listRightInset: expect.any(Number),
+    itemRightInset: 0,
+    quoteBorderLeft: "0px",
+    quoteBorderRight: "3px",
+    quotePaddingLeft: "0px",
+    quotePaddingRight: "12px",
+  });
+  expect(layout.listRightInset).toBeLessThanOrEqual(1);
+  expect(layout.itemRightInset).toBe(0);
+});
+
 test("browser notifications require explicit profile opt-in", async ({ page }) => {
   const meResponse = await page.request.get("/api/me");
   const me = (await meResponse.json()) as { user: { id: string } };
