@@ -115,6 +115,16 @@ func TestParseMessageMentions(t *testing.T) {
 			expected: []string{"bob"},
 		},
 		{
+			name:     "www URL path not a mention",
+			body:     "see www.example.com/@alice then @bob",
+			expected: []string{"bob"},
+		},
+		{
+			name:     "non-http URL scheme path not a mention",
+			body:     "see ftp://example.com/@alice then @bob",
+			expected: []string{"bob"},
+		},
+		{
 			name:     "mention in markdown brackets not detected",
 			body:     "check out [ask @user](https://example.com/@other)",
 			expected: nil,

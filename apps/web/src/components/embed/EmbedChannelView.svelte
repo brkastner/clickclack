@@ -67,11 +67,11 @@
   const mentionPeople = $derived.by(() => {
     const people = new Map<string, User>();
     for (const message of messages) {
-      if (message.author?.id && !message.author.deleted_at) {
+      if (message.author?.id && message.author.handle?.trim() && !message.author.deleted_at) {
         people.set(message.author.id, message.author);
       }
     }
-    if (user?.id) people.set(user.id, user);
+    if (user?.id && user.handle?.trim()) people.set(user.id, user);
     return [...people.values()].slice(0, 24);
   });
 

@@ -988,6 +988,7 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 		"message_id":      id,
 		"root_message_id": root.ID,
 		"author_id":       input.AuthorID,
+		"body":            body,
 	}, nonce)
 	statePayload := map[string]string{"root_message_id": root.ID}
 	var recipients []string

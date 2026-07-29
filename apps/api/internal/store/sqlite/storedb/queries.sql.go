@@ -3627,6 +3627,7 @@ SELECT u.id, CAST(clickclack_lower(u.handle) AS TEXT) AS handle
 FROM users u
 JOIN workspace_members wm ON wm.user_id = u.id
 WHERE wm.workspace_id = ?1
+  AND NULLIF(TRIM(u.handle), '') IS NOT NULL
   AND u.handle IN (
     SELECT CAST(value AS TEXT)
     FROM json_each(?2)

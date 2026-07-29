@@ -696,8 +696,25 @@ func ParseMessageMentions(body string) []string {
 }
 
 func hasHTTPURLPrefix(value string) bool {
-	return (len(value) >= len("http://") && strings.EqualFold(value[:len("http://")], "http://")) ||
-		(len(value) >= len("https://") && strings.EqualFold(value[:len("https://")], "https://"))
+	return hasURLLikePrefix(value)
+}
+
+func hasURLLikePrefix(value string) bool {
+	if len(value) >= len("www.") && strings.EqualFold(value[:len("www.")], "www.") {
+		return true
+	}
+	separator := strings.Index(value, "://")
+	if separator <= 0 {
+		return false
+	}
+	for i := 0; i < separator; i++ {
+		char := value[i]
+		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' ||
+			(char >= '0' && char <= '9' && i > 0) || char == '+' || char == '-' || char == '.') {
+			return false
+		}
+	}
+	return true
 }
 
 func markdownLinkEnd(body string, labelStart int) int {
