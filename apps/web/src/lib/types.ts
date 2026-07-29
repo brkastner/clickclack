@@ -288,6 +288,7 @@ export type RouteTarget = {
 export type EventPayload = {
   message_id?: string;
   root_message_id?: string;
+  topic_id?: string;
   channel_id?: string;
   direct_conversation_id?: string;
   emoji?: string;
