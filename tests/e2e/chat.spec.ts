@@ -1100,9 +1100,16 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
     "Right-aligned Markdown:",
     "",
     "- Chat ID: `channel`",
-    "- Message ID: `message`",
+    "  - Nested message ID: `message`",
+    "",
+    "- First paragraph stays with its marker.",
+    "",
+    "  Second paragraph stays readable.",
     "",
     "> Quoted context stays on the message side.",
+    "",
+    "1. Ordered parent",
+    "   1. Ordered nested",
   ].join("\n");
 
   await page.goto(route);
@@ -1121,14 +1128,26 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
   });
   const markdown = row.locator(":scope > .message-content > .markdown");
   await expect(markdown).toBeVisible();
-  await expect(markdown.locator("ul")).toHaveCount(1);
+  await expect(markdown.locator("ul")).toHaveCount(2);
+  await expect(markdown.locator("ol")).toHaveCount(2);
   await expect(markdown.locator("blockquote")).toHaveCount(1);
 
   const layout = await markdown.evaluate((element) => {
-    const list = element.querySelector("ul");
+    const list = element.querySelector(":scope > ul");
+    const nestedList = element.querySelector(":scope > ul > li > ul");
+    const looseItem = element.querySelector(":scope > ul > li:nth-child(2)");
+    const orderedList = element.querySelector(":scope > ol");
+    const nestedOrderedList = element.querySelector(":scope > ol > li > ol");
     const quote = element.querySelector("blockquote");
-    if (!list || !quote) throw new Error("Expected Markdown list and blockquote");
+    if (!list || !nestedList || !looseItem || !orderedList || !nestedOrderedList || !quote) {
+      throw new Error("Expected nested and loose Markdown lists and blockquote");
+    }
     const listStyle = getComputedStyle(list);
+    const nestedListStyle = getComputedStyle(nestedList);
+    const orderedListStyle = getComputedStyle(orderedList);
+    const nestedOrderedListStyle = getComputedStyle(nestedOrderedList);
+    const firstParagraph = looseItem.querySelector(":scope > p:first-child");
+    if (!firstParagraph) throw new Error("Expected loose list paragraph");
     const quoteStyle = getComputedStyle(quote);
     const firstItem = list.querySelector("li");
     if (!firstItem) throw new Error("Expected Markdown list item");
@@ -1140,6 +1159,11 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
       listPaddingLeft: listStyle.paddingLeft,
       listPaddingRight: listStyle.paddingRight,
       listStylePosition: listStyle.listStylePosition,
+      nestedListPaddingRight: nestedListStyle.paddingRight,
+      nestedListStylePosition: nestedListStyle.listStylePosition,
+      orderedListPaddingRight: orderedListStyle.paddingRight,
+      nestedOrderedListPaddingRight: nestedOrderedListStyle.paddingRight,
+      looseFirstParagraphDisplay: getComputedStyle(firstParagraph).display,
       listRightInset: messageRect.right - listRect.right,
       itemRightInset: listRect.right - itemRect.right,
       quoteBorderLeft: quoteStyle.borderLeftWidth,
@@ -1153,6 +1177,11 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
     listPaddingLeft: "0px",
     listPaddingRight: "0px",
     listStylePosition: "inside",
+    nestedListPaddingRight: "22px",
+    nestedListStylePosition: "inside",
+    orderedListPaddingRight: "0px",
+    nestedOrderedListPaddingRight: "22px",
+    looseFirstParagraphDisplay: "inline",
     listRightInset: expect.any(Number),
     itemRightInset: 0,
     quoteBorderLeft: "0px",
