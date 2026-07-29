@@ -1825,7 +1825,10 @@
     // hasn't echoed yet. Without this the placeholder would flicker out when a
     // sibling realtime event triggers a reload mid-flight.
     const localOptimistic = messages.filter(
-      (m) => (m.status === "pending" || m.status === "failed") && belongsToView(m, key),
+      (m) =>
+        (m.status === "pending" || m.status === "failed") &&
+        belongsToView(m, key) &&
+        (!activeTopicFilterID || m.topic_id === activeTopicFilterID),
     );
     const localByID = new Map(localOptimistic.map((m) => [m.id, m]));
     const localByNonce = new Map(localOptimistic.filter((m) => m.nonce).map((m) => [m.nonce, m]));
@@ -1855,7 +1858,8 @@
         m.id.startsWith("tmp_") &&
         !knownIDs.has(m.id) &&
         !(m.nonce && knownNonces.has(m.nonce)) &&
-        belongsToView(m, key),
+        belongsToView(m, key) &&
+        (!activeTopicFilterID || m.topic_id === activeTopicFilterID),
     );
     messages = preserve.length > 0 ? [...merged, ...preserve] : merged;
     editController.reconcile(key, messages);

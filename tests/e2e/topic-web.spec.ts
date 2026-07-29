@@ -101,10 +101,35 @@ test("topic selector, labels, filter, clear, and realtime stay coherent", async 
   await expect(page.getByText("release from composer")).toBeVisible();
   await expect(page.getByRole("button", { name: "Filter by topic Release" }).last()).toBeVisible();
 
+  let releasePendingSend: (() => void) | undefined;
+  const pendingSendBlocked = new Promise<void>((resolve) => {
+    releasePendingSend = resolve;
+  });
+  let pendingSendSeen: (() => void) | undefined;
+  const pendingSendRequested = new Promise<void>((resolve) => {
+    pendingSendSeen = resolve;
+  });
+  await page.route(`**/api/channels/${channel.id}/messages`, async (route) => {
+    const request = route.request();
+    const body = request.method() === "POST" ? request.postDataJSON() : undefined;
+    if (body?.body === "untagged pending while filtering") {
+      pendingSendSeen?.();
+      await pendingSendBlocked;
+    }
+    await route.continue();
+  });
+  await topicSelect.selectOption("");
+  await page.getByLabel("Message body").fill("untagged pending while filtering");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await pendingSendRequested;
+  await expect(page.getByText("untagged pending while filtering")).toBeVisible();
+
   await page.getByRole("button", { name: "Filter by topic Release" }).first().click();
   await expect(page.getByText("Showing topic")).toContainText("Release");
   await expect(page.getByText("untagged baseline")).toHaveCount(0);
+  await expect(page.getByText("untagged pending while filtering")).toHaveCount(0);
   await expect(page.getByText("release baseline")).toBeVisible();
+  releasePendingSend?.();
   const filteredReadSeq = (await currentChannelState()).last_read_seq || 0;
   await expect(page.locator(".messages")).not.toHaveClass(/is-revealing/);
   await expect
