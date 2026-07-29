@@ -1139,8 +1139,7 @@
     if (topicID) selectedComposerTopicID = topicID;
     scrollMemory.delete(currentConversationKey());
     messageWindows.delete(currentConversationKey());
-    messagesLoading = true;
-    await loadMessages(false);
+    await loadLatestMessages();
   }
 
   function pageToWindow(page: MessagePage): MessageWindow {

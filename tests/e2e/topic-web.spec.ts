@@ -173,7 +173,16 @@ test("topic selector, labels, filter, clear, and realtime stay coherent", async 
 
   await originalChannelLink.click();
   await expect(page.getByRole("heading", { name: "#topic-lab" })).toBeVisible();
+  const filteredPageRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === `/api/channels/${channel.id}/messages` &&
+      url.searchParams.get("topic_id") === topic.id
+    );
+  });
   await page.getByRole("button", { name: "Filter by topic Release" }).first().click();
+  const filteredPageURL = new URL((await filteredPageRequest).url());
+  expect(filteredPageURL.searchParams.has("around_seq")).toBe(false);
   await expect(page.getByText("Showing topic")).toContainText("Release");
 
   await page.getByRole("button", { name: "Clear filter" }).click();
