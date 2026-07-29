@@ -264,6 +264,13 @@ test("switching topic filters discards delayed pagination from the previous filt
   await expect(page.getByText("Showing topic")).toContainText("Release");
 
   const scrollport = page.locator(".messages-scroll");
+  await expect
+    .poll(() => scrollport.evaluate((element) => element.scrollHeight - element.clientHeight))
+    .toBeGreaterThan(0);
+  await scrollport.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
   await expect.poll(() => scrollport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await scrollport.evaluate((element) => {
     element.scrollTop = 0;
