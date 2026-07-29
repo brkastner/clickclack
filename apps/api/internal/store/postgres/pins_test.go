@@ -51,6 +51,9 @@ func TestPinnedMessagesMigrationUpgradesExistingDatabase(t *testing.T) {
 func TestPinMessageWaitsForConcurrentDelete(t *testing.T) {
 	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
 	owner, err := st.EnsureBootstrap(ctx, "Pin Race", "postgres-pin-race@example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +118,9 @@ func TestPinMessageWaitsForConcurrentDelete(t *testing.T) {
 func TestDeletePinnedMessageRemovesPinAndOrdersEvents(t *testing.T) {
 	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
 	owner, err := st.EnsureBootstrap(ctx, "Pin Delete", "postgres-pin-delete@example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -159,6 +165,9 @@ func TestDeletePinnedMessageRemovesPinAndOrdersEvents(t *testing.T) {
 func TestExportJSONIncludesPinnedMessages(t *testing.T) {
 	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
 	owner, err := st.EnsureBootstrap(ctx, "Pin Export", "postgres-pin-export@example.com")
 	if err != nil {
 		t.Fatal(err)
