@@ -1051,15 +1051,15 @@
   ): User[] {
     const people = new Map<string, User>();
     for (const member of members) {
-      if (member.user.id && !member.user.deleted_at) people.set(member.user.id, member.user);
+      if (member.user.id && member.user.handle?.trim() && !member.user.deleted_at) people.set(member.user.id, member.user);
     }
     for (const person of direct?.members || []) {
-      if (person.id && !person.deleted_at) people.set(person.id, person);
+      if (person.id && person.handle?.trim() && !person.deleted_at) people.set(person.id, person);
     }
     for (const person of recent) {
-      if (person.id && !person.deleted_at) people.set(person.id, person);
+      if (person.id && person.handle?.trim() && !person.deleted_at) people.set(person.id, person);
     }
-    if (currentUser?.id) people.set(currentUser.id, currentUser);
+    if (currentUser?.id && currentUser.handle?.trim()) people.set(currentUser.id, currentUser);
     return [...people.values()].slice(0, 24);
   }
 
@@ -1116,7 +1116,7 @@
       channelNotifPreference = data.preference;
     } catch {
       if (serial === channelNotifLoadSerial && channelID === selectedChannelID && !selectedDirectID) {
-        const fallback = storedChannelNotifPreference(channelID) || "all";
+        const fallback = lastKnownChannelNotifPreference(channelID) || "all";
         rememberChannelNotifPreference(channelID, fallback);
         channelNotifPreference = fallback;
       }
@@ -1868,7 +1868,7 @@
       return data.preference;
     } catch {
       // Preserve a last-known restrictive choice; otherwise retain the historical all default.
-      return channelNotifPreferences.get(channelID) || storedChannelNotifPreference(channelID) || "all";
+      return lastKnownChannelNotifPreference(channelID) || "all";
     }
   }
 
@@ -1885,6 +1885,10 @@
     } catch {
       return null;
     }
+  }
+
+  function lastKnownChannelNotifPreference(channelID: string): ChannelNotificationPreference | null {
+    return channelNotifPreferences.get(channelID) || storedChannelNotifPreference(channelID);
   }
 
   function rememberChannelNotifPreference(
@@ -1935,6 +1939,13 @@
       if (document.visibilityState === "visible" && stillAffectsActiveView) return;
       if (preference === "muted") return;
       if (preference === "mentions" && !event.mentioned_user_ids?.includes(user?.id || "")) return;
+    }
+    if (!browserNotificationsEnabled) return;
+    if (document.visibilityState === "visible") {
+      const stillAffectsActiveView =
+        (Boolean(channelID) && channelID === selectedChannelID) ||
+        (Boolean(dmID) && dmID === selectedDirectID);
+      if (stillAffectsActiveView) return;
     }
     const channel = channels.find((candidate) => candidate.id === channelID);
     const author = lookupUser(authorID);

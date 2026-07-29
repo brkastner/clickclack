@@ -3654,6 +3654,7 @@ SELECT u.id, lower(u.handle) AS handle
 FROM users u
 JOIN workspace_members wm ON wm.user_id = u.id
 WHERE wm.workspace_id = $1
+  AND NULLIF(BTRIM(u.handle), '') IS NOT NULL
   AND lower(u.handle) = ANY($2::text[])
 ORDER BY u.id
 `

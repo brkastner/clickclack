@@ -51,7 +51,7 @@ func TestDurableMessageEventsPreserveOptionalCorrelationMetadata(t *testing.T) {
 		t.Fatalf("unexpected reply events: %#v", replyEvents)
 	}
 	assertEventPayloadValue(t, replyEvents[0], "correlation_id", "corr-sqlite-reply")
-	assertEventPayloadMissing(t, replyEvents[0], "body")
+	assertEventPayloadValue(t, replyEvents[0], "body", "reply content stays in the message row")
 	assertEventPayloadMissing(t, replyEvents[1], "correlation_id")
 
 	second, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Second", Email: "correlation-second@example.com"})

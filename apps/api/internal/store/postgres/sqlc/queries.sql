@@ -270,6 +270,7 @@ SELECT u.id, lower(u.handle) AS handle
 FROM users u
 JOIN workspace_members wm ON wm.user_id = u.id
 WHERE wm.workspace_id = sqlc.arg(workspace_id)
+  AND NULLIF(BTRIM(u.handle), '') IS NOT NULL
   AND lower(u.handle) = ANY(sqlc.arg(handles)::text[])
 ORDER BY u.id;
 

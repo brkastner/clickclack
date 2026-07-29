@@ -84,7 +84,7 @@ func TestMessageEventCorrelationSurvivesResponseRealtimeAndRetrieval(t *testing.
 	replyEvent := eventByType(t, replyResult.Events, "thread.reply_created")
 	stateEvent := eventByType(t, replyResult.Events, "thread.state_updated")
 	assertAPIEventPayloadValue(t, replyEvent, "correlation_id", "corr-api-reply")
-	assertAPIEventPayloadMissing(t, replyEvent, "body")
+	assertAPIEventPayloadValue(t, replyEvent, "body", "reply content stays out of event metadata")
 	assertAPIEventPayloadMissing(t, stateEvent, "correlation_id")
 	liveReply := readEventType(t, conn, "thread.reply_created")
 	assertAPIEventPayloadValue(t, liveReply, "correlation_id", "corr-api-reply")
