@@ -106,6 +106,12 @@ test("topic selector, labels, filter, clear, and realtime stay coherent", async 
   await expect(page.getByText("untagged baseline")).toHaveCount(0);
   await expect(page.getByText("release baseline")).toBeVisible();
   const filteredReadSeq = (await currentChannelState()).last_read_seq || 0;
+  await expect(page.locator(".messages")).not.toHaveClass(/is-revealing/);
+  await expect
+    .poll(() =>
+      page.locator(".messages-scroll").evaluate((element) => getComputedStyle(element).opacity),
+    )
+    .toBe("1");
   if (process.env.TOPIC_FILTER_PROOF_PATH) {
     await page.screenshot({ path: process.env.TOPIC_FILTER_PROOF_PATH, fullPage: true });
   }
@@ -233,6 +239,7 @@ test("switching topic filters discards delayed pagination from the previous filt
   await expect(page.getByText("Showing topic")).toContainText("Release");
 
   const scrollport = page.locator(".messages-scroll");
+  await expect.poll(() => scrollport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await scrollport.evaluate((element) => {
     element.scrollTop = 0;
     element.dispatchEvent(new Event("scroll", { bubbles: true }));
