@@ -1732,6 +1732,16 @@
   text-decoration: underline;
 }
 
+.message-mention {
+  margin: 0 1px;
+  padding: 0 3px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 650;
+}
+
 .markdown code {
   background: var(--panel-2);
   border: 1px solid var(--line);
