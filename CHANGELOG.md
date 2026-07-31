@@ -2,7 +2,6 @@
 
 ## 0.2.2 - Unreleased
 
-- Prevented workspace-scoped bot tokens from listing or creating message topics in a different workspace where the bot also has membership.
 - Added optional human-readable channel display titles while preserving slug-based routing and uniqueness.
 - Added agent-friendly CLI commands for adding and removing message reactions through the existing public APIs, with exact JSON output and terminal-safe human output. Thanks @PollyBot13.
 - Removed the redundant "Open in ClickClack" link from embedded channel headers, leaving external navigation to the host's own control.
