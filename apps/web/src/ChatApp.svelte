@@ -263,6 +263,17 @@
   $: agentResponding = agentProgressTurns.some((turn) =>
     turn.lines.some((line) => !line.finalized),
   );
+  $: respondingAgentNames = [
+    ...new Set(
+      agentProgressTurns
+        .filter((turn) => turn.lines.some((line) => !line.finalized))
+        .map((turn) => {
+          const agent = lookupUser(turn.userId);
+          return agent?.display_name?.trim() || (agent?.handle ? `@${agent.handle}` : "");
+        })
+        .filter(Boolean),
+    ),
+  ];
   $: sidePanelOpen = selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
   $: searchPaneVisible = searchSession !== null && !searchThreadDetour;
@@ -3588,7 +3599,7 @@
     <TypingIndicator entries={typingEntries} currentUserID={user?.id} />
 
     <div class="composer-dock">
-    <AgentResponding active={agentResponding} />
+    <AgentResponding active={agentResponding} agentNames={respondingAgentNames} />
 
     {#if composerNotice}
       <div
