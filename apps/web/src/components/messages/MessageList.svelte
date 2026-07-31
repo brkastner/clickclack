@@ -29,7 +29,7 @@
   import { dmTitle } from "../../lib/chat/people";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
-  import type { Channel, DirectConversation, Message, Topic, Upload } from "../../lib/types";
+  import type { Channel, DirectConversation, Message, Topic, Upload, User } from "../../lib/types";
   import HistoryLoader from "./HistoryLoader.svelte";
   import MessageGroup from "./MessageGroup.svelte";
 
@@ -57,6 +57,7 @@
     selectedChannel?: Channel;
     selectedThreadID?: string;
     currentUserID?: string;
+    mentionPeople?: User[];
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
     canDeleteAnyMessage?: boolean;
@@ -104,6 +105,7 @@
     selectedChannel,
     selectedThreadID,
     currentUserID,
+    mentionPeople = [],
     reactionController,
     reactionsDisabled = false,
     canDeleteAnyMessage = false,
@@ -880,6 +882,7 @@
               {reactionController}
               {reactionsDisabled}
               {selectedThreadID}
+              {mentionPeople}
               {replyContext}
               {canDeleteAnyMessage}
               {deletingMessageIDs}

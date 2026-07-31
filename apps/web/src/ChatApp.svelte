@@ -4006,6 +4006,7 @@
       messages={visibleMessages}
       {selectedDirect}
       {selectedChannel}
+      {mentionPeople}
       restoreState={viewRestoreState}
       {viewKey}
       loading={messagesLoading}

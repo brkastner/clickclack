@@ -495,6 +495,7 @@
     <MessageList
       {messages}
       selectedChannel={channel}
+      {mentionPeople}
       viewKey={channel.id}
       {hasOlder}
       {hasNewer}
