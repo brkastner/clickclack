@@ -13,7 +13,10 @@ test("finds known handles at token boundaries", () => {
 
 test("does not highlight unknown handles, emails, or URL paths", () => {
   assert.deepEqual(
-    findMentionRanges("email a@alice.test, see https://example.com/@alice, then @unknown", handles),
+    findMentionRanges(
+      "email a@alice.test, see https://example.com/@alice, /users/@alice, docs/path/@alice?tab=1, then @unknown",
+      handles,
+    ),
     [],
   );
 });

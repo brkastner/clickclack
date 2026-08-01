@@ -7,6 +7,7 @@
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
+  import { listWorkspaceMembersPage } from "../../lib/workspace-members";
   import {
     MessageEditController,
     type MessageEditSession,
@@ -63,17 +64,39 @@
   let loadSerial = 0;
   let loadPending = false;
   let failedSubmission: MessageSubmission | null = null;
+  let workspaceMemberUsers = $state<User[]>([]);
+  let memberLoadSerial = 0;
 
   const mentionPeople = $derived.by(() => {
     const people = new Map<string, User>();
+    for (const person of workspaceMemberUsers) {
+      if (person.id && !person.deleted_at) people.set(person.id, person);
+    }
     for (const message of messages) {
       if (message.author?.id && !message.author.deleted_at) {
         people.set(message.author.id, message.author);
       }
     }
     if (user?.id) people.set(user.id, user);
-    return [...people.values()].slice(0, 24);
+    return [...people.values()];
   });
+
+  async function loadWorkspaceMembers(workspaceID: string) {
+    const serial = ++memberLoadSerial;
+    workspaceMemberUsers = [];
+    try {
+      const members: User[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await listWorkspaceMembersPage({ workspaceID, cursor, limit: 100 });
+        members.push(...page.members.map((member) => member.user));
+        cursor = page.has_more ? page.next_cursor : undefined;
+      } while (cursor);
+      if (serial === memberLoadSerial) workspaceMemberUsers = members;
+    } catch {
+      if (serial === memberLoadSerial) workspaceMemberUsers = [];
+    }
+  }
 
   function newNonce(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -193,6 +216,7 @@
       if (serial !== loadSerial) return;
       user = me.user;
       route = resolved.route;
+      void loadWorkspaceMembers(resolved.route.workspace_id);
       channel = resolvedChannel;
       applyPage(page, "replace");
       viewState = "ready";

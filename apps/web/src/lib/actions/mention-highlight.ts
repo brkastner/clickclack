@@ -34,7 +34,10 @@ function mentionIsInsideURL(text: string, start: number): boolean {
   const tokenStart =
     Math.max(text.lastIndexOf(" ", start - 1), text.lastIndexOf("\n", start - 1)) + 1;
   const prefix = text.slice(tokenStart, start);
-  return /^(?:www\.[^\s/]+|[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/]+)\//u.test(prefix);
+  return (
+    /^(?:www\.[^\s/]+|[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/]+)\//u.test(prefix) ||
+    /(?:^|\/)[^\s/]*\/$/u.test(prefix)
+  );
 }
 
 function clearMentionHighlights(root: HTMLElement) {
@@ -84,12 +87,24 @@ function renderMentionHighlights(root: HTMLElement, targets: Map<string, User>) 
 
 export function enhanceMentions(node: HTMLElement, people: User[] = []) {
   let targets = mentionTargets(people);
-  renderMentionHighlights(node, targets);
+  let observer: MutationObserver | undefined;
+
+  const render = () => {
+    observer?.disconnect();
+    renderMentionHighlights(node, targets);
+    observer?.observe(node, { childList: true, subtree: true });
+  };
+
+  observer = new MutationObserver(() => render());
+  render();
 
   return {
     update(nextPeople: User[] = []) {
       targets = mentionTargets(nextPeople);
-      renderMentionHighlights(node, targets);
+      render();
+    },
+    destroy() {
+      observer?.disconnect();
     },
   };
 }
