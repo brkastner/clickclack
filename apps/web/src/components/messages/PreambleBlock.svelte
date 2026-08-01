@@ -2,13 +2,15 @@
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { markdown } from "../../lib/format";
   import { toolDetail } from "../../lib/chat/tool-detail";
-  import type { PreambleBlock } from "../../lib/types";
+  import { enhanceMentions } from "../../lib/actions/mention-highlight";
+  import type { PreambleBlock, User } from "../../lib/types";
 
   type Props = {
     block: PreambleBlock;
+    mentionPeople?: User[];
   };
 
-  let { block }: Props = $props();
+  let { block, mentionPeople = [] }: Props = $props();
 
   // Block lifecycle: while the turn is live (final === false) the block opens
   // expanded so the operator watches narration stream in. Once the turn ends
@@ -73,7 +75,7 @@
     <div class="preamble-flow">
       {#each resolved as entry (entry.item.id)}
         {#if entry.item.type === "commentary"}
-          <div class="markdown preamble-body" use:enhanceMarkdown>
+          <div class="markdown preamble-body" use:enhanceMarkdown use:enhanceMentions={mentionPeople}>
             {@html markdown(entry.item.body)}
           </div>
         {:else if entry.tool}
@@ -102,7 +104,7 @@
                   <div class="preamble-tool-full-head">{full.head}</div>
                 {/if}
                 {#if full.text}
-                  <div class="markdown preamble-tool-full-body" use:enhanceMarkdown>
+                  <div class="markdown preamble-tool-full-body" use:enhanceMarkdown use:enhanceMentions={mentionPeople}>
                     {@html markdown(full.text)}
                   </div>
                 {/if}

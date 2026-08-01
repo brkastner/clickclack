@@ -731,11 +731,13 @@
     if (workspaceChanged) {
       await Promise.all([
         loadModerationMembers(),
-        loadWorkspaceMembers(workspace.id),
         loadSlashCommands(workspace.id),
         loadBotCommands(workspace.id),
         loadTopics(workspace.id),
       ]);
+      // Mention targets are progressively available; they must not block
+      // navigation while a large workspace is paginated in the background.
+      void loadWorkspaceMembers(workspace.id);
     }
     if (serial !== routeApplySerial) return;
 
@@ -3366,6 +3368,7 @@
       loadSlashCommands(),
       loadBotCommands(),
     ]);
+    void loadWorkspaceMembers();
     await loadMessages();
     if (selectedThreadID) await refreshThread(selectedThreadID);
   }
@@ -3383,6 +3386,7 @@
       loadSlashCommands(event.workspace_id),
       loadBotCommands(event.workspace_id),
     ]);
+    void loadWorkspaceMembers(event.workspace_id);
   }
 
   function handleReadEvent(event: RealtimeEvent) {

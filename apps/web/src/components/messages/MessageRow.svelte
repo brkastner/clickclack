@@ -556,7 +556,7 @@
   <span class="row-stamp" aria-hidden="true">{index === 0 ? "" : time(message.created_at)}</span>
   <div class="message-content">
     {#if preambleBlock}
-      <PreambleBlock block={preambleBlock} />
+      <PreambleBlock block={preambleBlock} {mentionPeople} />
     {:else if isDeleted}
       <div class="message-deleted">This message was deleted.</div>
     {:else if editing}
