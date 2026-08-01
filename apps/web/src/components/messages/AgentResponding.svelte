@@ -18,14 +18,11 @@
   });
 </script>
 
-<div
-  class="typing-indicator agent-responding"
-  class:visible={active}
-  aria-live="polite"
-  aria-atomic="true"
->
-  <span class="typing-indicator__dots" aria-hidden="true">
-    <i></i><i></i><i></i>
-  </span>
-  <span class="typing-indicator__label">{label}</span>
-</div>
+{#if active}
+  <div class="typing-indicator agent-responding visible" aria-live="polite" aria-atomic="true">
+    <span class="typing-indicator__dots" aria-hidden="true">
+      <i></i><i></i><i></i>
+    </span>
+    <span class="typing-indicator__label">{label}</span>
+  </div>
+{/if}
