@@ -15,7 +15,7 @@
     trimMessageWindow as trimMessageWindowMessages,
     type MessageWindowDirection,
   } from "./lib/chat/messageWindow";
-  import { collectRecentPeople, dmTitle } from "./lib/chat/people";
+  import { collectMentionPeople, collectRecentPeople, dmTitle } from "./lib/chat/people";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
   import { channelDisplayTitle } from "./lib/chat/channels";
   import { redirectTypingToComposer, rememberTypeToFocusPointer } from "./lib/chat/typeToFocus";
@@ -50,6 +50,7 @@
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
+  import { listWorkspaceMembersPage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
@@ -94,6 +95,7 @@
   let selectedThreadState: ThreadState | null = null;
   let selectedProfile: User | null = null;
   let moderationMembers: MemberModeration[] = [];
+  let workspaceMemberUsers: User[] = [];
   let slashCommands: SlashCommand[] = [];
   let botCommands: WorkspaceBotCommand[] = [];
   // Local-only feedback for slash dispatch: Slack-style ephemeral responses
@@ -192,6 +194,7 @@
   let topicsLoadSerial = 0;
   let directConversationsLoadSerial = 0;
   let moderationMembersLoadSerial = 0;
+  let workspaceMembersLoadSerial = 0;
   let slashCommandsLoadSerial = 0;
   let botCommandsLoadSerial = 0;
   let channelNotifLoadSerial = 0;
@@ -318,7 +321,7 @@
     artifactViewerElement,
   );
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
-  $: mentionPeople = collectMentionPeople(user, recentPeople, moderationMembers, selectedDirect);
+  $: mentionPeople = collectMentionPeople(user, recentPeople, workspaceMemberUsers, selectedDirect);
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "dm" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "thread" && replyTarget && selectedThread && replyTarget.id !== selectedThread.id && !replies.some((r) => r.id === replyTarget?.id)) clearReplyTarget();
@@ -704,9 +707,11 @@
       topicsLoadSerial += 1;
       slashCommandsLoadSerial += 1;
       botCommandsLoadSerial += 1;
+      workspaceMembersLoadSerial += 1;
       slashCommands = [];
       botCommands = [];
       topics = [];
+      workspaceMemberUsers = [];
       selectedChannelID = "";
       selectedDirectID = "";
       selectedThread = null;
@@ -726,6 +731,7 @@
     if (workspaceChanged) {
       await Promise.all([
         loadModerationMembers(),
+        loadWorkspaceMembers(workspace.id),
         loadSlashCommands(workspace.id),
         loadBotCommands(workspace.id),
         loadTopics(workspace.id),
@@ -1001,6 +1007,33 @@
     }
   }
 
+  async function loadWorkspaceMembers(workspaceID = selectedWorkspaceID) {
+    const serial = ++workspaceMembersLoadSerial;
+    if (!workspaceID) {
+      workspaceMemberUsers = [];
+      return;
+    }
+    try {
+      const members: User[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await listWorkspaceMembersPage({
+          workspaceID,
+          cursor,
+          limit: 100,
+        });
+        members.push(...page.members.map((member) => member.user));
+        cursor = page.has_more ? page.next_cursor : undefined;
+      } while (cursor);
+      if (serial !== workspaceMembersLoadSerial || workspaceID !== selectedWorkspaceID) return;
+      workspaceMemberUsers = members;
+    } catch {
+      if (serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
+        workspaceMemberUsers = [];
+      }
+    }
+  }
+
   async function loadSlashCommands(workspaceID = selectedWorkspaceID) {
     const serial = ++slashCommandsLoadSerial;
     if (!workspaceID) {
@@ -1041,26 +1074,6 @@
   function clearComposerNoticeFor(_conversationKey: string) {
     slashDispatchGeneration += 1;
     composerNotice = null;
-  }
-
-  function collectMentionPeople(
-    currentUser: User | null,
-    recent: User[],
-    members: MemberModeration[],
-    direct: DirectConversation | undefined,
-  ): User[] {
-    const people = new Map<string, User>();
-    for (const member of members) {
-      if (member.user.id && member.user.handle?.trim() && !member.user.deleted_at) people.set(member.user.id, member.user);
-    }
-    for (const person of direct?.members || []) {
-      if (person.id && person.handle?.trim() && !person.deleted_at) people.set(person.id, person);
-    }
-    for (const person of recent) {
-      if (person.id && person.handle?.trim() && !person.deleted_at) people.set(person.id, person);
-    }
-    if (currentUser?.id && currentUser.handle?.trim()) people.set(currentUser.id, currentUser);
-    return [...people.values()].slice(0, 24);
   }
 
   async function updateMemberModeration(userID: string, body: Record<string, unknown>) {
