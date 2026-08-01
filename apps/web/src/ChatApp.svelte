@@ -51,6 +51,7 @@
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
+  import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
   import { listWorkspaceMembersPage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
@@ -318,17 +319,7 @@
     turn.lines.some((line) => !line.finalized),
   );
   $: pinnedMessageIDs = new Set(pinnedMessages.map((message) => message.id));
-  $: respondingAgentNames = [
-    ...new Set(
-      agentProgressTurns
-        .filter((turn) => turn.lines.some((line) => !line.finalized))
-        .map((turn) => {
-          const agent = lookupUser(turn.userId);
-          return agent?.display_name?.trim() || (agent?.handle ? `@${agent.handle}` : "");
-        })
-        .filter(Boolean),
-    ),
-  ];
+  $: activeRespondingAgentNames = respondingAgentNames(agentProgressTurns, botCommands, lookupUser);
   $: sidePanelOpen = pinnedPanelOpen || selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
   $: searchPaneVisible = searchSession !== null && !searchThreadDetour;
@@ -3555,8 +3546,13 @@
     const turnId = typeof payload.turn_id === "string" ? payload.turn_id : "";
     const op = typeof payload.op === "string" ? payload.op : "";
     if (!turnId || !op) return;
+    const userId = typeof payload.user_id === "string" ? payload.user_id : "";
+    const turnKey = agentProgressTurnKey(userId, turnId);
     if (op === "clear") {
-      agentProgressTurns = agentProgressTurns.filter((turn) => turn.turnId !== turnId);
+      agentProgressTurns = agentProgressTurns.filter((turn) => {
+        if (turn.turnId !== turnId) return true;
+        return userId && turn.userId ? turn.key !== turnKey : false;
+      });
       return;
     }
     const line = payload.line as Record<string, unknown> | undefined;
@@ -3576,7 +3572,7 @@
     // Finalize/update frames legitimately carry only { id, kind, status } and no
     // text/toolName. Merge onto the prior line so a status-only finalize still
     // applies (the line dims) instead of being dropped and left live until TTL.
-    const existing = agentProgressTurns.find((turn) => turn.turnId === turnId);
+    const existing = agentProgressTurns.find((turn) => turn.key === turnKey);
     const prior = existing?.lines.find((l) => l.id === lineId);
     const view = {
       id: lineId,
@@ -3589,16 +3585,15 @@
     // Only drop a brand-new line that carries nothing renderable. An update for
     // an existing line must always apply, even when this frame omits content.
     if (!prior && !view.text && !view.toolName) return;
-    const userId = typeof payload.user_id === "string" ? payload.user_id : "";
     const expiresAt = Date.now() + AGENT_PROGRESS_TTL_MS;
     if (!existing) {
-      agentProgressTurns = [...agentProgressTurns, { turnId, userId, lines: [view], expiresAt }];
+      agentProgressTurns = [...agentProgressTurns, { key: turnKey, turnId, userId, lines: [view], expiresAt }];
     } else {
       const lines = existing.lines.some((l) => l.id === lineId)
         ? existing.lines.map((l) => (l.id === lineId ? view : l))
         : [...existing.lines, view];
       agentProgressTurns = agentProgressTurns.map((turn) =>
-        turn.turnId === turnId ? { ...turn, lines, expiresAt } : turn,
+        turn.key === turnKey ? { ...turn, lines, expiresAt } : turn,
       );
     }
     ensureAgentProgressSweeper();
@@ -4215,7 +4210,7 @@
     <TypingIndicator entries={typingEntries} currentUserID={user?.id} />
 
     <div class="composer-dock">
-    <AgentResponding active={agentResponding} agentNames={respondingAgentNames} />
+    <AgentResponding active={agentResponding} agentNames={activeRespondingAgentNames} />
 
     {#if composerNotice}
       <div
