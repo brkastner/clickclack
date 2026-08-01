@@ -5,7 +5,9 @@ import { collectMentionPeople } from "./chat/people.ts";
 const user = (id: string, handle: string) => ({ id, handle, display_name: handle });
 
 test("keeps non-recent ordinary workspace members available for mention highlighting", () => {
-  const members = Array.from({ length: 30 }, (_, index) => user(`member-${index}`, `member-${index}`));
+  const members = Array.from({ length: 30 }, (_, index) =>
+    user(`member-${index}`, `member-${index}`),
+  );
   const target = members[29];
 
   const people = collectMentionPeople(null, [], members, undefined);
