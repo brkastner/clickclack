@@ -1867,6 +1867,23 @@
   text-decoration: underline;
 }
 
+.message-mention {
+  margin: 0 1px;
+  padding: 0 3px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: inherit;
+  font-weight: 600;
+}
+
+.message-mention.is-current-user {
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .markdown code {
   background: var(--panel-2);
   border: 1px solid var(--line);

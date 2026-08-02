@@ -196,7 +196,7 @@
     const seen = new Set<string>();
     return mentionPeople
       .filter((person) => {
-        if (!person.id || seen.has(person.id)) return false;
+        if (!person.id || !person.handle?.trim() || seen.has(person.id)) return false;
         seen.add(person.id);
         return true;
       })

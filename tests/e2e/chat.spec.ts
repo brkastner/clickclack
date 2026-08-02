@@ -583,10 +583,11 @@ test("coalesces durable agent activity and applies activity preferences", async 
     channel: { id: string };
   };
 
+  const activityBotHandle = `activity-bot-${Date.now()}`;
   const botResponse = await page.request.post(`/api/workspaces/${workspaceId}/bots`, {
     data: {
       display_name: "Activity Bot",
-      handle: `activity-bot-${Date.now()}`,
+      handle: activityBotHandle,
       token_name: "e2e",
       scopes: ["bot:write", "agent_activity:write"],
     },
@@ -596,7 +597,11 @@ test("coalesces durable agent activity and applies activity preferences", async 
   const botHeaders = { Authorization: `Bearer ${createdBot.bot_token.token}` };
   const turnId = `turn-${Date.now()}`;
   for (const data of [
-    { body: "Checking the deployment boundary.", kind: "agent_commentary", turn_id: turnId },
+    {
+      body: `Checking the deployment boundary for @${activityBotHandle}.`,
+      kind: "agent_commentary",
+      turn_id: turnId,
+    },
     { body: "**bash inspect**\n\nvalidated local target", kind: "agent_tool", turn_id: turnId },
     {
       body: "Commentary after the first tool remains in sequence.",
@@ -647,13 +652,16 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expect(page.getByText("Deployment boundary is healthy.")).toBeVisible();
 
   await preamble.getByRole("button", { name: "Show preamble" }).click();
-  await expect(preamble.getByText("Checking the deployment boundary.")).toBeVisible();
+  await expect(preamble.getByText("Checking the deployment boundary for")).toBeVisible();
+  await expect(preamble.locator("mark[data-clickclack-mention='true']")).toHaveText(
+    `@${activityBotHandle}`,
+  );
   await expect(preamble.getByText("bash")).toBeVisible();
   await preamble.getByRole("button", { name: /bash/ }).click();
   await expect(preamble.getByText("validated local target")).toBeVisible();
   const preambleItems = preamble.locator(".preamble-flow > *");
   await expect(preambleItems).toHaveCount(4);
-  await expect(preambleItems.nth(0)).toContainText("Checking the deployment boundary.");
+  await expect(preambleItems.nth(0)).toContainText("Checking the deployment boundary for");
   await expect(preambleItems.nth(1)).toContainText("bash");
   await expect(preambleItems.nth(2)).toContainText("Commentary after the first tool");
   await expect(preambleItems.nth(3)).toContainText("read");
@@ -815,7 +823,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await page.getByRole("button", { name: /Account settings for/ }).click({ button: "right" });
   const settings = page.getByLabel("Account settings");
   await settings.getByLabel("Hide agent commentary").check();
-  await expect(preamble.getByText("Checking the deployment boundary.")).toHaveCount(0);
+  await expect(preamble.getByText("Checking the deployment boundary for")).toHaveCount(0);
   await settings.getByLabel("Hide tool calls").check();
   await expect(preambles).toHaveCount(0);
   await settings.getByLabel("Your message alignment").selectOption("right");
@@ -2499,6 +2507,79 @@ test("channel preferences filter browser notifications outside the active conver
       ),
     )
     .toBe(1);
+});
+
+test("resolved mention emphasis follows the channel notification preference", async ({ page }) => {
+  const meResponse = await page.request.get("/api/me");
+  let me = (await meResponse.json()) as {
+    user: { id: string; handle: string; display_name: string };
+  };
+  if (!me.user.handle) {
+    const handle = `attention-${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const profileResponse = await page.request.patch("/api/me", { data: { handle } });
+    expect(profileResponse.ok()).toBe(true);
+    me = (await profileResponse.json()) as typeof me;
+  }
+
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as {
+    workspaces: { id: string; route_id: string }[];
+  };
+  const workspace = workspaces.workspaces[0];
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: `mention-attention-${randomUUID()}`, kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+  const channel = (await channelResponse.json()) as {
+    channel: { id: string; route_id: string; name: string };
+  };
+  const senderID = clickclack([
+    "admin",
+    "user",
+    "create",
+    "--data",
+    "./data/e2e",
+    "--workspace",
+    workspace.id,
+    "--name",
+    "Mention Attention Sender",
+    "--email",
+    `mention-attention-${randomUUID()}@example.com`,
+  ]);
+  const muteResponse = await page.request.patch(
+    `/api/channels/${channel.channel.id}/notification-settings`,
+    { data: { preference: "muted" } },
+  );
+  expect(muteResponse.ok()).toBe(true);
+
+  await page.goto(`/app/${workspace.route_id}/${channel.channel.route_id}`);
+  await waitForAppReady(page);
+  await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
+
+  const messageResponse = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+    headers: { "X-ClickClack-User": senderID },
+    data: { body: `Please review this, @${me.user.handle}` },
+  });
+  expect(messageResponse.ok()).toBe(true);
+  const messageResult = (await messageResponse.json()) as { message: { id: string } };
+  const mention = page
+    .locator(`[data-message-id="${messageResult.message.id}"]`)
+    .locator("mark[data-clickclack-mention='true']");
+  await expect(mention).toHaveText(`@${me.user.handle}`);
+  await expect(mention).not.toHaveAttribute("data-mention-attention", "true");
+
+  await page.getByRole("button", { name: "Channel muted - click to change" }).click();
+  await expect(mention).toHaveAttribute("data-mention-attention", "true");
+  await expect(mention).toHaveClass(/is-current-user/);
+
+  await page.getByRole("button", { name: "All notifications enabled - click to change" }).click();
+  await expect(mention).toHaveAttribute("data-mention-attention", "true");
+
+  await page
+    .getByRole("button", { name: "Notifications for @mentions only - click to change" })
+    .click();
+  await expect(mention).not.toHaveAttribute("data-mention-attention", "true");
+  await expect(mention).not.toHaveClass(/is-current-user/);
 });
 
 test("clicking the active conversation does not refetch its messages", async ({ page }) => {

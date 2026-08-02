@@ -2,7 +2,7 @@
   import Avatar from "../avatar/Avatar.svelte";
   import { handleLabel } from "../../lib/chat/people";
   import { time } from "../../lib/format";
-  import type { Message, Topic, Upload } from "../../lib/types";
+  import type { Message, Topic, Upload, User } from "../../lib/types";
   import type { MessageGroup as MessageGroupType } from "../../lib/chat/messages";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
@@ -14,6 +14,8 @@
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
     selectedThreadID?: string;
+    mentionPeople?: User[];
+    mentionAttentionUserID?: string;
     canDeleteAnyMessage?: boolean;
     deletingMessageIDs?: ReadonlySet<string>;
     replyContext: "channel" | "dm";
@@ -39,6 +41,8 @@
     reactionController,
     reactionsDisabled = false,
     selectedThreadID,
+    mentionPeople = [],
+    mentionAttentionUserID,
     canDeleteAnyMessage = false,
     deletingMessageIDs = new Set<string>(),
     replyContext,
@@ -102,6 +106,8 @@
         selected={selectedThreadID === message.id}
         {replyContext}
         {selectedThreadID}
+        {mentionPeople}
+        {mentionAttentionUserID}
         {currentUserID}
         {reactionController}
         {reactionsDisabled}

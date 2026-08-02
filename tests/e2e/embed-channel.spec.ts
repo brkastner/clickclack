@@ -9,6 +9,16 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
   };
   const workspace = workspaces[0];
   const stamp = Date.now();
+  const mentionHandle = `embed-channel-${stamp}`;
+  const botResponse = await page.request.post(`/api/workspaces/${workspace.id}/bots`, {
+    data: {
+      display_name: "Embed Channel Mention",
+      handle: mentionHandle,
+      token_name: "e2e",
+      scopes: ["bot:write"],
+    },
+  });
+  expect(botResponse.ok()).toBe(true);
 
   const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
     data: { name: `embed-channel-${stamp}`, kind: "public" },
@@ -17,7 +27,7 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
     channel: { id: string; route_id: string; name: string };
   };
 
-  const initialBody = `embedded channel root ${stamp}`;
+  const initialBody = `embedded channel root ${stamp} for @${mentionHandle}`;
   const initialResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
     data: { body: initialBody },
   });
@@ -39,6 +49,9 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
   await expect(page.locator(".sidebar, .topbar, .guild-rail")).toHaveCount(0);
 
   const initialRow = page.locator(`[data-message-id="${initialMessage.id}"]`);
+  await expect(initialRow.locator("mark[data-clickclack-mention='true']")).toHaveText(
+    `@${mentionHandle}`,
+  );
   const reactionResponse = await page.request.post(`/api/messages/${initialMessage.id}/reactions`, {
     data: { emoji: "👀" },
   });

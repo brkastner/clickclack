@@ -2,6 +2,7 @@
   import { onDestroy, tick } from "svelte";
   import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
+  import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { time, markdown } from "../../lib/format";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
@@ -10,7 +11,7 @@
   import MessageActionSheet from "./MessageActionSheet.svelte";
   import { shouldOpenUpward } from "../../lib/popover";
   import type { ReactionController } from "../../lib/reactions.svelte";
-  import type { Message, Topic, Upload } from "../../lib/types";
+  import type { Message, Topic, Upload, User } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
   import MessageEditor from "./MessageEditor.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
@@ -25,6 +26,8 @@
     selected: boolean;
     replyContext: "channel" | "dm";
     selectedThreadID?: string;
+    mentionPeople?: User[];
+    mentionAttentionUserID?: string;
     currentUserID?: string;
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
@@ -53,6 +56,8 @@
     selected,
     replyContext,
     selectedThreadID,
+    mentionPeople = [],
+    mentionAttentionUserID,
     currentUserID,
     reactionController,
     reactionsDisabled = false,
@@ -553,7 +558,7 @@
   <span class="row-stamp" aria-hidden="true">{index === 0 ? "" : time(message.created_at)}</span>
   <div class="message-content">
     {#if preambleBlock}
-      <PreambleBlock block={preambleBlock} />
+      <PreambleBlock block={preambleBlock} {mentionPeople} {mentionAttentionUserID} />
     {:else if isDeleted}
       <div class="message-deleted">This message was deleted.</div>
     {:else if editing}
@@ -570,7 +575,11 @@
     {:else}
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
-    <div class="markdown" use:enhanceMarkdown>{@html markdown(message.body)}</div>
+    <div
+      class="markdown"
+      use:enhanceMarkdown
+      use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+    >{@html markdown(message.body)}</div>
     {#if message.edited_at}
       <span class="message-edit__indicator" title="Edited {time(message.edited_at)}">(edited)</span>
     {/if}

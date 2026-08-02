@@ -71,6 +71,26 @@ export function collectRecentPeople(
   return [...people.values()].slice(0, 12);
 }
 
+export function collectMentionPeople(
+  currentUser: User | null,
+  recent: User[],
+  workspaceMembers: User[],
+  direct: DirectConversation | undefined,
+): User[] {
+  const people = new Map<string, User>();
+  for (const person of workspaceMembers) {
+    if (person.id && !person.deleted_at) people.set(person.id, person);
+  }
+  for (const person of direct?.members || []) {
+    if (person.id && !person.deleted_at) people.set(person.id, person);
+  }
+  for (const person of recent) {
+    if (person.id && !person.deleted_at) people.set(person.id, person);
+  }
+  if (currentUser?.id) people.set(currentUser.id, currentUser);
+  return [...people.values()];
+}
+
 export function directConversationForUser(
   conversations: DirectConversation[],
   memberID: string,
