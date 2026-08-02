@@ -331,9 +331,8 @@ func TestMentionRecordingOnThreadReply(t *testing.T) {
 				if len(evt2.MentionedUserIDs) != 1 || evt2.MentionedUserIDs[0] != user.ID {
 					t.Fatalf("expected mentioned_user_ids for thread reply to contain %q, got %v", user.ID, evt2.MentionedUserIDs)
 				}
-				if authorID, _ := eventPayloadValue(evt2, "author_id"); authorID != owner.ID {
-					t.Fatalf("expected thread reply author_id %q, got %q", owner.ID, authorID)
-				}
+				assertEventPayloadMissing(t, evt2, "author_id")
+				assertEventPayloadMissing(t, evt2, "body")
 			}
 		}
 	}

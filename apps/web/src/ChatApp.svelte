@@ -1912,6 +1912,15 @@
     if (kind === "agent_commentary" || kind === "agent_tool") return;
     if (!browserNotificationsEnabled) return;
     if (document.visibilityState === "visible" && affectsActiveView) return;
+    const { channelID, dmID } = messageEventScope(event);
+    if (channelID) {
+      const preference = await notificationPreferenceForChannel(channelID);
+      if (!preference || !browserNotificationsEnabled) return;
+      const stillAffectsActiveView = channelID === selectedChannelID && !selectedDirectID;
+      if (document.visibilityState === "visible" && stillAffectsActiveView) return;
+      if (preference === "muted") return;
+      if (preference === "mentions" && !event.mentioned_user_ids?.includes(user?.id || "")) return;
+    }
     const messageID =
       typeof payload.message_id === "string"
         ? payload.message_id
@@ -1924,22 +1933,10 @@
         authorID = data.message.author_id;
         rawBody = data.message.body;
       } catch {
-        // Keep the durable event metadata fallback when message hydration fails.
+        // A generic alert is safer than copying message content into durable event metadata.
       }
     }
     if (authorID && authorID === user?.id) return;
-    const { channelID, dmID } = messageEventScope(event);
-    if (channelID) {
-      const preference = await notificationPreferenceForChannel(channelID);
-      if (!preference) return;
-      if (!browserNotificationsEnabled) return;
-      const stillAffectsActiveView =
-        (Boolean(channelID) && channelID === selectedChannelID) ||
-        (Boolean(dmID) && dmID === selectedDirectID);
-      if (document.visibilityState === "visible" && stillAffectsActiveView) return;
-      if (preference === "muted") return;
-      if (preference === "mentions" && !event.mentioned_user_ids?.includes(user?.id || "")) return;
-    }
     if (!browserNotificationsEnabled) return;
     if (document.visibilityState === "visible") {
       const stillAffectsActiveView =

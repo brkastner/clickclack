@@ -2405,6 +2405,19 @@ test("channel preferences filter browser notifications outside the active conver
     },
   );
   expect(threadReplyResponse.ok()).toBe(true);
+  const threadReplyResult = (await threadReplyResponse.json()) as {
+    events: {
+      type: string;
+      mentioned_user_ids?: string[];
+      payload: Record<string, unknown>;
+    }[];
+  };
+  const durableReplyEvent = threadReplyResult.events.find(
+    (event) => event.type === "thread.reply_created",
+  );
+  expect(durableReplyEvent?.mentioned_user_ids).toContain(me.user.id);
+  expect(durableReplyEvent?.payload).not.toHaveProperty("author_id");
+  expect(durableReplyEvent?.payload).not.toHaveProperty("body");
   await expect
     .poll(() =>
       page.evaluate(
