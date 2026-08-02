@@ -6,8 +6,8 @@ exercises the rendered channel UI.
 ## Reproduction
 
 ```sh
-TOPIC_FILTER_PROOF_PATH=docs/proof/topic-web-filter.png \
-TOPIC_MOBILE_PROOF_PATH=docs/proof/topic-web-mobile.png \
+TOPIC_FILTER_PROOF_PATH=/tmp/clickclack-topic-filter.png \
+TOPIC_MOBILE_PROOF_PATH=/tmp/clickclack-topic-mobile.png \
 pnpm exec playwright test tests/e2e/topic-web.spec.ts --workers=1
 ```
 
