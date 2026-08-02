@@ -217,6 +217,15 @@ func TestHTTPBotTokenWorkspaceIsolation(t *testing.T) {
 	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/workspaces/"+otherWorkspace.ID, nil, http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/workspaces/"+otherWorkspace.ID+"/channels", nil, http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/workspaces/"+otherWorkspace.ID+"/channels", strings.NewReader(`{"name":"hidden"}`), http.StatusForbidden)
+	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/workspaces/"+otherWorkspace.ID+"/topics", nil, http.StatusForbidden)
+	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/workspaces/"+otherWorkspace.ID+"/topics", strings.NewReader(`{"channel_id":"`+otherChannel.ID+`","name":"hidden"}`), http.StatusForbidden)
+	otherTopics, err := st.ListTopics(ctx, otherWorkspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(otherTopics) != 0 {
+		t.Fatalf("bot token created a topic outside its workspace scope: %#v", otherTopics)
+	}
 	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/search?workspace_id="+otherWorkspace.ID+"&q=scope", nil, http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/realtime/events?workspace_id="+otherWorkspace.ID, nil, http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/dms", strings.NewReader(`{"workspace_id":"`+otherWorkspace.ID+`","member_ids":[]}`), http.StatusForbidden)

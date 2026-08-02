@@ -904,7 +904,12 @@ func (s *Server) listTopics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	topics, err := s.store.ListTopics(r.Context(), chi.URLParam(r, "workspace_id"), act.user.ID)
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	topics, err := s.store.ListTopics(r.Context(), workspaceID, act.user.ID)
 	writeResult(w, map[string]any{"topics": topics}, err)
 }
 
@@ -918,6 +923,11 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
 	var body struct {
 		ChannelID string `json:"channel_id"`
 		Name      string `json:"name"`
@@ -926,7 +936,7 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	topic, err := s.store.CreateTopic(r.Context(), store.CreateTopicInput{WorkspaceID: chi.URLParam(r, "workspace_id"), ChannelID: body.ChannelID, Name: body.Name, CreatedBy: act.user.ID})
+	topic, err := s.store.CreateTopic(r.Context(), store.CreateTopicInput{WorkspaceID: workspaceID, ChannelID: body.ChannelID, Name: body.Name, CreatedBy: act.user.ID})
 	writeResultStatus(w, http.StatusCreated, map[string]any{"topic": topic}, err)
 }
 
