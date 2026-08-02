@@ -28,7 +28,7 @@ async function openPinChannel(page: Page) {
   };
   await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
   await waitForAppReady(page);
-  return { suffix, channel };
+  return { suffix, workspace, channel };
 }
 
 async function createDirectConversation(page: Page, label: string) {
@@ -166,6 +166,79 @@ test("pins are shared, persistent, and removable through ClickClack", async ({ p
   expect(await persistedResponse.json()).toEqual({ messages: [] });
 });
 
+test("pinned items stay channel-wide across topic filters and retain message metadata", async ({
+  page,
+}) => {
+  const { suffix, workspace, channel } = await openPinChannel(page);
+  const mentionHandle = `pin-mention-${suffix}`;
+  const botResponse = await page.request.post(`/api/workspaces/${workspace.id}/bots`, {
+    data: {
+      display_name: "Pinned Mention Target",
+      handle: mentionHandle,
+      token_name: "e2e",
+      scopes: ["bot:write"],
+    },
+  });
+  expect(botResponse.ok()).toBe(true);
+
+  const firstTopicResponse = await page.request.post(`/api/workspaces/${workspace.id}/topics`, {
+    data: { channel_id: channel.id, name: `Pin Alpha ${suffix}` },
+  });
+  const secondTopicResponse = await page.request.post(`/api/workspaces/${workspace.id}/topics`, {
+    data: { channel_id: channel.id, name: `Pin Beta ${suffix}` },
+  });
+  expect(firstTopicResponse.ok()).toBe(true);
+  expect(secondTopicResponse.ok()).toBe(true);
+  const firstTopic = (await firstTopicResponse.json()) as { topic: { id: string; name: string } };
+  const secondTopic = (await secondTopicResponse.json()) as { topic: { id: string; name: string } };
+
+  const firstBody = `Pinned alpha ${suffix}`;
+  const secondBody = `Pinned beta ${suffix} for @${mentionHandle}`;
+  const firstMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: firstBody, topic_id: firstTopic.topic.id },
+  });
+  const secondMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: secondBody, topic_id: secondTopic.topic.id },
+  });
+  expect(firstMessageResponse.ok()).toBe(true);
+  expect(secondMessageResponse.ok()).toBe(true);
+  const firstMessage = (await firstMessageResponse.json()) as { message: { id: string } };
+  const secondMessage = (await secondMessageResponse.json()) as { message: { id: string } };
+  for (const messageID of [firstMessage.message.id, secondMessage.message.id]) {
+    const pinResponse = await page.request.post(`/api/channels/${channel.id}/pins`, {
+      data: { message_id: messageID },
+    });
+    expect(pinResponse.status()).toBe(201);
+  }
+
+  await page.reload();
+  await waitForAppReady(page);
+  const firstRow = page.locator(`[data-message-id="${firstMessage.message.id}"]`);
+  await firstRow.getByRole("button", { name: `Filter by topic ${firstTopic.topic.name}` }).click();
+  await expect(page.locator(".messages-scroll .markdown", { hasText: firstBody })).toBeVisible();
+  await expect(page.locator(".messages-scroll .markdown", { hasText: secondBody })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Pinned items" }).click();
+  const panel = page.getByRole("complementary", { name: "Pinned messages pane" });
+  await expect(panel.getByText("2 / 100 pinned", { exact: true })).toBeVisible();
+  await expect(panel.getByText(firstBody)).toBeVisible();
+  await expect(panel.getByText(secondBody)).toBeVisible();
+  const secondPinnedItem = panel.locator(`[data-message-id="${secondMessage.message.id}"]`);
+  await expect(secondPinnedItem.locator("mark[data-clickclack-mention='true']")).toHaveText(
+    `@${mentionHandle}`,
+  );
+  await expect(
+    secondPinnedItem.getByRole("button", { name: `Filter by topic ${secondTopic.topic.name}` }),
+  ).toBeVisible();
+
+  await secondPinnedItem
+    .getByRole("button", { name: `Filter by topic ${secondTopic.topic.name}` })
+    .click();
+  await expect(panel).toBeHidden();
+  await expect(page.locator(".messages-scroll .markdown", { hasText: secondBody })).toBeVisible();
+  await expect(page.locator(".messages-scroll .markdown", { hasText: firstBody })).toHaveCount(0);
+});
+
 test("local edits and deletes reconcile the open pinned panel", async ({ page }) => {
   const { suffix, channel } = await openPinChannel(page);
   const body = `Local pin reconciliation ${suffix}`;
@@ -232,14 +305,16 @@ test("thread pin failures remain visible without unhandled errors", async ({ pag
     await route.fulfill({
       status: 409,
       contentType: "application/json",
-      body: JSON.stringify({ error: "Pin limit reached" }),
+      body: JSON.stringify({ error: "channel pin limit reached (maximum 100)" }),
     });
   });
   const pinButton = threadPane.locator(".thread-root").getByRole("button", {
     name: "Pin message",
   });
   await pinButton.click();
-  await expect(threadPane.locator(".thread-pin-error")).toHaveText("Pin limit reached");
+  await expect(threadPane.locator(".thread-pin-error")).toHaveText(
+    "channel pin limit reached (maximum 100)",
+  );
   await expect(pinButton).toBeEnabled();
   if (process.env.PIN_THREAD_ERROR_PROOF_PATH) {
     await page.screenshot({ path: process.env.PIN_THREAD_ERROR_PROOF_PATH, fullPage: true });

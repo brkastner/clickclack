@@ -1,29 +1,42 @@
 <script lang="ts">
+  import { enhanceMarkdown } from "../../lib/actions/markdown";
+  import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { markdown, time } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
-  import type { Message, Upload } from "../../lib/types";
+  import type { Message, Topic, Upload, User } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
+  import TopicBadge from "../messages/TopicBadge.svelte";
 
   type Props = {
     messages: Message[];
     loading?: boolean;
     error?: string;
+    topics?: Topic[];
+    mentionPeople?: User[];
+    mentionAttentionUserID?: string;
+    maxPins?: number;
     onClose: () => void;
     onOpenThread: (message: Message) => void;
     onOpenImage: (url: string, title: string) => void;
     onOpenArtifact: (upload: Upload) => void;
     onUnpin: (message: Message) => Promise<void>;
+    onSelectTopic?: (topicID: string) => void;
   };
 
   let {
     messages,
     loading = false,
     error = "",
+    topics = [],
+    mentionPeople = [],
+    mentionAttentionUserID,
+    maxPins = 100,
     onClose,
     onOpenThread,
     onOpenImage,
     onOpenArtifact,
     onUnpin,
+    onSelectTopic,
   }: Props = $props();
   let unpinningMessageIDs = $state(new Set<string>());
   let actionError = $state("");
@@ -46,12 +59,16 @@
 
 <div class="pinned-panel">
   <header class="pinned-panel__header">
-    <h2 class="pinned-panel__title">
-      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
-      </svg>
-      Pinned Messages
-    </h2>
+    <div>
+      <h2 class="pinned-panel__title">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
+        </svg>
+        Pinned Messages
+        <span class="pinned-panel__count">{messages.length} / {maxPins} pinned</span>
+      </h2>
+      <p class="pinned-panel__limit">Shared across this channel, with a maximum of {maxPins} messages.</p>
+    </div>
     <button type="button" class="pinned-panel__close" aria-label="Close pinned panel" onclick={onClose}>
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
@@ -79,12 +96,18 @@
       {:else}
         <div class="pinned-panel__list">
         {#each messages as message (message.id)}
+          {@const topic = topics.find((candidate) => candidate.id === message.topic_id)}
           <div class="pinned-panel__item" data-message-id={message.id}>
             <div class="pinned-item__meta">
               <span class="pinned-item__author">{message.author?.display_name || "Unknown"}</span>
               <time class="pinned-item__time">{time(message.created_at)}</time>
             </div>
-            <div class="pinned-item__body markdown">{@html markdown(message.body)}</div>
+            <TopicBadge {topic} onSelect={onSelectTopic} />
+            <div
+              class="pinned-item__body markdown"
+              use:enhanceMarkdown
+              use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+            >{@html markdown(message.body)}</div>
             {#if message.attachments?.length}
               <div class="attachment-grid">
                 {#each message.attachments as attachment (attachment.id)}
@@ -157,6 +180,18 @@
     font-weight: 600;
     margin: 0;
     color: var(--text, #1a1a1a);
+  }
+
+  .pinned-panel__count {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 550;
+  }
+
+  .pinned-panel__limit {
+    margin: 3px 0 0 22px;
+    color: var(--muted);
+    font-size: 11px;
   }
 
   .pinned-panel__close {

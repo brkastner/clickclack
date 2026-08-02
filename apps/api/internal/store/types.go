@@ -63,7 +63,7 @@ const (
 var (
 	ErrAlreadyPinned         = errors.New("message is already pinned")
 	ErrPinnedMessageNotFound = errors.New("pinned message not found")
-	ErrPinnedMessageLimit    = errors.New("channel pin limit reached")
+	ErrPinnedMessageLimit    = errors.New("channel pin limit reached (maximum 100)")
 )
 
 const MaxPinnedMessagesPerChannel = 100

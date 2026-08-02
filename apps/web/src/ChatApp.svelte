@@ -3297,7 +3297,6 @@
       await loadTopics(event.workspace_id);
     }
     if (messageEventAlreadyAccounted(event)) return;
-    const affectsConversation =
     if (
       (event.type === "message.updated" || event.type === "message.deleted") &&
       pinnedMessageIDs.has(event.payload.message_id || "")
@@ -3810,8 +3809,12 @@
   }
 
   function toggleSidePanelFromTopbar() {
+    if (selectedThread) {
+      closeSidePanel();
+      return;
+    }
     if (sidePanelOpen) closeSidePanel();
-    else status = "pick a message to open its thread";
+    status = "pick a message to open its thread";
   }
 
   async function loadPinnedMessages(channelID = selectedChannelID, directID = selectedDirectID) {
@@ -4025,6 +4028,7 @@
     <DesktopTitlebar
       channelNotifPreference={selectedChannel ? channelNotifPreference : null}
       {channelNotifSaving}
+      pinnedOpen={pinnedPanelOpen}
       channelTitle={selectedDirect
         ? `@${dmTitle(selectedDirect, user?.id)}`
         : selectedChannel
@@ -4121,8 +4125,8 @@
         workspaceName={selectedWorkspace?.name}
         currentUserID={user?.id}
         {searchQuery}
-        {sidePanelOpen}
         threadOpen={selectedThread !== null}
+        pinnedOpen={pinnedPanelOpen}
         {channelNotifPreference}
         {channelNotifSaving}
         onSearchQuery={(value) => (searchQuery = value)}
@@ -4313,11 +4317,18 @@
         messages={pinnedMessages}
         loading={pinnedMessagesLoading}
         error={pinnedMessagesError}
+        {topics}
+        {mentionPeople}
+        {mentionAttentionUserID}
         onClose={closeSidePanel}
         onOpenThread={(message) => void openPinnedMessageThread(message)}
         onOpenImage={openImageViewer}
         onOpenArtifact={openArtifactViewer}
         onUnpin={(message) => toggleMessagePin(message, true)}
+        onSelectTopic={(topicID) => {
+          pinnedPanelOpen = false;
+          void setTopicFilter(topicID);
+        }}
       />
     {:else if selectedThread}
       <ThreadPanel

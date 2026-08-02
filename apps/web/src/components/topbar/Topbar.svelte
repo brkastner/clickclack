@@ -9,8 +9,8 @@
     workspaceName?: string;
     currentUserID?: string;
     searchQuery: string;
-    sidePanelOpen: boolean;
     threadOpen: boolean;
+    pinnedOpen?: boolean;
     channelNotifPreference?: ChannelNotificationPreference | null;
     channelNotifSaving?: boolean;
     onSearchQuery: (value: string) => void;
@@ -33,8 +33,8 @@
     workspaceName,
     currentUserID,
     searchQuery,
-    sidePanelOpen,
     threadOpen,
+    pinnedOpen = false,
     channelNotifPreference = undefined,
     channelNotifSaving = false,
     onSearchQuery,
@@ -113,7 +113,7 @@
       type="button"
       title={threadOpen ? "Close thread" : "Open a message thread"}
       aria-label={threadOpen ? "Close thread" : "Open a message thread"}
-      class:active={sidePanelOpen}
+      class:active={threadOpen}
       onclick={onToggleThread}
     >
       <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
@@ -121,7 +121,13 @@
       </svg>
     </button>
     {#if selectedChannel}
-      <button type="button" title="Pinned items" aria-label="Pinned items" onclick={onPinnedItems}>
+      <button
+        type="button"
+        title={pinnedOpen ? "Close pinned items" : "Pinned items"}
+        aria-label={pinnedOpen ? "Close pinned items" : "Pinned items"}
+        class:active={pinnedOpen}
+        onclick={onPinnedItems}
+      >
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
         </svg>

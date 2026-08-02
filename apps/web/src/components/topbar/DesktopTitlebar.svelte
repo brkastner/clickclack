@@ -7,6 +7,7 @@
     channelNotifSaving?: boolean;
     channelTitle?: string;
     pinsAvailable?: boolean;
+    pinnedOpen?: boolean;
     externalURL?: string;
     connected: boolean;
     mobileNavigation: boolean;
@@ -35,6 +36,7 @@
     channelNotifSaving = false,
     channelTitle,
     pinsAvailable = false,
+    pinnedOpen = false,
     externalURL,
     connected,
     mobileNavigation,
@@ -162,7 +164,13 @@
           </button>
         {/if}
         {#if pinsAvailable}
-          <button type="button" title="Pinned items" aria-label="Pinned items" onclick={onPinnedItems}>
+          <button
+            type="button"
+            title={pinnedOpen ? "Close pinned items" : "Pinned items"}
+            aria-label={pinnedOpen ? "Close pinned items" : "Pinned items"}
+            class:active={pinnedOpen}
+            onclick={onPinnedItems}
+          >
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
             </svg>

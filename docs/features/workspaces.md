@@ -132,4 +132,4 @@ first direct conversation.
 
 - Private channels with explicit member sets (planned but not modeled in V1).
 - Arbitrary HTTP member invites/additions.
-- Channel topics or descriptions.
+- Channel descriptions.

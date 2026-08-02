@@ -5,8 +5,10 @@ read_when:
 
 # Pinned messages
 
-Channel members can pin up to 100 non-deleted messages in a channel. Pins are shared channel
-state, not a per-user bookmark. Direct messages do not support pins.
+Channel members can pin up to 100 non-deleted messages in a channel. The pinned panel always shows
+the whole channel's pins, even while the timeline is filtered to a topic. It preserves topic badges
+and resolved-mention rendering so a pinned message reads the same as it does in the timeline. Pins
+are shared channel state, not a per-user bookmark. Direct messages do not support pins.
 
 ## Endpoints
 
@@ -17,7 +19,8 @@ DELETE /api/channels/{channel_id}/pins/{message_id}
 ```
 
 The POST body is `{ "message_id": "msg_..." }`. Listing returns full message objects newest pin
-first. A duplicate pin or a channel at its limit returns HTTP 409.
+first. A duplicate pin or a channel at its 100-message limit returns HTTP 409; the app also shows
+the current count against that ceiling in the panel header.
 
 ## Events
 

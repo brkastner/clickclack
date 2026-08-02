@@ -136,6 +136,13 @@ attention style only while the channel preference is `all` or `mentions`.
 Muted channels keep the neutral resolved-handle treatment. See
 [channel notifications](channel-notifications.md) for the API and delivery rules.
 
+### Pinned messages
+
+Pins are shared, channel-wide references rather than per-user bookmarks. The
+pinned panel is independent of the current topic filter and retains topic
+badges and mention rendering. Each channel can hold at most 100 pins. See
+[pinned messages](pinned-messages.md) for the API and event contract.
+
 ## Sequence numbers
 
 Every channel message gets a per-channel `channel_seq` assigned inside the
