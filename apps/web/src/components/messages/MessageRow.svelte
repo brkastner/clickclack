@@ -15,6 +15,7 @@
   import MessageEditor from "./MessageEditor.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
   import PreambleBlock from "./PreambleBlock.svelte";
+  import TopicBadge from "./TopicBadge.svelte";
 
   type Props = {
     message: Message;
@@ -567,17 +568,7 @@
         />
       {/if}
     {:else}
-    {#if topic}
-      <button
-        type="button"
-        class="message-topic"
-        aria-label={`Filter by topic ${topic.name}`}
-        onclick={(event) => {
-          event.stopPropagation();
-          onSelectTopic(topic.id);
-        }}
-      >{topic.name}</button>
-    {/if}
+    <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div class="markdown" use:enhanceMarkdown>{@html markdown(message.body)}</div>
     {#if message.edited_at}

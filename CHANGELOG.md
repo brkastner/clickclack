@@ -1,7 +1,14 @@
 # Changelog
 
-## 0.2.2 - Unreleased
+## 0.3.0 - Unreleased
 
+- Added coherent conversation organization and attention tools, beginning with topic selection and filtered timelines across the web app, API, and SDK. Thanks @PollyBot13.
+
+## 0.2.2 - 2026-08-01
+
+- Updated Go, web, desktop, Cloudflare, CI action, package-manager, and container-base dependencies.
+- Fixed bot topic endpoints accepting cross-workspace list and create operations by enforcing the token workspace scope. Thanks @ShiroKSH.
+- Fixed right-aligned messages rendering Markdown lists and blockquotes outside the message bubble. Thanks @jjjhenriksen.
 - Added optional human-readable channel display titles while preserving slug-based routing and uniqueness.
 - Added agent-friendly CLI commands for adding and removing message reactions through the existing public APIs, with exact JSON output and terminal-safe human output. Thanks @PollyBot13.
 - Removed the redundant "Open in ClickClack" link from embedded channel headers, leaving external navigation to the host's own control.

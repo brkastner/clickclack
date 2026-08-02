@@ -16,7 +16,7 @@ on the same row via `quoted_message_id` and friends, documented in
 ## Endpoints
 
 ```http
-GET    /api/channels/{channel_id}/messages?after_seq=&before_seq=&around_seq=&topic_id=&limit=
+GET    /api/channels/{channel_id}/messages?after_seq=&before_seq=&around_seq=&mode=&topic_id=&limit=
 POST   /api/channels/{channel_id}/messages
 POST   /api/channels/{channel_id}/read
 GET    /api/messages/by-nonce?workspace_id=...&nonce=...
@@ -28,7 +28,8 @@ DELETE /api/messages/{message_id}
 - `GET` returns root messages only (`parent_message_id IS NULL`) for the
   channel, ordered by `channel_seq` ascending. `after_seq` and `before_seq` are
   exclusive cursor windows; `around_seq` returns context around a target
-  sequence. Cursor params are mutually exclusive, and `limit` is clamped to
+  sequence. Cursor params are mutually exclusive; `mode=latest` explicitly
+  selects the newest window and cannot be combined with a cursor. `limit` is clamped to
   `1..200` (default 100). Optional `topic_id` restricts every cursor mode and
   page-metadata check to one active topic available in the channel. Every
   returned root includes `thread_state`, including
@@ -97,7 +98,15 @@ Publishing activity requires bot-token authentication plus the explicit
 activity-capable bot token with a scope list such as
 `bot:write,agent_activity:write`.
 
-## Topics
+## Conversation organization and attention
+
+Conversation organization stays attached to the channel timeline, while
+attention is a per-user choice. Topics label and filter messages without
+creating nested rooms. Related channel-wide tools, such as pins and mention
+attention, use the same message metadata and rendering surfaces rather than
+forking the conversation model.
+
+### Topics
 
 Topics are optional labels for channel messages. They are useful for deploys,
 incidents, customer threads, or other lightweight organization without turning
