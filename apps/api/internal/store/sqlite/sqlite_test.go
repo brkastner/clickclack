@@ -44,6 +44,11 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 	channel := channels[0]
+	if err := st.UpsertChannelNotificationSettings(ctx, store.ChannelNotificationInput{
+		ChannelID: channel.ID, UserID: owner.ID, Preference: store.ChannelNotifyMentions,
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "ClickClack", Slug: workspace.Slug}, owner.ID); err == nil {
 		t.Fatal("expected duplicate workspace slug error")
@@ -189,6 +194,9 @@ func TestStoreValidationAndAdminHelpers(t *testing.T) {
 	}
 	if len(exportBody["user_notification_settings"]) == 0 {
 		t.Fatalf("expected user_notification_settings in export, got keys %#v", exportBody)
+	}
+	if len(exportBody["channel_notification_settings"]) != 1 || exportBody["channel_notification_settings"][0]["preference"] != store.ChannelNotifyMentions {
+		t.Fatalf("expected channel notification preference in export, got %#v", exportBody["channel_notification_settings"])
 	}
 	if exportBody["user_notification_settings"][0]["pushover_user_key"] != "[redacted]" {
 		t.Fatalf("pushover user key export was not redacted: %#v", exportBody["user_notification_settings"][0])

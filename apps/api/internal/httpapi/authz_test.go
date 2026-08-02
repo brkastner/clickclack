@@ -53,6 +53,8 @@ func TestHTTPUnauthorizedRoutes(t *testing.T) {
 		{http.MethodPost, "/api/messages/msg_missing/thread/replies", `{"body":"x"}`},
 		{http.MethodPost, "/api/messages/msg_missing/reactions", `{"emoji":"x"}`},
 		{http.MethodDelete, "/api/messages/msg_missing/reactions/x", ""},
+		{http.MethodGet, "/api/channels/chn_missing/notification-settings", ""},
+		{http.MethodPatch, "/api/channels/chn_missing/notification-settings", `{"preference":"muted"}`},
 		{http.MethodGet, "/api/realtime/events?workspace_id=wsp_missing", ""},
 		{http.MethodGet, "/api/realtime/ws?workspace_id=wsp_missing", ""},
 		{http.MethodGet, "/api/search?workspace_id=wsp_missing&q=x", ""},
@@ -229,6 +231,8 @@ func TestHTTPBotTokenWorkspaceIsolation(t *testing.T) {
 	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/routes/"+otherWorkspace.RouteID+"/"+otherChannel.RouteID, nil, http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/channels/"+otherChannel.ID+"/messages", nil, http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/channels/"+otherChannel.ID+"/messages", strings.NewReader(`{"body":"nope"}`), http.StatusForbidden)
+	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/channels/"+otherChannel.ID+"/notification-settings", nil, http.StatusForbidden)
+	expectStatusWithBearer(t, token.Token, http.MethodPatch, server.URL+"/api/channels/"+otherChannel.ID+"/notification-settings", strings.NewReader(`{"preference":"muted"}`), http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/channels/"+otherChannel.ID+"/read", strings.NewReader(`{"seq":1}`), http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/hooks/mattermost/"+otherChannel.ID, strings.NewReader(`{"text":"nope"}`), http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/hooks/slash/"+otherChannel.ID, strings.NewReader(`command=/nope`), http.StatusForbidden)

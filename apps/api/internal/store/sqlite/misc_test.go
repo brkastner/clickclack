@@ -216,7 +216,7 @@ func TestStoreMiscBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	recipients, err := st.ListPushNotificationRecipients(ctx, root.ID)
+	recipients, err := st.ListPushNotificationRecipients(ctx, root.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestStoreMiscBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	recipients, err = st.ListPushNotificationRecipients(ctx, dmMessage.ID)
+	recipients, err = st.ListPushNotificationRecipients(ctx, dmMessage.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestStoreMiscBranches(t *testing.T) {
 	if len(replies) != 6 || len(threadState.LastReplyAuthorIDs) != 3 {
 		t.Fatalf("unexpected thread compaction: replies=%d state=%#v", len(replies), threadState)
 	}
-	recipients, err = st.ListPushNotificationRecipients(ctx, reply.ID)
+	recipients, err = st.ListPushNotificationRecipients(ctx, reply.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestStoreMiscBranches(t *testing.T) {
 	if _, err := st.db.ExecContext(ctx, `DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?`, workspaces[0].ID, owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	recipients, err = st.ListPushNotificationRecipients(ctx, dmMessage.ID)
+	recipients, err = st.ListPushNotificationRecipients(ctx, dmMessage.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

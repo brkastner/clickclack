@@ -659,7 +659,7 @@ func TestPushNotificationsRespectModerationVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server.notifyMessageCreated(ctx, hidden)
+	server.notifyMessageCreated(ctx, hidden, nil)
 	if len(notifier.notifications) != 0 {
 		t.Fatalf("guest should not receive hidden channel push notifications: %#v", notifier.notifications)
 	}
@@ -667,7 +667,7 @@ func TestPushNotificationsRespectModerationVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server.notifyMessageCreated(ctx, visible)
+	server.notifyMessageCreated(ctx, visible, nil)
 	if len(notifier.notifications) != 1 || notifier.notifications[0].RecipientKey != "g12345678901234567890123456789" {
 		t.Fatalf("guest should receive guest channel push notification, got %#v", notifier.notifications)
 	}
@@ -698,7 +698,7 @@ func TestPushNotificationsRespectModerationVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server.notifyMessageCreated(ctx, dmMessage)
+	server.notifyMessageCreated(ctx, dmMessage, nil)
 	if len(notifier.notifications) != 0 {
 		t.Fatalf("demoted guest should not receive DM push notifications: %#v", notifier.notifications)
 	}

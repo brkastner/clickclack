@@ -191,6 +191,18 @@ CREATE TABLE reactions (
   PRIMARY KEY (message_id, user_id, emoji)
 );
 
+CREATE TABLE channel_notification_settings (
+  channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  preference TEXT NOT NULL DEFAULT 'all' CHECK (preference IN ('all', 'mentions', 'muted')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (channel_id, user_id)
+);
+
+CREATE INDEX idx_channel_notification_settings_user
+  ON channel_notification_settings(user_id, channel_id);
+
 CREATE TABLE events (
   id TEXT PRIMARY KEY,
   cursor TEXT NOT NULL UNIQUE,
@@ -200,7 +212,8 @@ CREATE TABLE events (
   seq BIGINT,
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  is_private BIGINT NOT NULL DEFAULT 0 CHECK (is_private IN (0, 1))
+  is_private BIGINT NOT NULL DEFAULT 0 CHECK (is_private IN (0, 1)),
+  mentioned_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 
 CREATE INDEX idx_events_workspace_cursor ON events(workspace_id, cursor);

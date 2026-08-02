@@ -51,6 +51,7 @@ func TestDurableMessageEventsPreserveOptionalCorrelationMetadata(t *testing.T) {
 		t.Fatalf("unexpected reply events: %#v", replyEvents)
 	}
 	assertEventPayloadValue(t, replyEvents[0], "correlation_id", "corr-sqlite-reply")
+	assertEventPayloadMissing(t, replyEvents[0], "author_id")
 	assertEventPayloadMissing(t, replyEvents[0], "body")
 	assertEventPayloadMissing(t, replyEvents[1], "correlation_id")
 

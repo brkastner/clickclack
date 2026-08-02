@@ -124,6 +124,15 @@ topic was supplied. The web channel composer lists the active topics available
 to that channel. Root-message topic labels can be clicked to filter the
 timeline; clearing the visible filter returns to the unfiltered channel.
 
+### Channel attention
+
+Each channel has one server-backed notification preference per member: `all`,
+`mentions`, or `muted`. The channel header controls that preference for both
+browser/desktop alerts and Pushover delivery. Mention-only delivery uses the
+resolved `mentioned_user_ids` event metadata; it does not create a separate
+highlight or appearance setting. See [channel notifications](channel-notifications.md)
+for the API and delivery rules.
+
 ## Sequence numbers
 
 Every channel message gets a per-channel `channel_seq` assigned inside the

@@ -1,7 +1,10 @@
 <script lang="ts">
   import { safeExternalChannelURL } from "../../lib/chat/channels";
+  import type { ChannelNotificationPreference } from "../../lib/types";
 
   type Props = {
+    channelNotifPreference?: ChannelNotificationPreference | null;
+    channelNotifSaving?: boolean;
     channelTitle?: string;
     externalURL?: string;
     connected: boolean;
@@ -16,9 +19,18 @@
     onSearch: () => void;
     onSearchQuery: (value: string) => void;
     onToggleSidebar: () => void;
+    onToggleChannelNotifications?: () => void;
   };
 
+  function notifTitle(pref: ChannelNotificationPreference): string {
+    if (pref === "muted") return "Channel muted - click to change";
+    if (pref === "mentions") return "Notifications for @mentions only - click to change";
+    return "All notifications enabled - click to change";
+  }
+
   let {
+    channelNotifPreference = undefined,
+    channelNotifSaving = false,
     channelTitle,
     externalURL,
     connected,
@@ -33,6 +45,7 @@
     onSearch,
     onSearchQuery,
     onToggleSidebar,
+    onToggleChannelNotifications = () => {},
   }: Props = $props();
 
   const externalHref = $derived(safeExternalChannelURL(externalURL));
@@ -123,6 +136,27 @@
       {/if}
       <button type="submit" class="search-submit">Search</button>
     </form>
+
+    {#if channelNotifPreference}
+      <div class="desktop-titlebar-actions" aria-label="Channel tools">
+        <button
+          type="button"
+          title={notifTitle(channelNotifPreference)}
+          aria-label={notifTitle(channelNotifPreference)}
+          aria-busy={channelNotifSaving}
+          disabled={channelNotifSaving}
+          onclick={onToggleChannelNotifications}
+        >
+          {#if channelNotifPreference === "muted"}
+            <span aria-hidden="true">🔕</span>
+          {:else if channelNotifPreference === "mentions"}
+            <span aria-hidden="true">@</span>
+          {:else}
+            <span aria-hidden="true">🔔</span>
+          {/if}
+        </button>
+      </div>
+    {/if}
 
     {#if !connected}
       <span class="desktop-titlebar-status" role="status">Connecting…</span>

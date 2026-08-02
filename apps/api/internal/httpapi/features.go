@@ -1517,7 +1517,7 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {
-			s.notifyMessageCreated(r.Context(), message)
+			s.notifyMessageCreated(r.Context(), message, event.MentionedUserIDs)
 		}
 	}
 	writeMessageCreateResult(w, message, event, err)
@@ -1546,7 +1546,7 @@ func (s *Server) mattermostWebhook(w http.ResponseWriter, r *http.Request) {
 	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: act.user.ID, Body: body.Text})
 	if err == nil {
 		s.publishEvent(r.Context(), event)
-		s.notifyMessageCreated(r.Context(), message)
+		s.notifyMessageCreated(r.Context(), message, event.MentionedUserIDs)
 	}
 	writeResultStatus(w, http.StatusCreated, map[string]any{"message": message, "event": event}, err)
 }
@@ -1587,7 +1587,7 @@ func (s *Server) slashCommand(w http.ResponseWriter, r *http.Request) {
 	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: act.user.ID, Body: body})
 	if err == nil {
 		s.publishEvent(r.Context(), event)
-		s.notifyMessageCreated(r.Context(), message)
+		s.notifyMessageCreated(r.Context(), message, event.MentionedUserIDs)
 	}
 	writeResultStatus(w, http.StatusCreated, map[string]any{
 		"response_type": "in_channel",
@@ -1661,7 +1661,7 @@ func (s *Server) invokeRegisteredSlashCommand(w http.ResponseWriter, r *http.Req
 			return
 		}
 		s.publishEvent(r.Context(), event)
-		s.notifyMessageCreated(r.Context(), message)
+		s.notifyMessageCreated(r.Context(), message, event.MentionedUserIDs)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"response_type": callback.ResponseType,
