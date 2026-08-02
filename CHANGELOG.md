@@ -2,6 +2,7 @@
 
 ## 0.2.2 - Unreleased
 
+- Updated Go, web, desktop, Cloudflare, CI action, package-manager, and container-base dependencies.
 - Fixed bot topic endpoints accepting cross-workspace list and create operations by enforcing the token workspace scope. Thanks @ShiroKSH.
 - Fixed right-aligned messages rendering Markdown lists and blockquotes outside the message bubble. Thanks @jjjhenriksen.
 - Added optional human-readable channel display titles while preserving slug-based routing and uniqueness.
