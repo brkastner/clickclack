@@ -43,16 +43,23 @@ type Server struct {
 	metrics               *metricsRegistry
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
+	realtimeReplayLimit   int
 }
 
 const (
-	websocketBearerProtocolPrefix = "clickclack.bearer."
-	csrfHeaderName                = "X-ClickClack-CSRF"
-	maxJSONBodyBytes              = 1 << 20
-	readHeaderTimeout             = 5 * time.Second
-	httpRequestTimeout            = 30 * time.Second
-	idleTimeout                   = 120 * time.Second
-	uploadCleanupSweepLimit       = 100
+	websocketBearerProtocolPrefix     = "clickclack.bearer."
+	csrfHeaderName                    = "X-ClickClack-CSRF"
+	maxJSONBodyBytes                  = 1 << 20
+	readHeaderTimeout                 = 5 * time.Second
+	httpRequestTimeout                = 30 * time.Second
+	idleTimeout                       = 120 * time.Second
+	uploadCleanupSweepLimit           = 100
+	realtimeReplayPageSize            = 500
+	realtimeReplayMaxEvents           = 5000
+	realtimeResyncRequiredStatus      = websocket.StatusCode(4001)
+	realtimeOverflowCloseReason       = "realtime buffer overflow; reconnect with after_cursor to replay"
+	realtimeReplayCloseReason         = "realtime replay interrupted; reconnect with after_cursor"
+	realtimeResyncRequiredCloseReason = "realtime replay limit exceeded; resync required"
 	// setupCodeClaimLimit/Window bound unauthenticated bot setup code
 	// claim attempts per client IP.
 	setupCodeClaimLimit  = 10
@@ -114,6 +121,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		pushNotifier:          options.PushNotifier,
 		metrics:               metrics,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
+		realtimeReplayLimit:   realtimeReplayMaxEvents,
 		build: buildMetadata{
 			Environment: options.Environment,
 			Version:     options.Version,
@@ -855,6 +863,7 @@ func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Name            string `json:"name"`
+		DisplayTitle    string `json:"display_title"`
 		Kind            string `json:"kind"`
 		ExternalManaged bool   `json:"external_managed"`
 		ExternalRef     string `json:"external_ref"`
@@ -868,6 +877,7 @@ func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
 	channel, event, err := s.store.CreateChannel(r.Context(), store.CreateChannelInput{
 		WorkspaceID:     chi.URLParam(r, "workspace_id"),
 		Name:            body.Name,
+		DisplayTitle:    body.DisplayTitle,
 		Kind:            body.Kind,
 		UserID:          act.user.ID,
 		ExternalManaged: body.ExternalManaged,
@@ -891,7 +901,12 @@ func (s *Server) listTopics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	topics, err := s.store.ListTopics(r.Context(), chi.URLParam(r, "workspace_id"), act.user.ID)
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	topics, err := s.store.ListTopics(r.Context(), workspaceID, act.user.ID)
 	writeResult(w, map[string]any{"topics": topics}, err)
 }
 
@@ -905,6 +920,11 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
+	workspaceID := chi.URLParam(r, "workspace_id")
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
 	var body struct {
 		ChannelID string `json:"channel_id"`
 		Name      string `json:"name"`
@@ -913,7 +933,7 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	topic, err := s.store.CreateTopic(r.Context(), store.CreateTopicInput{WorkspaceID: chi.URLParam(r, "workspace_id"), ChannelID: body.ChannelID, Name: body.Name, CreatedBy: act.user.ID})
+	topic, err := s.store.CreateTopic(r.Context(), store.CreateTopicInput{WorkspaceID: workspaceID, ChannelID: body.ChannelID, Name: body.Name, CreatedBy: act.user.ID})
 	writeResultStatus(w, http.StatusCreated, map[string]any{"topic": topic}, err)
 }
 
@@ -1182,7 +1202,12 @@ func (s *Server) removeReaction(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireBotMessageResource(w, r, act, chi.URLParam(r, "message_id"), "dms:write"); !ok {
 		return
 	}
-	event, err := s.store.RemoveReaction(r.Context(), store.CreateReactionInput{MessageID: chi.URLParam(r, "message_id"), UserID: act.user.ID, Emoji: chi.URLParam(r, "emoji")})
+	emoji, err := url.PathUnescape(chi.URLParam(r, "emoji"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	event, err := s.store.RemoveReaction(r.Context(), store.CreateReactionInput{MessageID: chi.URLParam(r, "message_id"), UserID: act.user.ID, Emoji: emoji})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 	}
@@ -1262,20 +1287,78 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 	ctx := r.Context()
-	backlog, err := s.store.ListEventsAfter(ctx, workspaceID, act.user.ID, r.URL.Query().Get("after_cursor"), 500)
+	replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
 	if err != nil {
-		_ = conn.Close(websocket.StatusPolicyViolation, err.Error())
+		_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
 		return
 	}
-	sent := make(map[string]struct{}, len(backlog))
-	for _, event := range backlog {
-		if event.ID != "" {
-			sent[event.ID] = struct{}{}
+	replayCursor := r.URL.Query().Get("after_cursor")
+	if replayCursor != "" {
+		exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, replayCursor)
+		if err != nil {
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+			return
 		}
-		if !s.shouldDeliverEventToActor(ctx, event, act.user.ID) {
-			continue
+		if !exists {
+			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+			return
 		}
-		if err := writeWS(ctx, conn, event); err != nil {
+	}
+	if replayCursor != "" && (replayTail == "" || replayCursor > replayTail) {
+		_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+		return
+	}
+	replayedEvents := 0
+	for replayTail != "" && replayCursor < replayTail {
+		pageCursor := replayCursor
+		backlog, err := s.store.ListEventsAfter(ctx, workspaceID, act.user.ID, pageCursor, realtimeReplayPageSize)
+		if err != nil {
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+			return
+		}
+		if len(backlog) == 0 {
+			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+			return
+		}
+		if pageCursor != "" {
+			exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, pageCursor)
+			if err != nil {
+				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+				return
+			}
+			if !exists {
+				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+				return
+			}
+		}
+		previousCursor := pageCursor
+		for _, event := range backlog {
+			if event.Cursor > replayTail {
+				break
+			}
+			if replayedEvents >= s.realtimeReplayLimit {
+				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+				return
+			}
+			replayedEvents++
+			// ListEventsAfter prefilters visibility, while this live lookup closes
+			// the revocation window between fetching a page and writing its events.
+			deliver, err := s.shouldDeliverEventToActorResult(ctx, event, act.user.ID)
+			if err != nil {
+				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+				return
+			}
+			if !deliver {
+				replayCursor = event.Cursor
+				continue
+			}
+			if err := writeWS(ctx, conn, event); err != nil {
+				return
+			}
+			replayCursor = event.Cursor
+		}
+		if replayCursor == previousCursor {
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
 			return
 		}
 	}
@@ -1283,12 +1366,16 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			return
-		case event := <-events:
-			if event.ID != "" {
-				if _, ok := sent[event.ID]; ok {
-					continue
-				}
+		case event, ok := <-events:
+			if !ok {
+				_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
+				return
 			}
+			if event.Cursor != "" && event.Cursor <= replayCursor {
+				continue
+			}
+			// Bot deletion and membership-removal revocations are intentionally
+			// ephemeral, so they only arrive on the live hub path, never replay.
 			if eventRevokesWorkspaceAccess(event, act.user.ID) {
 				_ = conn.Close(websocket.StatusPolicyViolation, "workspace access revoked")
 				return
@@ -1380,19 +1467,29 @@ func filterEventsForUser(events []store.Event, userID string) []store.Event {
 }
 
 func (s *Server) shouldDeliverEventToActor(ctx context.Context, event store.Event, userID string) bool {
+	deliver, err := s.shouldDeliverEventToActorResult(ctx, event, userID)
+	return err == nil && deliver
+}
+
+func (s *Server) shouldDeliverEventToActorResult(ctx context.Context, event store.Event, userID string) (bool, error) {
 	if !shouldDeliverEvent(event, userID) {
-		return false
+		return false, nil
 	}
+	var err error
 	if conversationID := directConversationIDFromEvent(event); conversationID != "" {
-		_, err := s.store.GetDirectConversation(ctx, conversationID, userID)
-		return err == nil
+		_, err = s.store.GetDirectConversation(ctx, conversationID, userID)
+	} else if event.ChannelID == "" {
+		_, err = s.store.GetWorkspace(ctx, event.WorkspaceID, userID)
+	} else {
+		_, err = s.store.GetChannel(ctx, event.ChannelID, userID)
 	}
-	if event.ChannelID == "" {
-		_, err := s.store.GetWorkspace(ctx, event.WorkspaceID, userID)
-		return err == nil
+	if err == nil {
+		return true, nil
 	}
-	_, err := s.store.GetChannel(ctx, event.ChannelID, userID)
-	return err == nil
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, err
 }
 
 func directConversationIDFromEvent(event store.Event) string {

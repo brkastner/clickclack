@@ -217,6 +217,7 @@ type Channel struct {
 	RouteID         string  `json:"route_id"`
 	WorkspaceID     string  `json:"workspace_id"`
 	Name            string  `json:"name"`
+	DisplayTitle    *string `json:"display_title,omitempty"`
 	Kind            string  `json:"kind"`
 	CreatedAt       string  `json:"created_at"`
 	ArchivedAt      *string `json:"archived_at,omitempty"`
@@ -699,6 +700,7 @@ type TransferWorkspaceOwnershipInput struct {
 type CreateChannelInput struct {
 	WorkspaceID     string
 	Name            string
+	DisplayTitle    string
 	Kind            string
 	UserID          string
 	ExternalManaged bool
@@ -711,6 +713,7 @@ type UpdateChannelInput struct {
 	ChannelID       string
 	UserID          string
 	Name            string
+	DisplayTitle    *string
 	Kind            string
 	Archived        *bool
 	ExternalManaged *bool
@@ -1103,6 +1106,7 @@ type Store interface {
 	AddReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	RemoveReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	LatestEventCursor(ctx context.Context, workspaceID, userID string) (string, error)
+	EventCursorExists(ctx context.Context, workspaceID, userID, cursor string) (bool, error)
 	ListEventsAfter(ctx context.Context, workspaceID, userID, cursor string, limit int) ([]Event, error)
 	CreateUpload(ctx context.Context, input CreateUploadInput) (Upload, error)
 	GetUpload(ctx context.Context, uploadID, userID string) (Upload, error)

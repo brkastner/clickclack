@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
@@ -9,6 +9,111 @@ function clickclack(args: string[]): string {
     encoding: "utf8",
   }).trim();
 }
+
+// Timeline rows expose editing through the ⋮ overflow menu.
+async function openTimelineEditor(row: Locator) {
+  await row.hover();
+  await row.getByRole("button", { name: "More actions" }).click();
+  await row.getByRole("menuitem", { name: "Edit message" }).click();
+}
+
+async function createOwnedMessage(page: Page, label: string) {
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `${label} ${suffix}` },
+  });
+  expect(workspaceResponse.ok()).toBe(true);
+  const { workspace } = (await workspaceResponse.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: `${label.toLowerCase().replaceAll(" ", "-")}-${suffix}`, kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+  const { channel } = (await channelResponse.json()) as {
+    channel: { route_id: string };
+  };
+
+  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+  await waitForAppReady(page);
+  const body = `${label} ${suffix}`;
+  await page.getByLabel("Message body").fill(body);
+  await page.getByRole("button", { name: "Send" }).click();
+  const row = page.locator(".message-row:not(.is-pending)", { hasText: body });
+  await expect(row).toBeVisible();
+  return { body, row };
+}
+
+test("message action menu supports standard keyboard navigation", async ({ page }) => {
+  const { row } = await createOwnedMessage(page, "Keyboard menu");
+  const trigger = row.getByRole("button", { name: "More actions" });
+  await row.hover();
+  await trigger.click();
+
+  const copy = row.getByRole("menuitem", { name: "Copy text" });
+  const edit = row.getByRole("menuitem", { name: "Edit message" });
+  const remove = row.getByRole("menuitem", { name: "Delete message" });
+  await expect(copy).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(edit).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(remove).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(copy).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(remove).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(copy).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(remove).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  await expect(row.getByRole("menu", { name: "More actions" })).toHaveCount(0);
+
+  await trigger.click();
+  await expect(copy).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(row.getByRole("menu", { name: "More actions" })).toHaveCount(0);
+});
+
+test("copy message text reports success and failure", async ({ page }) => {
+  const { body, row } = await createOwnedMessage(page, "Clipboard feedback");
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          Object.assign(window, { copiedMessageText: value });
+        },
+      },
+    });
+  });
+
+  const trigger = row.getByRole("button", { name: "More actions" });
+  await row.hover();
+  await trigger.click();
+  await row.getByRole("menuitem", { name: "Copy text" }).click();
+  await expect(row.locator(".message-copy-status")).toHaveText("Copied");
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, "copiedMessageText"))).toBe(body);
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async () => {
+          throw new Error("clipboard denied");
+        },
+      },
+    });
+  });
+  await row.hover();
+  await trigger.click();
+  await row.getByRole("menuitem", { name: "Copy text" }).click();
+  await expect(row.locator(".message-copy-status")).toHaveText("Couldn't copy");
+  expect(pageErrors).toEqual([]);
+});
 
 test("message edits persist in channels and threads", async ({ page }) => {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
@@ -49,8 +154,7 @@ test("message edits persist in channels and threads", async ({ page }) => {
   });
   expect(reactionResponse.ok()).toBe(true);
   await expect(channelRow.getByRole("button", { name: "✅ — 1 reaction" })).toBeVisible();
-  await channelRow.hover();
-  await channelRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(channelRow);
   const channelEditor = channelRow.getByLabel("Edit message");
   await expect(channelEditor).toBeFocused();
   await expect(channelEditor).toHaveValue(originalBody);
@@ -85,16 +189,19 @@ test("message edits persist in channels and threads", async ({ page }) => {
   await expect(channelRow.getByText("(edited)")).toBeVisible();
   await expect(channelRow.getByRole("button", { name: "✅ — 1 reaction" })).toBeVisible();
 
+  await channelRow.hover();
   await channelRow.getByRole("button", { name: "Open thread" }).click();
   const threadPane = page.getByLabel("Thread pane", { exact: true });
   await expect(threadPane).toBeVisible();
-  await channelRow.getByRole("button", { name: "Edit message" }).focus();
+  await channelRow.hover();
+  await channelRow.getByRole("button", { name: "More actions" }).focus();
   await expect(channelRow.locator(".message-actions")).toHaveCSS("opacity", "1");
-  await channelRow.getByRole("button", { name: "Edit message" }).click();
+  await channelRow.getByRole("button", { name: "More actions" }).click();
+  await channelRow.getByRole("menuitem", { name: "Edit message" }).click();
   await expect(page.locator('textarea[aria-label="Edit message"]')).toHaveCount(1);
   await expect(channelRow.getByLabel("Edit message")).toBeFocused();
   await channelRow.getByLabel("Edit message").press("Escape");
-  await expect(channelRow.getByRole("button", { name: "Edit message" })).toBeFocused();
+  await expect(channelRow.getByRole("button", { name: "More actions" })).toBeFocused();
   const threadRoot = threadPane.locator(`.thread-root[data-message-id="${channelMessageID}"]`);
   await threadRoot.hover();
   await threadRoot.getByRole("button", { name: "Edit message" }).click();
@@ -107,6 +214,7 @@ test("message edits persist in channels and threads", async ({ page }) => {
   await threadRoot.getByLabel("Edit message").fill("Discarded thread-root draft");
   await threadPane.getByRole("button", { name: "Close thread" }).click();
   await expect(threadRoot).not.toBeVisible();
+  await channelRow.hover();
   await channelRow.getByRole("button", { name: "Open thread" }).click();
   await expect(threadPane).toBeVisible();
   await expect(threadPane.locator('textarea[aria-label="Edit message"]')).toHaveCount(0);
@@ -118,10 +226,10 @@ test("message edits persist in channels and threads", async ({ page }) => {
   );
   await expect(reopenedThreadRoot.locator(".markdown table")).toContainText("preserved");
   await threadPane.getByRole("button", { name: "Close thread" }).click();
-  await channelRow.hover();
-  await channelRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(channelRow);
   await expect(channelRow.getByLabel("Edit message")).toBeFocused();
   await channelRow.getByLabel("Edit message").press("Escape");
+  await channelRow.hover();
   await channelRow.getByRole("button", { name: "Open thread" }).click();
   await expect(threadPane).toBeVisible();
   const originalReply = `Original thread reply ${suffix}`;
@@ -190,8 +298,7 @@ test("message edits submit boundary whitespace to server normalization", async (
   await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
   await waitForAppReady(page);
   const row = page.locator(`[data-message-id="${message.id}"]`);
-  await row.hover();
-  await row.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(row);
   const whitespaceBody = `    indented code ${suffix}\n`;
   await row.getByLabel("Edit message").fill(whitespaceBody);
   const submittedEdit = page.waitForResponse(
@@ -256,8 +363,7 @@ test("edit sessions reject empty shortcuts and keep save failures visible", asyn
   const firstRow = page.locator(`[data-message-id="${firstMessage.id}"]`);
   const secondRow = page.locator(`[data-message-id="${secondMessage.id}"]`);
 
-  await firstRow.hover();
-  await firstRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(firstRow);
   const unsavedDraft = `Unsaved first edit ${suffix}`;
   await firstRow.getByLabel("Edit message").fill(unsavedDraft);
   await page.getByRole("link", { name: `# ${alternateChannel.name}` }).click();
@@ -266,12 +372,11 @@ test("edit sessions reject empty shortcuts and keep save failures visible", asyn
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
   await expect(firstRow.getByLabel("Edit message")).toHaveValue(unsavedDraft);
-  await secondRow.hover();
-  await secondRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(secondRow);
   await expect(firstRow.getByLabel("Edit message")).toHaveValue(unsavedDraft);
   await expect(secondRow.locator('textarea[aria-label="Edit message"]')).toHaveCount(0);
   await firstRow.getByLabel("Edit message").press("Escape");
-  await expect(firstRow.getByRole("button", { name: "Edit message" })).toBeFocused();
+  await expect(firstRow.getByRole("button", { name: "More actions" })).toBeFocused();
 
   let patchCount = 0;
   page.on("request", (request) => {
@@ -279,8 +384,7 @@ test("edit sessions reject empty shortcuts and keep save failures visible", asyn
       patchCount += 1;
     }
   });
-  await secondRow.hover();
-  await secondRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(secondRow);
   await secondRow.getByLabel("Edit message").fill("\u0085");
   await secondRow.getByLabel("Edit message").press("Control+Enter");
   await expect(secondRow.getByLabel("Edit message")).toHaveValue("\u0085");
@@ -292,8 +396,7 @@ test("edit sessions reject empty shortcuts and keep save failures visible", asyn
   await expect(secondRow.locator('textarea[aria-label="Edit message"]')).toHaveCount(0);
   expect(patchCount).toBe(0);
 
-  await secondRow.hover();
-  await secondRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(secondRow);
   await secondRow.getByLabel("Edit message").fill("\ufeff");
   await secondRow.getByRole("button", { name: "Save" }).click();
   await expect(secondRow.locator('textarea[aria-label="Edit message"]')).toHaveCount(0);
@@ -324,14 +427,12 @@ test("edit sessions reject empty shortcuts and keep save failures visible", asyn
     });
   });
 
-  await firstRow.hover();
-  await firstRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(firstRow);
   await firstRow.getByLabel("Edit message").fill(`Saved first edit ${suffix}`);
   await firstRow.getByRole("button", { name: "Save" }).click();
   await firstSaveStarted;
 
-  await secondRow.hover();
-  await secondRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(secondRow);
   await expect(firstRow.getByLabel("Edit message")).toHaveValue(`Saved first edit ${suffix}`);
   await expect(secondRow.locator('textarea[aria-label="Edit message"]')).toHaveCount(0);
   releaseFirstSave();
@@ -390,8 +491,7 @@ test("virtualized edit rows retain and reveal their unsaved draft", async ({ pag
 
   const firstRow = page.locator(`[data-message-id="${created[0].id}"]`);
   await expect(firstRow).toBeVisible();
-  await firstRow.hover();
-  await firstRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(firstRow);
   const draft = `retained virtualized draft ${suffix}`;
   await firstRow.getByLabel("Edit message").fill(draft);
   await firstRow.getByLabel("Edit message").blur();
@@ -408,8 +508,7 @@ test("virtualized edit rows retain and reveal their unsaved draft", async ({ pag
   const competingMessageID = created[created.length - 1].id;
   const competingRow = page.locator(`[data-message-id="${competingMessageID}"]`);
   await expect(competingRow).toBeVisible();
-  await competingRow.hover();
-  await competingRow.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(competingRow);
 
   await expect(firstRow.getByLabel("Edit message")).toHaveValue(draft);
   await expect(firstRow.getByLabel("Edit message")).toBeFocused();
@@ -458,8 +557,7 @@ test("message editing works in direct conversations", async ({ page }) => {
   await waitForAppReady(page);
   const row = page.locator(`[data-message-id="${message.id}"]`);
   await expect(row).toContainText(originalBody);
-  await row.hover();
-  await row.getByRole("button", { name: "Edit message" }).click();
+  await openTimelineEditor(row);
   const editedBody = `Edited direct message ${suffix}`;
   await row.getByLabel("Edit message").fill(editedBody);
   await row.getByRole("button", { name: "Save" }).click();

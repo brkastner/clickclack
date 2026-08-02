@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
@@ -16,6 +16,10 @@ import { waitForAppReady } from "./app-ready";
 
 const serverURL = "http://127.0.0.1:18082";
 const execFileAsync = promisify(execFile);
+
+function activeChannelHeading(scope: Page | Locator): Locator {
+  return scope.getByRole("heading", { name: /^#/ });
+}
 const goCacheEnv = {
   GOCACHE: execFileSync("go", ["env", "GOCACHE"], { cwd: process.cwd(), encoding: "utf8" }).trim(),
   GOMODCACHE: execFileSync("go", ["env", "GOMODCACHE"], {
@@ -42,7 +46,11 @@ async function clickclackAsync(args: string[], env: NodeJS.ProcessEnv = {}): Pro
   return stdout.trim();
 }
 
-async function createGeneralChannelRoute(page: Page, label: string): Promise<string> {
+async function createGeneralChannelRoute(
+  page: Page,
+  label: string,
+  isolatedUser = false,
+): Promise<string> {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: `${label} ${suffix}` },
@@ -51,6 +59,28 @@ async function createGeneralChannelRoute(page: Page, label: string): Promise<str
   const { workspace } = (await workspaceResponse.json()) as {
     workspace: { id: string; route_id: string };
   };
+  if (isolatedUser) {
+    const userID = execFileSync(
+      "go",
+      [
+        "run",
+        "./apps/api/cmd/clickclack",
+        "admin",
+        "user",
+        "create",
+        "--data",
+        "./data/e2e",
+        "--workspace",
+        workspace.id,
+        "--name",
+        `${label} Tester`,
+        "--email",
+        `${label.toLowerCase().replaceAll(" ", "-")}-${suffix}@example.com`,
+      ],
+      { cwd: process.cwd(), encoding: "utf8" },
+    ).trim();
+    await page.setExtraHTTPHeaders({ "X-ClickClack-User": userID });
+  }
   const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
     data: { name: "general", kind: "public" },
   });
@@ -493,7 +523,7 @@ test("channels can be reordered accessibly and persist locally", async ({ page, 
 test("app subdomain root opens the chat app", async ({ page }) => {
   await page.goto("http://app.localhost:18082/");
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 });
 
 test("shows realtime connection state in the shell", async ({ page }) => {
@@ -1090,6 +1120,115 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expect.poll(() => messageSide(agentMessage)).toBe("right");
 });
 
+test("keeps Markdown lists and blockquotes inside right-aligned messages", async ({ page }) => {
+  const route = await createGeneralChannelRoute(page, "Right aligned Markdown", true);
+  const markdownBody = [
+    "Right-aligned Markdown:",
+    "",
+    "- Chat ID: `channel`",
+    "  - Nested message ID: `message`",
+    "",
+    "- First paragraph stays with its marker.",
+    "",
+    "  Second paragraph stays readable.",
+    "",
+    "> Quoted context stays on the message side.",
+    "",
+    "1. Ordered parent",
+    "   1. Ordered nested",
+  ].join("\n");
+
+  await page.goto(route);
+  await waitForAppReady(page);
+  await page.evaluate(() => {
+    localStorage.removeItem("clickclack:message-layout:v1");
+    document.documentElement.removeAttribute("data-message-layout");
+  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-message-layout");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await page.getByLabel("Message body").fill(markdownBody);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await page.getByRole("button", { name: /Account settings for/ }).click();
+  const settings = page.getByLabel("Account settings");
+  const userAlign = settings.getByLabel("Your message alignment");
+  await userAlign.selectOption("right");
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+
+  const row = page.locator(".message-row", {
+    has: page.getByText("Right-aligned Markdown:", { exact: true }),
+  });
+  const group = row.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' message-group ')][1]",
+  );
+  await expect(group).toHaveClass(/is-self/);
+  const markdown = row.locator(":scope > .message-content > .markdown");
+  await expect(markdown).toBeVisible();
+  await expect(markdown.locator("ul")).toHaveCount(2);
+  await expect(markdown.locator("ol")).toHaveCount(2);
+  await expect(markdown.locator("blockquote")).toHaveCount(1);
+
+  const layout = await markdown.evaluate((element) => {
+    const list = element.querySelector(":scope > ul");
+    const nestedList = element.querySelector(":scope > ul > li > ul");
+    const looseItem = element.querySelector(":scope > ul > li:nth-child(2)");
+    const orderedList = element.querySelector(":scope > ol");
+    const nestedOrderedList = element.querySelector(":scope > ol > li > ol");
+    const quote = element.querySelector("blockquote");
+    if (!list || !nestedList || !looseItem || !orderedList || !nestedOrderedList || !quote) {
+      throw new Error("Expected nested and loose Markdown lists and blockquote");
+    }
+    const listStyle = getComputedStyle(list);
+    const nestedListStyle = getComputedStyle(nestedList);
+    const orderedListStyle = getComputedStyle(orderedList);
+    const nestedOrderedListStyle = getComputedStyle(nestedOrderedList);
+    const firstParagraph = looseItem.querySelector(":scope > p:first-child");
+    if (!firstParagraph) throw new Error("Expected loose list paragraph");
+    const quoteStyle = getComputedStyle(quote);
+    const firstItem = list.querySelector("li");
+    if (!firstItem) throw new Error("Expected Markdown list item");
+    const messageRect = element.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    const itemRect = firstItem.getBoundingClientRect();
+    return {
+      textAlign: getComputedStyle(element).textAlign,
+      listPaddingLeft: listStyle.paddingLeft,
+      listPaddingRight: listStyle.paddingRight,
+      listStylePosition: listStyle.listStylePosition,
+      nestedListPaddingRight: nestedListStyle.paddingRight,
+      nestedListStylePosition: nestedListStyle.listStylePosition,
+      orderedListPaddingRight: orderedListStyle.paddingRight,
+      nestedOrderedListPaddingRight: nestedOrderedListStyle.paddingRight,
+      looseFirstParagraphDisplay: getComputedStyle(firstParagraph).display,
+      listRightInset: messageRect.right - listRect.right,
+      itemRightInset: listRect.right - itemRect.right,
+      quoteBorderLeft: quoteStyle.borderLeftWidth,
+      quoteBorderRight: quoteStyle.borderRightWidth,
+      quotePaddingLeft: quoteStyle.paddingLeft,
+      quotePaddingRight: quoteStyle.paddingRight,
+    };
+  });
+  expect(layout).toEqual({
+    textAlign: "right",
+    listPaddingLeft: "0px",
+    listPaddingRight: "0px",
+    listStylePosition: "inside",
+    nestedListPaddingRight: "22px",
+    nestedListStylePosition: "inside",
+    orderedListPaddingRight: "0px",
+    nestedOrderedListPaddingRight: "22px",
+    looseFirstParagraphDisplay: "inline",
+    listRightInset: expect.any(Number),
+    itemRightInset: 0,
+    quoteBorderLeft: "0px",
+    quoteBorderRight: "3px",
+    quotePaddingLeft: "0px",
+    quotePaddingRight: "12px",
+  });
+  expect(layout.listRightInset).toBeLessThanOrEqual(1);
+  expect(layout.itemRightInset).toBe(0);
+});
+
 test("browser notifications require explicit profile opt-in", async ({ page }) => {
   const meResponse = await page.request.get("/api/me");
   const me = (await meResponse.json()) as { user: { id: string } };
@@ -1139,6 +1278,31 @@ test("browser notifications require explicit profile opt-in", async ({ page }) =
     .toBe(1);
 });
 
+test("realtime cursor storage failures do not block app startup", async ({ page }) => {
+  await page.addInitScript(() => {
+    const isCursorKey = (key: string) => key.startsWith("clickclack:") && key.endsWith(":cursor");
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    const removeItem = Storage.prototype.removeItem;
+    Storage.prototype.getItem = function (key: string) {
+      if (isCursorKey(key)) throw new Error("blocked cursor storage");
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (isCursorKey(key)) throw new Error("blocked cursor storage");
+      return setItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key: string) {
+      if (isCursorKey(key)) throw new Error("blocked cursor storage");
+      return removeItem.call(this, key);
+    };
+  });
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await expect(page.getByRole("heading", { name: /^#/ })).toBeVisible();
+});
+
 test("browser notification storage failures do not block app startup", async ({ page }) => {
   const generalRoute = await createGeneralChannelRoute(page, "Notification storage");
   await page.addInitScript(() => {
@@ -1162,7 +1326,7 @@ test("browser notification storage failures do not block app startup", async ({ 
 
   await page.goto(generalRoute);
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 });
 
 test("mobile navigation behaves like a drawer", async ({ page }) => {
@@ -1170,7 +1334,7 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(generalRoute);
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 
   const composer = page.locator('textarea[aria-label="Message body"]');
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
@@ -1180,7 +1344,7 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
   };
 
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
   await expect(composer).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
@@ -1242,7 +1406,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await page.setViewportSize({ width: 1280, height: 860 });
   await page.goto(generalRoute);
   await waitForAppReady(page);
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 
   const shell = page.locator(".shell");
   const titlebar = page.locator(".desktop-titlebar");
@@ -1250,7 +1414,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await expect(titlebar).toBeVisible();
   await expect(page.getByTitle("ClickClack home")).toHaveAttribute("href", "/app");
   await expect(page.locator(".timeline .topbar")).toHaveCount(0);
-  await expect(titlebar.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(titlebar)).toBeVisible();
   await expect(page.locator(".sidebar .sidebar-collapse")).toHaveCount(0);
   expect(
     await titlebarSearch.evaluate((input) => {
@@ -1268,7 +1432,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await titlebar.getByRole("button", { name: "Workspace settings" }).click();
   await expect(page.getByRole("dialog", { name: "Workspace settings" })).toBeVisible();
   await page.goBack();
-  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(page)).toBeVisible();
 
   await page.getByLabel("Message body").fill("desktop titlebar search probe");
   await page.getByRole("button", { name: "Send" }).click();
@@ -1297,7 +1461,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await page.setViewportSize({ width: 760, height: 700 });
   // The conversation title has no in-card fallback on desktop, so it must
   // survive narrow windows (truncated, not hidden).
-  await expect(titlebar.getByRole("heading", { name: "#general" })).toBeVisible();
+  await expect(activeChannelHeading(titlebar)).toBeVisible();
   await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveCount(0);
   const titlebarNavigation = titlebar.getByRole("button", { name: "Open navigation" });
   await expect(titlebarNavigation).toBeVisible();
@@ -1398,7 +1562,7 @@ test("mobile navigation geometry clears the timeline at narrow widths", async ({
     await page.setViewportSize({ width, height: 844 });
     await page.goto(generalRoute);
     await waitForAppReady(page);
-    await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+    await expect(activeChannelHeading(page)).toBeVisible();
     await expect
       .poll(() =>
         page.evaluate(
@@ -1587,6 +1751,8 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   const threadedRow = page
     .locator(".message-row")
     .filter({ has: page.locator(".markdown").filter({ hasText: "hello playwright" }) });
+  // The hover toolbar ignores pointer events until the row is really hovered.
+  await threadedRow.hover();
   await threadedRow.getByRole("button", { name: "Open thread" }).click();
   await expect(page.getByLabel("Thread pane")).toBeVisible();
 
@@ -1709,7 +1875,8 @@ test("confirms message deletion in the app modal", async ({ page }) => {
   });
   await expect(row).toBeVisible();
   await row.hover();
-  await row.getByRole("button", { name: "Delete message" }).click();
+  await row.getByRole("button", { name: "More actions" }).click();
+  await row.getByRole("menuitem", { name: "Delete message" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Delete message" });
   await expect(dialog).toBeVisible();
@@ -1719,7 +1886,8 @@ test("confirms message deletion in the app modal", async ({ page }) => {
   await expect(row.getByText(body, { exact: true })).toBeVisible();
 
   await row.hover();
-  await row.getByRole("button", { name: "Delete message" }).click();
+  await row.getByRole("button", { name: "More actions" }).click();
+  await row.getByRole("menuitem", { name: "Delete message" }).click();
   await dialog.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText("This message was deleted.", { exact: true })).toBeVisible();
@@ -2446,6 +2614,93 @@ test("renders search results in a responsive sidebar", async ({ page }) => {
   expect(mobileResultsBox!.height).toBe(720);
   await page.keyboard.press("Escape");
   await expect(results).toHaveCount(0);
+});
+
+test("keeps the newest message snapshot when same-channel loads resolve out of order", async ({
+  page,
+}) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceID = workspaces.workspaces[0].id;
+  const suffix = Date.now();
+  const staleChannelResponse = await page.request.post(`/api/workspaces/${workspaceID}/channels`, {
+    data: { name: `snapshot-stale-${suffix}`, kind: "public" },
+  });
+  const freshChannelResponse = await page.request.post(`/api/workspaces/${workspaceID}/channels`, {
+    data: { name: `snapshot-fresh-${suffix}`, kind: "public" },
+  });
+  const { channel: targetChannel } = (await staleChannelResponse.json()) as {
+    channel: { id: string; name: string };
+  };
+  const { channel: alternateChannel } = (await freshChannelResponse.json()) as {
+    channel: { id: string; name: string };
+  };
+  const staleBody = `stale snapshot ${suffix}`;
+  const freshBody = `fresh snapshot ${suffix}`;
+  const message = (id: string, seq: number, body: string) => ({
+    id,
+    workspace_id: workspaceID,
+    channel_id: targetChannel.id,
+    author_id: "usr_snapshot",
+    thread_root_id: id,
+    channel_seq: seq,
+    body,
+    body_format: "markdown" as const,
+    created_at: new Date(Date.UTC(2026, 0, 1, 0, seq)).toISOString(),
+  });
+  let requestCount = 0;
+  let startFirstRequest!: () => void;
+  const firstRequestStarted = new Promise<void>((resolve) => {
+    startFirstRequest = resolve;
+  });
+  let releaseFirstRequest!: () => void;
+  const firstRequestRelease = new Promise<void>((resolve) => {
+    releaseFirstRequest = resolve;
+  });
+  await page.route(`**/api/channels/${targetChannel.id}/messages?*`, async (route) => {
+    requestCount += 1;
+    const stale = requestCount === 1;
+    if (stale) {
+      startFirstRequest();
+      await firstRequestRelease;
+    }
+    const seq = stale ? 1 : 2;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        messages: [
+          message(
+            stale ? "MSTALESNAPSHOT01" : "MFRESHSNAPSHOT1",
+            seq,
+            stale ? staleBody : freshBody,
+          ),
+        ],
+        oldest_seq: seq,
+        newest_seq: seq,
+        has_older: false,
+        has_newer: false,
+      }),
+    });
+  });
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${targetChannel.name}` }).click();
+  await firstRequestStarted;
+  await page.getByRole("link", { name: `# ${alternateChannel.name}` }).click();
+  await expect(page.getByRole("heading", { name: `#${alternateChannel.name}` })).toBeVisible();
+  await page.getByRole("link", { name: `# ${targetChannel.name}` }).click();
+  await expect(page.getByText(freshBody)).toBeVisible();
+
+  const staleResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes(`/api/channels/${targetChannel.id}/messages?`) && response.ok(),
+  );
+  releaseFirstRequest();
+  await staleResponse;
+  await expect(page.getByText(freshBody)).toBeVisible();
+  await expect(page.getByText(staleBody)).toHaveCount(0);
 });
 
 test("search paginates, and handles empty, failed, and stale responses", async ({ page }) => {

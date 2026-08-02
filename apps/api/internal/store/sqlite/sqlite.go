@@ -560,6 +560,7 @@ func (s *Store) CreateChannel(ctx context.Context, input store.CreateChannelInpu
 		ID:              newID("chn"),
 		WorkspaceID:     input.WorkspaceID,
 		Name:            slug(input.Name),
+		DisplayTitle:    normalizedDisplayTitle(input.DisplayTitle),
 		Kind:            input.Kind,
 		CreatedAt:       now(),
 		ExternalManaged: input.ExternalManaged,
@@ -588,6 +589,7 @@ func (s *Store) CreateChannel(ctx context.Context, input store.CreateChannelInpu
 			RouteID:         sqlText(ch.RouteID),
 			WorkspaceID:     ch.WorkspaceID,
 			Name:            ch.Name,
+			DisplayTitle:    nullFromPtr(ch.DisplayTitle),
 			Kind:            ch.Kind,
 			CreatedAt:       ch.CreatedAt,
 			ExternalManaged: databaseBool(ch.ExternalManaged),
@@ -1044,6 +1046,17 @@ func (s *Store) ListEventsAfter(ctx context.Context, workspaceID, userID, cursor
 		out = append(out, event)
 	}
 	return out, nil
+}
+
+func (s *Store) EventCursorExists(ctx context.Context, workspaceID, userID, cursor string) (bool, error) {
+	if err := s.requireMembership(ctx, workspaceID, userID); err != nil {
+		return false, err
+	}
+	exists, err := s.q.EventCursorExists(ctx, storedb.EventCursorExistsParams{
+		WorkspaceID: workspaceID,
+		Cursor:      cursor,
+	})
+	return exists, err
 }
 
 func (s *Store) LatestEventCursor(ctx context.Context, workspaceID, userID string) (string, error) {

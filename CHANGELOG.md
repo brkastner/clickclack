@@ -2,11 +2,17 @@
 
 ## 0.2.2 - Unreleased
 
+- Fixed bot topic endpoints accepting cross-workspace list and create operations by enforcing the token workspace scope. Thanks @ShiroKSH.
+- Fixed right-aligned messages rendering Markdown lists and blockquotes outside the message bubble. Thanks @jjjhenriksen.
+- Added optional human-readable channel display titles while preserving slug-based routing and uniqueness.
+- Added agent-friendly CLI commands for adding and removing message reactions through the existing public APIs, with exact JSON output and terminal-safe human output. Thanks @PollyBot13.
 - Removed the redundant "Open in ClickClack" link from embedded channel headers, leaving external navigation to the host's own control.
 - Fixed the embedded channel view overflowing narrow host panels (such as OpenClaw's discussion sidebar), where long session channel names clipped the header link and send button off the right edge.
+- Fixed the thread panel enforcing a ~370px minimum width, which clipped the thread embed and full-screen mobile threads in hosts narrower than 370px.
 - Compacted the embedded channel and thread headers and aligned the embed composer gutters and bottom spacing with narrow host panels.
 - Added Gravatar fallbacks for email-backed users without an explicit or provider-supplied avatar.
 - Added an accessible large-image lightbox for chat and thread attachments with focus containment, focus restoration, backdrop dismissal, and responsive full-screen mobile presentation.
+- Hardened realtime recovery with ordered client application, post-success cursor checkpoints, paged connect-time replay, explicit overflow reconnects, and stale message-load protection.
 
 ## 0.2.1 - 2026-07-19
 
