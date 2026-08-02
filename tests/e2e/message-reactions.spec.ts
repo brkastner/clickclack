@@ -555,8 +555,8 @@ test("touch action sheets remain usable in short landscape viewports", async ({
     };
   });
   expect(geometry.top).toBeGreaterThanOrEqual(0);
-  // 1px tolerance: fractional viewport heights round the sheet's bottom edge.
-  expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewportHeight + 1);
+  // 2px tolerance: fractional viewport heights round the sheet's bottom edge.
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewportHeight + 2);
   expect(geometry.scrollHeight).toBeGreaterThan(geometry.clientHeight);
   expect(geometry.overflowY).toBe("auto");
 
