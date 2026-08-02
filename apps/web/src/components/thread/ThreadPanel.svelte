@@ -31,6 +31,7 @@
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
     mentionPeople?: User[];
+    mentionAttentionUserID?: string;
     replyDisabled?: boolean;
     headerLabel?: string;
     headerDetail?: string;
@@ -67,6 +68,7 @@
     reactionController,
     reactionsDisabled = false,
     mentionPeople = [],
+    mentionAttentionUserID,
     replyDisabled = false,
     headerLabel = "Thread",
     headerDetail,
@@ -436,7 +438,11 @@
           onSave={() => saveEdit(root)}
         />
       {:else}
-        <div class="markdown" use:enhanceMarkdown use:enhanceMentions={mentionPeople}>{@html markdown(root.body)}</div>
+        <div
+          class="markdown"
+          use:enhanceMarkdown
+          use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+        >{@html markdown(root.body)}</div>
         {#if root.edited_at}
           <span class="message-edit__indicator" title="Edited {time(root.edited_at)}">(edited)</span>
         {/if}
@@ -566,7 +572,11 @@
             />
           {:else}
             <QuoteBlock message={reply} onJump={onJumpToQuote} />
-            <div class="markdown" use:enhanceMarkdown use:enhanceMentions={mentionPeople}>{@html markdown(reply.body)}</div>
+            <div
+              class="markdown"
+              use:enhanceMarkdown
+              use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+            >{@html markdown(reply.body)}</div>
             {#if reply.edited_at}
               <span class="message-edit__indicator" title="Edited {time(reply.edited_at)}">(edited)</span>
             {/if}

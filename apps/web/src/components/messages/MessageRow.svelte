@@ -27,6 +27,7 @@
     replyContext: "channel" | "dm";
     selectedThreadID?: string;
     mentionPeople?: User[];
+    mentionAttentionUserID?: string;
     currentUserID?: string;
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
@@ -56,6 +57,7 @@
     replyContext,
     selectedThreadID,
     mentionPeople = [],
+    mentionAttentionUserID,
     currentUserID,
     reactionController,
     reactionsDisabled = false,
@@ -556,7 +558,7 @@
   <span class="row-stamp" aria-hidden="true">{index === 0 ? "" : time(message.created_at)}</span>
   <div class="message-content">
     {#if preambleBlock}
-      <PreambleBlock block={preambleBlock} {mentionPeople} />
+      <PreambleBlock block={preambleBlock} {mentionPeople} {mentionAttentionUserID} />
     {:else if isDeleted}
       <div class="message-deleted">This message was deleted.</div>
     {:else if editing}
@@ -573,7 +575,11 @@
     {:else}
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
-    <div class="markdown" use:enhanceMarkdown use:enhanceMentions={mentionPeople}>{@html markdown(message.body)}</div>
+    <div
+      class="markdown"
+      use:enhanceMarkdown
+      use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+    >{@html markdown(message.body)}</div>
     {#if message.edited_at}
       <span class="message-edit__indicator" title="Edited {time(message.edited_at)}">(edited)</span>
     {/if}

@@ -130,8 +130,11 @@ Each channel has one server-backed notification preference per member: `all`,
 `mentions`, or `muted`. The channel header controls that preference for both
 browser/desktop alerts and Pushover delivery. Mention-only delivery uses the
 resolved `mentioned_user_ids` event metadata; it does not create a separate
-highlight or appearance setting. See [channel notifications](channel-notifications.md)
-for the API and delivery rules.
+highlight or appearance setting. Resolvable handles are always marked neutrally
+in timelines and threads; a mention of the current user receives the stronger
+attention style only while the channel preference is `all` or `mentions`.
+Muted channels keep the neutral resolved-handle treatment. See
+[channel notifications](channel-notifications.md) for the API and delivery rules.
 
 ## Sequence numbers
 

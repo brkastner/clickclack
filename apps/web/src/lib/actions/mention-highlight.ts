@@ -6,6 +6,11 @@ export type MentionRange = {
   handle: string;
 };
 
+export type MentionHighlightOptions = {
+  people?: User[];
+  attentionUserID?: string;
+};
+
 const MENTION_RE = /(^|[^A-Za-z0-9_@-])(@[A-Za-z0-9][A-Za-z0-9_-]{0,31})/gu;
 
 export function mentionTargets(people: readonly User[]): Map<string, User> {
@@ -50,7 +55,11 @@ function isExcludedTextNode(node: Text): boolean {
   return Boolean(node.parentElement?.closest("a, code, pre, script, style, textarea"));
 }
 
-function renderMentionHighlights(root: HTMLElement, targets: Map<string, User>) {
+function renderMentionHighlights(
+  root: HTMLElement,
+  targets: Map<string, User>,
+  attentionUserID: string,
+) {
   clearMentionHighlights(root);
   if (targets.size === 0) return;
 
@@ -75,6 +84,10 @@ function renderMentionHighlights(root: HTMLElement, targets: Map<string, User>) 
       highlight.dataset.clickclackMention = "true";
       highlight.dataset.mentionHandle = range.handle;
       if (target?.id) highlight.dataset.mentionUserId = target.id;
+      if (target?.id && target.id === attentionUserID) {
+        highlight.classList.add("is-current-user");
+        highlight.dataset.mentionAttention = "true";
+      }
       highlight.title = target?.display_name || `@${range.handle}`;
       highlight.textContent = textNode.data.slice(range.start, range.end);
       fragment.append(highlight);
@@ -85,13 +98,14 @@ function renderMentionHighlights(root: HTMLElement, targets: Map<string, User>) 
   }
 }
 
-export function enhanceMentions(node: HTMLElement, people: User[] = []) {
-  let targets = mentionTargets(people);
+export function enhanceMentions(node: HTMLElement, options: MentionHighlightOptions = {}) {
+  let targets = mentionTargets(options.people ?? []);
+  let attentionUserID = options.attentionUserID ?? "";
   let observer: MutationObserver | undefined;
 
   const render = () => {
     observer?.disconnect();
-    renderMentionHighlights(node, targets);
+    renderMentionHighlights(node, targets, attentionUserID);
     observer?.observe(node, { childList: true, subtree: true });
   };
 
@@ -99,8 +113,9 @@ export function enhanceMentions(node: HTMLElement, people: User[] = []) {
   render();
 
   return {
-    update(nextPeople: User[] = []) {
-      targets = mentionTargets(nextPeople);
+    update(nextOptions: MentionHighlightOptions = {}) {
+      targets = mentionTargets(nextOptions.people ?? []);
+      attentionUserID = nextOptions.attentionUserID ?? "";
       render();
     },
     destroy() {

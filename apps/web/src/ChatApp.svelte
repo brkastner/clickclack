@@ -103,6 +103,7 @@
   // stream.
   let composerNotice: { kind: "ephemeral" | "error"; text: string } | null = null;
   let mentionPeople: User[] = [];
+  let mentionAttentionUserID = "";
   let selectedImage: { url: string; title: string } | null = null;
   let selectedArtifact: Upload | null = null;
   let artifactConversationKey = "";
@@ -322,6 +323,14 @@
   );
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, workspaceMemberUsers, selectedDirect);
+  $: mentionAttentionUserID =
+    user?.id &&
+    (selectedDirectID ||
+      (selectedChannelID &&
+        channelNotifPreference !== null &&
+        channelNotifPreference !== "muted"))
+      ? user.id
+      : "";
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "dm" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "thread" && replyTarget && selectedThread && replyTarget.id !== selectedThread.id && !replies.some((r) => r.id === replyTarget?.id)) clearReplyTarget();
@@ -4024,6 +4033,7 @@
       {selectedDirect}
       {selectedChannel}
       {mentionPeople}
+      {mentionAttentionUserID}
       restoreState={viewRestoreState}
       {viewKey}
       loading={messagesLoading}
@@ -4190,6 +4200,7 @@
         {replyBody}
         replyTarget={replyTarget && replyContext === "thread" ? replyTarget : null}
         {mentionPeople}
+        {mentionAttentionUserID}
         replyDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
         onClose={closeSidePanel}
         onBack={searchThreadDetour && searchSession ? () => void returnToSearchFromThread() : undefined}

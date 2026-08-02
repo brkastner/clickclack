@@ -15,6 +15,7 @@
     reactionsDisabled?: boolean;
     selectedThreadID?: string;
     mentionPeople?: User[];
+    mentionAttentionUserID?: string;
     canDeleteAnyMessage?: boolean;
     deletingMessageIDs?: ReadonlySet<string>;
     replyContext: "channel" | "dm";
@@ -41,6 +42,7 @@
     reactionsDisabled = false,
     selectedThreadID,
     mentionPeople = [],
+    mentionAttentionUserID,
     canDeleteAnyMessage = false,
     deletingMessageIDs = new Set<string>(),
     replyContext,
@@ -105,6 +107,7 @@
         {replyContext}
         {selectedThreadID}
         {mentionPeople}
+        {mentionAttentionUserID}
         {currentUserID}
         {reactionController}
         {reactionsDisabled}

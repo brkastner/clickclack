@@ -7,6 +7,16 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
   };
   const workspace = workspaces[0];
   const stamp = Date.now();
+  const mentionHandle = `embed-thread-${stamp}`;
+  const botResponse = await page.request.post(`/api/workspaces/${workspace.id}/bots`, {
+    data: {
+      display_name: "Embed Thread Mention",
+      handle: mentionHandle,
+      token_name: "e2e",
+      scopes: ["bot:write"],
+    },
+  });
+  expect(botResponse.ok()).toBe(true);
 
   const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
     data: { name: `embed-${stamp}`, kind: "public" },
@@ -16,7 +26,7 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
   };
 
   const rootResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
-    data: { body: `embedded root ${stamp}` },
+    data: { body: `embedded root ${stamp} for @${mentionHandle}` },
   });
   const { message } = (await rootResponse.json()) as {
     message: { id: string; body: string };
@@ -41,6 +51,9 @@ test("embedded thread loads, posts replies, and follows realtime updates", async
   await expect(page.locator(".sidebar, .topbar")).toHaveCount(0);
 
   const rootRow = page.locator(`[data-message-id="${message.id}"]`);
+  await expect(rootRow.locator("mark[data-clickclack-mention='true']")).toHaveText(
+    `@${mentionHandle}`,
+  );
   await expect(rootRow.getByRole("button", { name: "Add reaction" })).toBeVisible();
   const rootReaction = await page.request.post(`/api/messages/${message.id}/reactions`, {
     data: { emoji: "🚀" },

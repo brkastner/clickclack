@@ -58,6 +58,7 @@
     selectedThreadID?: string;
     currentUserID?: string;
     mentionPeople?: User[];
+    mentionAttentionUserID?: string;
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
     canDeleteAnyMessage?: boolean;
@@ -106,6 +107,7 @@
     selectedThreadID,
     currentUserID,
     mentionPeople = [],
+    mentionAttentionUserID,
     reactionController,
     reactionsDisabled = false,
     canDeleteAnyMessage = false,
@@ -883,6 +885,7 @@
               {reactionsDisabled}
               {selectedThreadID}
               {mentionPeople}
+              {mentionAttentionUserID}
               {replyContext}
               {canDeleteAnyMessage}
               {deletingMessageIDs}
