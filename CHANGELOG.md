@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 - Unreleased
+
+- Added coherent conversation organization and attention tools, beginning with topic selection and filtered timelines across the web app, API, and SDK. Thanks @PollyBot13.
+
 ## 0.2.2 - 2026-08-01
 
 - Updated Go, web, desktop, Cloudflare, CI action, package-manager, and container-base dependencies.

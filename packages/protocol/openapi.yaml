@@ -1046,13 +1046,42 @@ paths:
           in: query
           schema:
             type: integer
+            minimum: 0
+        - name: before_seq
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: around_seq
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: topic_id
+          in: query
+          schema:
+            type: string
+            minLength: 1
+          description: Return only root messages assigned to this active workspace or channel topic.
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [latest]
+          description: Explicitly request the latest window. Mutually exclusive with cursor parameters.
         - name: limit
           in: query
           schema:
             type: integer
+            minimum: 1
+            maximum: 200
       responses:
         "200":
           description: Root channel messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagePage"
     post:
       operationId: createMessage
       parameters:
@@ -2932,6 +2961,8 @@ components:
           type: string
         thread_root_id:
           type: string
+        topic_id:
+          type: string
         channel_seq:
           type: integer
           format: int64
@@ -2983,6 +3014,24 @@ components:
       properties:
         message:
           $ref: "#/components/schemas/Message"
+    MessagePage:
+      type: object
+      required: [messages, oldest_seq, newest_seq, has_older, has_newer]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        oldest_seq:
+          type: integer
+          format: int64
+        newest_seq:
+          type: integer
+          format: int64
+        has_older:
+          type: boolean
+        has_newer:
+          type: boolean
     SearchHighlight:
       type: object
       required: [start, end]

@@ -281,6 +281,7 @@ type MessagePageRequest struct {
 	BeforeSeq *int64
 	AfterSeq  *int64
 	AroundSeq *int64
+	TopicID   string
 }
 
 type MessagePage struct {

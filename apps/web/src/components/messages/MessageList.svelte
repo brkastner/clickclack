@@ -29,7 +29,7 @@
   import { dmTitle } from "../../lib/chat/people";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
-  import type { Channel, DirectConversation, Message, Upload } from "../../lib/types";
+  import type { Channel, DirectConversation, Message, Topic, Upload } from "../../lib/types";
   import HistoryLoader from "./HistoryLoader.svelte";
   import MessageGroup from "./MessageGroup.svelte";
 
@@ -82,6 +82,8 @@
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
+    topics?: Topic[];
+    onSelectTopic?: (topicID: string) => void;
   };
 
   let {
@@ -127,6 +129,8 @@
     editController,
     editScope = "",
     onMessageEdited,
+    topics = [],
+    onSelectTopic = () => {},
   }: Props = $props();
 
   // Sub-pixel tolerance — matches virtua's official chat example (FIXME comment
@@ -891,6 +895,8 @@
               {onRetry}
               {onDiscard}
               {onDeleteMessage}
+              {topics}
+              {onSelectTopic}
             />
           {/if}
         {/snippet}

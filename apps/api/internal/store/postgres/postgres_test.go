@@ -195,8 +195,17 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	topic, err := st.CreateTopic(ctx, store.CreateTopicInput{
+		WorkspaceID: workspace.ID,
+		ChannelID:   channel.ID,
+		Name:        "Postgres topic",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	messageCtx := requestmeta.WithCorrelationID(ctx, "corr-postgres-message")
-	created, event, err := st.CreateMessage(messageCtx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "hello postgres"})
+	created, event, err := st.CreateMessage(messageCtx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "hello postgres", TopicID: topic.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,6 +220,13 @@ func TestPostgresStoreSmoke(t *testing.T) {
 	}
 	if len(page.Messages) != 1 || page.Messages[0].ID != created.ID {
 		t.Fatalf("unexpected messages: %#v", page.Messages)
+	}
+	topicPage, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{Limit: 10, TopicID: topic.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(topicPage.Messages) != 1 || topicPage.Messages[0].TopicID != topic.ID {
+		t.Fatalf("unexpected filtered topic messages: %#v", topicPage.Messages)
 	}
 	replyCtx := requestmeta.WithCorrelationID(ctx, "corr-postgres-reply")
 	_, state, replyEvents, err := st.CreateThreadReply(replyCtx, store.CreateThreadReplyInput{RootMessageID: created.ID, AuthorID: owner.ID, Body: "postgres thread reply"})

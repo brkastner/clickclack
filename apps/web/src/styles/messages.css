@@ -297,6 +297,69 @@
   padding-top: 20px;
 }
 
+.topic-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.topic-filter strong {
+  color: var(--text);
+}
+
+.topic-filter button,
+.message-topic {
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.topic-filter button:hover,
+.message-topic:hover {
+  text-decoration: underline;
+}
+
+.message-topic {
+  display: inline-flex;
+  margin: 0 0 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.topic-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px -1px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.topic-picker select {
+  min-width: 0;
+  max-width: min(280px, 65vw);
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+}
+
 .composer-dock .agent-responding {
   position: absolute;
   top: 0;

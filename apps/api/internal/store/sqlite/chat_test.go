@@ -390,6 +390,75 @@ func TestStoreMessagePageCursors(t *testing.T) {
 	}
 }
 
+func TestStoreMessagePageTopicFilter(t *testing.T) {
+	t.Parallel()
+	ctx, st, owner, workspace, channel := seededStore(t)
+	topic, err := st.CreateTopic(ctx, store.CreateTopicInput{
+		WorkspaceID: workspace.ID,
+		ChannelID:   channel.ID,
+		Name:        "Release",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 12; i++ {
+		input := store.CreateMessageInput{
+			ChannelID: channel.ID,
+			AuthorID:  owner.ID,
+			Body:      fmt.Sprintf("topic page %02d", i),
+		}
+		if i%2 == 0 {
+			input.TopicID = topic.ID
+		}
+		if _, _, err := st.CreateMessage(ctx, input); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	latest, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{
+		Limit:   3,
+		TopicID: topic.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectExactSeqs(t, latest.Messages, 8, 10, 12)
+	if !latest.HasOlder || latest.HasNewer {
+		t.Fatalf("unexpected topic latest metadata: %#v", latest)
+	}
+
+	before, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{
+		BeforeSeq: int64Ptr(8),
+		Limit:     2,
+		TopicID:   topic.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectExactSeqs(t, before.Messages, 4, 6)
+	if !before.HasOlder || !before.HasNewer {
+		t.Fatalf("unexpected topic before metadata: %#v", before)
+	}
+
+	around, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{
+		AroundSeq: int64Ptr(7),
+		Limit:     3,
+		TopicID:   topic.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectExactSeqs(t, around.Messages, 4, 6, 8)
+
+	if _, err := st.db.ExecContext(ctx, `UPDATE topics SET archived_at = ? WHERE id = ?`, now(), topic.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ListMessages(ctx, channel.ID, owner.ID, store.MessagePageRequest{TopicID: topic.ID}); !errors.Is(err, store.ErrInvalidMessagePage) {
+		t.Fatalf("expected archived topic rejection, got %v", err)
+	}
+}
+
 func TestStoreMessagePageLargeHistorySmoke(t *testing.T) {
 	if os.Getenv("CLICKCLACK_LARGE_HISTORY") != "1" {
 		t.Skip("set CLICKCLACK_LARGE_HISTORY=1 to run the 100k-message paging smoke")
@@ -890,6 +959,18 @@ func expectSeqs(t *testing.T, messages []store.Message, first, last int64) {
 		want := first + int64(i)
 		if message.ChannelSeq == nil || *message.ChannelSeq != want {
 			t.Fatalf("message %d: expected seq %d, got %#v", i, want, message.ChannelSeq)
+		}
+	}
+}
+
+func expectExactSeqs(t *testing.T, messages []store.Message, want ...int64) {
+	t.Helper()
+	if len(messages) != len(want) {
+		t.Fatalf("message count = %d, want %d: %#v", len(messages), len(want), messages)
+	}
+	for i, message := range messages {
+		if message.ChannelSeq == nil || *message.ChannelSeq != want[i] {
+			t.Fatalf("message[%d] seq = %v, want %d: %#v", i, message.ChannelSeq, want[i], messages)
 		}
 	}
 }

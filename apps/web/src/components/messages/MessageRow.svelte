@@ -10,11 +10,12 @@
   import MessageActionSheet from "./MessageActionSheet.svelte";
   import { shouldOpenUpward } from "../../lib/popover";
   import type { ReactionController } from "../../lib/reactions.svelte";
-  import type { Message, Upload } from "../../lib/types";
+  import type { Message, Topic, Upload } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
   import MessageEditor from "./MessageEditor.svelte";
   import QuoteBlock from "./QuoteBlock.svelte";
   import PreambleBlock from "./PreambleBlock.svelte";
+  import TopicBadge from "./TopicBadge.svelte";
 
   type Props = {
     message: Message;
@@ -40,6 +41,8 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
+    topics?: Topic[];
+    onSelectTopic?: (topicID: string) => void;
   };
 
   let {
@@ -66,6 +69,8 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
+    topics = [],
+    onSelectTopic = () => {},
   }: Props = $props();
 
   let editSession = $derived(editController?.session(editScope));
@@ -130,6 +135,7 @@
   let canOpenThread = $derived(
     !preambleBlock && !isPending && !isFailed && (!isDeleted || hasThreadReplies || isThreadOpen),
   );
+  let topic = $derived(topics.find((candidate) => candidate.id === message.topic_id));
 
   function openThreadFromRow(event: MouseEvent) {
     if (suppressRowClick || showActionSheet) {
@@ -562,6 +568,7 @@
         />
       {/if}
     {:else}
+    <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div class="markdown" use:enhanceMarkdown>{@html markdown(message.body)}</div>
     {#if message.edited_at}

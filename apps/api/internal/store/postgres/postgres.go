@@ -612,9 +612,18 @@ func (s *Store) ListMessages(ctx context.Context, channelID, userID string, page
 	if err := s.requireGuestChannelAccess(ctx, workspaceID, channelID, userID); err != nil {
 		return store.MessagePage{}, err
 	}
+	if err := s.requireTopic(ctx, workspaceID, channelID, page.TopicID); err != nil {
+		return store.MessagePage{}, err
+	}
+	where := "m.channel_id = $1 AND m.parent_message_id IS NULL"
+	args := []any{channelID}
+	if page.TopicID != "" {
+		where += " AND m.topic_id = $2"
+		args = append(args, strings.TrimSpace(page.TopicID))
+	}
 	return s.listMessagePage(ctx, messagePageScope{
-		where:  "m.channel_id = $1 AND m.parent_message_id IS NULL",
-		args:   []any{channelID},
+		where:  where,
+		args:   args,
 		userID: userID,
 	}, page)
 }

@@ -952,6 +952,13 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	if values, ok := r.URL.Query()["topic_id"]; ok {
+		if len(values) == 0 || strings.TrimSpace(values[0]) == "" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("%w: topic_id is required", store.ErrInvalidMessagePage))
+			return
+		}
+		page.TopicID = strings.TrimSpace(values[0])
+	}
 	if !s.requireBotChannelWorkspace(w, r, act, chi.URLParam(r, "channel_id")) {
 		return
 	}

@@ -50,7 +50,7 @@
   import DesktopTitlebar from "./components/topbar/DesktopTitlebar.svelte";
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
-  import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { Channel, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
@@ -73,6 +73,7 @@
   const editController = new MessageEditController(revealEditSession);
   let workspaces: Workspace[] = [];
   let channels: Channel[] = [];
+  let topics: Topic[] = [];
   let directConversations: DirectConversation[] = [];
   let messages: Message[] = [];
   let replies: Message[] = [];
@@ -80,6 +81,12 @@
   let selectedChannelID = "";
   let selectedDirectID = "";
   let selectedThread: Message | null = null;
+  let selectedComposerTopicID = "";
+  let activeTopicFilterID = "";
+  let topicFilterGeneration = 0;
+  let topicConversationKey = "";
+  let topicFilterLoading = false;
+  let recoverableDraftMessages = new Map<string, Message[]>();
   let selectedThreadState: ThreadState | null = null;
   let selectedProfile: User | null = null;
   let moderationMembers: MemberModeration[] = [];
@@ -178,6 +185,7 @@
   let messageLoadGeneration = 0;
   let workspacesLoadSerial = 0;
   let channelsLoadSerial = 0;
+  let topicsLoadSerial = 0;
   let directConversationsLoadSerial = 0;
   let moderationMembersLoadSerial = 0;
   let slashCommandsLoadSerial = 0;
@@ -216,9 +224,12 @@
     ? moderationMembers.find((member) => member.user.id === selectedProfile?.id)
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
+  $: eligibleTopics = topicsForChannel(topics, selectedChannelID);
+  $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
   $: selectedDirectWritable = selectedDirect?.can_send ?? true;
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
+  $: resetTopicStateForConversation(activeConversationKey);
   // Slash-dispatch notices are scoped to the conversation they fired in.
   $: clearComposerNoticeFor(activeConversationKey);
   // Bot-declared menus surface in channels; in DMs only for bots that are
@@ -257,6 +268,31 @@
     { hideCommentary, hideToolCalls },
     activityClock,
   );
+
+  function resetTopicStateForConversation(conversationKey: string) {
+    if (conversationKey === topicConversationKey) return;
+    topicConversationKey = conversationKey;
+    topicFilterLoading = false;
+    selectedComposerTopicID = "";
+    updateActiveTopicFilter("");
+  }
+
+  function updateActiveTopicFilter(topicID: string) {
+    if (topicID === activeTopicFilterID) return;
+    activeTopicFilterID = topicID;
+    topicFilterGeneration += 1;
+  }
+
+  function activeMessageScopeKey(): string {
+    return `${selectedWorkspaceID}:${currentConversationKey()}:${activeTopicFilterID}:${topicFilterGeneration}`;
+  }
+
+  function topicsForChannel(source: Topic[], channelID: string): Topic[] {
+    if (!channelID) return [];
+    return source.filter(
+      (topic) => !topic.archived_at && (!topic.channel_id || topic.channel_id === channelID),
+    );
+  }
   // High-level "agent turn is live" signal: any tracked turn that still has an
   // unfinalized line. Drives the compact AgentResponding status above the
   // composer; clears as soon as every line finalizes or the turn is cleared.
@@ -659,10 +695,12 @@
       captureScrollMemory();
       editController.clear();
       selectedWorkspaceID = workspace.id;
+      topicsLoadSerial += 1;
       slashCommandsLoadSerial += 1;
       botCommandsLoadSerial += 1;
       slashCommands = [];
       botCommands = [];
+      topics = [];
       selectedChannelID = "";
       selectedDirectID = "";
       selectedThread = null;
@@ -684,6 +722,7 @@
         loadModerationMembers(),
         loadSlashCommands(workspace.id),
         loadBotCommands(workspace.id),
+        loadTopics(workspace.id),
       ]);
     }
     if (serial !== routeApplySerial) return;
@@ -718,6 +757,7 @@
         connectPendingRealtime(workspace.id);
         return;
       }
+      resetTopicStateForConversation(targetID);
       await loadMessages();
       if (serial !== routeApplySerial) return;
       appliedRouteKey = canonicalRouteKey;
@@ -738,6 +778,7 @@
         connectPendingRealtime(workspace.id);
         return;
       }
+      resetTopicStateForConversation(targetID);
       await loadMessages();
       if (serial !== routeApplySerial) return;
       appliedRouteKey = canonicalRouteKey;
@@ -760,6 +801,7 @@
     if (!fallbackTargetID) {
       selectedChannelID = "";
       selectedDirectID = "";
+      resetTopicStateForConversation("");
       await loadMessages();
       appliedRouteKey = requestedRouteKey;
       if (workspaceIDParam !== workspace.route_id || targetIDParam) await navigateToApp(workspace.id, "", true);
@@ -882,6 +924,58 @@
       replies = [];
     }
     if (loadInitialMessages) await loadMessages();
+  }
+
+  async function loadTopics(workspaceID = selectedWorkspaceID) {
+    const serial = ++topicsLoadSerial;
+    const conversationKey = currentConversationKey();
+    const channelID = selectedChannelID;
+    let clearedInvalidFilter = false;
+    if (!workspaceID) {
+      topics = [];
+      return;
+    }
+    try {
+      const data = await api<{ topics: Topic[] }>(`/api/workspaces/${workspaceID}/topics`);
+      if (serial !== topicsLoadSerial || workspaceID !== selectedWorkspaceID) return;
+      topics = data.topics;
+      if (currentConversationKey() !== conversationKey || selectedChannelID !== channelID) return;
+      const eligibleTopicIDs = new Set(
+        topicsForChannel(data.topics, channelID).map((topic) => topic.id),
+      );
+      if (selectedComposerTopicID && !eligibleTopicIDs.has(selectedComposerTopicID)) {
+        selectedComposerTopicID = "";
+      }
+      if (activeTopicFilterID && !eligibleTopicIDs.has(activeTopicFilterID)) {
+        updateActiveTopicFilter("");
+        scrollMemory.delete(currentConversationKey());
+        messageWindows.delete(currentConversationKey());
+        clearedInvalidFilter = true;
+      }
+    } catch {
+      // A transient refresh failure is not authoritative. Preserve the last
+      // known topics so an active filter and its clear control stay visible.
+      return;
+    }
+    if (!clearedInvalidFilter || currentConversationKey() !== conversationKey) return;
+    try {
+      await loadLatestMessages();
+    } catch (error) {
+      if (currentConversationKey() !== conversationKey || activeTopicFilterID) return;
+      setActiveMessages(localDraftMessagesForView(conversationKey));
+      composerNotice = {
+        kind: "error",
+        text:
+          error instanceof Error
+            ? `Topic changed, but messages could not reload: ${error.message}`
+            : "Topic changed, but messages could not reload",
+      };
+    }
+  }
+
+  function activateMessageComposer() {
+    activeComposerContext = "message";
+    if (selectedChannelID) void loadTopics();
   }
 
   async function loadModerationMembers(workspaceID = selectedWorkspaceID) {
@@ -1073,7 +1167,87 @@
     const base = selectedDirectID
       ? `/api/dms/${selectedDirectID}/messages`
       : `/api/channels/${selectedChannelID}/messages`;
-    return query ? `${base}?${query}` : base;
+    const params = new URLSearchParams(query);
+    if (!selectedDirectID && activeTopicFilterID) params.set("topic_id", activeTopicFilterID);
+    const resolvedQuery = params.toString();
+    return resolvedQuery ? `${base}?${resolvedQuery}` : base;
+  }
+
+  async function setTopicFilter(topicID: string) {
+    if (!selectedChannelID || topicID === activeTopicFilterID || topicFilterLoading) return;
+    const conversationKey = currentConversationKey();
+    const previousTopicID = activeTopicFilterID;
+    const previousComposerTopicID = selectedComposerTopicID;
+    const previousWindow = messageWindows.get(conversationKey);
+    const previousScroll = scrollMemory.get(conversationKey);
+    topicFilterLoading = true;
+    updateActiveTopicFilter(topicID);
+    const generation = topicFilterGeneration;
+    if (topicID) selectedComposerTopicID = topicID;
+    scrollMemory.delete(conversationKey);
+    messageWindows.delete(conversationKey);
+    try {
+      await loadLatestMessages();
+      if (
+        currentConversationKey() !== conversationKey ||
+        topicFilterGeneration !== generation
+      ) {
+        return;
+      }
+    } catch (error) {
+      if (
+        currentConversationKey() !== conversationKey ||
+        topicFilterGeneration !== generation
+      ) {
+        return;
+      }
+      updateActiveTopicFilter(previousTopicID);
+      if (selectedComposerTopicID === topicID) {
+        selectedComposerTopicID = previousComposerTopicID;
+      }
+      messageWindows.delete(conversationKey);
+      const rollbackGeneration = topicFilterGeneration;
+      try {
+        await loadLatestMessages();
+        if (
+          currentConversationKey() !== conversationKey ||
+          topicFilterGeneration !== rollbackGeneration
+        ) {
+          return;
+        }
+        if (previousScroll) {
+          scrollMemory.set(conversationKey, previousScroll);
+          viewRestoreState = previousScroll;
+        }
+      } catch {
+        if (
+          currentConversationKey() !== conversationKey ||
+          topicFilterGeneration !== rollbackGeneration
+        ) {
+          return;
+        }
+        if (previousWindow) {
+          rememberMessageWindow(conversationKey, previousWindow);
+          commitView(conversationKey, previousWindow.messages);
+          updateActiveMessageWindowFlags(conversationKey, previousWindow);
+        } else {
+          setActiveMessages(localDraftMessagesForView(conversationKey));
+        }
+        if (previousScroll) {
+          scrollMemory.set(conversationKey, previousScroll);
+          viewRestoreState = previousScroll;
+        }
+      }
+      composerNotice = {
+        kind: "error",
+        text:
+          error instanceof Error
+            ? `Topic could not change: ${error.message}`
+            : "Topic could not change",
+      };
+    } finally {
+      topicFilterLoading = false;
+    }
   }
 
   function pageToWindow(page: MessagePage): MessageWindow {
@@ -1233,8 +1407,9 @@
 
   async function loadOlderMessages() {
     const key = currentConversationKey();
+    const scopeKey = activeMessageScopeKey();
     const window = messageWindows.get(key);
-    const loadKey = `${key}:older`;
+    const loadKey = `${scopeKey}:older`;
     if (olderPageState !== "idle") {
       pendingOlderPageIntent = true;
       return;
@@ -1247,7 +1422,7 @@
     let committed = false;
     try {
       const data = await api<MessagePage>(messagePagePath(`before_seq=${encodeURIComponent(String(window.oldest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== key) return;
+      if (activeMessageScopeKey() !== scopeKey) return;
       const merged = mergeMessageWindows(data.messages, messages);
       commitMessageWindow(key, {
         messages: merged,
@@ -1259,19 +1434,20 @@
       committed = true;
       setHistoryEdgeState("older", "settling");
     } catch (error) {
-      if (currentConversationKey() === key) {
+      if (activeMessageScopeKey() === scopeKey) {
         status = error instanceof Error ? error.message : "Could not load older messages";
       }
     } finally {
       loadingMessagePages.delete(loadKey);
-      if (currentConversationKey() === key && !committed) setHistoryEdgeState("older", "idle");
+      if (activeMessageScopeKey() === scopeKey && !committed) setHistoryEdgeState("older", "idle");
     }
   }
 
   async function loadNewerMessages() {
     const key = currentConversationKey();
+    const scopeKey = activeMessageScopeKey();
     const window = messageWindows.get(key);
-    const loadKey = `${key}:newer`;
+    const loadKey = `${scopeKey}:newer`;
     if (newerPageState !== "idle") {
       pendingNewerPageIntent = true;
       return;
@@ -1287,7 +1463,7 @@
     let committed = false;
     try {
       const data = await api<MessagePage>(messagePagePath(`after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== key) return;
+      if (activeMessageScopeKey() !== scopeKey) return;
       if (data.messages.length === 0) {
         commitMessageWindow(key, { ...window, has_newer: data.has_newer }, "append");
         committed = true;
@@ -1309,18 +1485,19 @@
       committed = true;
       setHistoryEdgeState("newer", "settling");
     } catch (error) {
-      if (currentConversationKey() === key) {
+      if (activeMessageScopeKey() === scopeKey) {
         status = error instanceof Error ? error.message : "Could not load newer messages";
       }
     } finally {
       loadingMessagePages.delete(loadKey);
-      if (currentConversationKey() === key && !committed) setHistoryEdgeState("newer", "idle");
+      if (activeMessageScopeKey() === scopeKey && !committed) setHistoryEdgeState("newer", "idle");
     }
   }
 
   function loadNewerMessagesFromRealtime(): Promise<void> {
     const targetWorkspaceID = selectedWorkspaceID;
     const targetKey = currentConversationKey();
+    const targetScopeKey = activeMessageScopeKey();
     if (!targetWorkspaceID || !targetKey) return Promise.resolve();
 
     // Serialize only the active message-window fetch. Rendering and scrolling
@@ -1329,7 +1506,11 @@
     const load = realtimeMessageLoadQueue
       .catch(() => undefined)
       .then(async () => {
-        if (selectedWorkspaceID !== targetWorkspaceID || currentConversationKey() !== targetKey) {
+        if (
+          selectedWorkspaceID !== targetWorkspaceID ||
+          currentConversationKey() !== targetKey ||
+          activeMessageScopeKey() !== targetScopeKey
+        ) {
           return;
         }
         const window = messageWindows.get(targetKey);
@@ -1342,7 +1523,11 @@
             `after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`,
           ),
         );
-        if (selectedWorkspaceID !== targetWorkspaceID || currentConversationKey() !== targetKey) {
+        if (
+          selectedWorkspaceID !== targetWorkspaceID ||
+          currentConversationKey() !== targetKey ||
+          activeMessageScopeKey() !== targetScopeKey
+        ) {
           return;
         }
         const currentWindow = messageWindows.get(targetKey);
@@ -1502,6 +1687,7 @@
     if (!options.all && Date.now() < suppressAutoReadUntil) return;
     const key = currentConversationKey() || viewKey;
     if (!key) return;
+    if (activeTopicFilterID && channels.some((channel) => channel.id === key)) return;
     if (!options.all && !options.seq) {
       const boundarySeq = unreadBoundarySeqForKey(key);
       if (boundarySeq >= 0 && !unreadBoundaryLoadedForKey(key, boundarySeq)) return;
@@ -1745,9 +1931,7 @@
     // Preserve outgoing optimistic placeholders for this view that the server
     // hasn't echoed yet. Without this the placeholder would flicker out when a
     // sibling realtime event triggers a reload mid-flight.
-    const localOptimistic = messages.filter(
-      (m) => (m.status === "pending" || m.status === "failed") && belongsToView(m, key),
-    );
+    const localOptimistic = localDraftMessagesForView(key);
     const localByID = new Map(localOptimistic.map((m) => [m.id, m]));
     const localByNonce = new Map(localOptimistic.filter((m) => m.nonce).map((m) => [m.nonce, m]));
     reactionController.seedMessages(msgs);
@@ -1770,13 +1954,14 @@
     });
     const knownIDs = new Set(merged.map((m) => m.id));
     const knownNonces = new Set(merged.map((m) => m.nonce).filter(Boolean));
-    const preserve = messages.filter(
+    const preserve = localOptimistic.filter(
       (m) =>
         (m.status === "pending" || m.status === "failed") &&
         m.id.startsWith("tmp_") &&
         !knownIDs.has(m.id) &&
         !(m.nonce && knownNonces.has(m.nonce)) &&
-        belongsToView(m, key),
+        belongsToView(m, key) &&
+        (!activeTopicFilterID || m.topic_id === activeTopicFilterID),
     );
     messages = preserve.length > 0 ? [...merged, ...preserve] : merged;
     editController.reconcile(key, messages);
@@ -1857,6 +2042,9 @@
     workspaceID: string;
     channelID?: string;
     directConversationID?: string;
+    topicID?: string;
+    topicFilterID: string;
+    topicFilterGeneration: number;
     viewKey: string;
   };
 
@@ -1876,6 +2064,7 @@
       workspace_id: draft.workspaceID,
       channel_id: draft.channelID,
       direct_conversation_id: draft.directConversationID,
+      topic_id: draft.topicID,
       author_id: user?.id || "",
       thread_root_id: id,
       body: draft.body,
@@ -1932,6 +2121,9 @@
       workspaceID: selectedWorkspaceID,
       channelID: selectedChannelID || undefined,
       directConversationID: selectedDirectID || undefined,
+      topicID: selectedChannelID ? selectedComposerTopicID || undefined : undefined,
+      topicFilterID: activeTopicFilterID,
+      topicFilterGeneration,
       viewKey: currentConversationKey(),
     };
     messageBody = "";
@@ -1988,17 +2180,114 @@
     return err.message;
   }
 
+  function localDraftMessagesForView(viewKey: string): Message[] {
+    const candidates = [...messages, ...(recoverableDraftMessages.get(viewKey) || [])].filter(
+      (message) =>
+        (message.status === "pending" || message.status === "failed") &&
+        belongsToView(message, viewKey) &&
+        (!activeTopicFilterID || message.topic_id === activeTopicFilterID),
+    );
+    const drafts = new Map<string, Message>();
+    for (const message of candidates) {
+      const key = message.nonce ? `nonce:${message.nonce}` : `id:${message.id}`;
+      drafts.set(key, message);
+    }
+    return [...drafts.values()];
+  }
+
+  function rememberRecoverableDraft(viewKey: string, draftMessage: Message) {
+    const existing = recoverableDraftMessages.get(viewKey) || [];
+    const next = existing.filter(
+      (message) =>
+        message.id !== draftMessage.id &&
+        !(draftMessage.nonce && message.nonce === draftMessage.nonce),
+    );
+    recoverableDraftMessages = new Map(recoverableDraftMessages).set(viewKey, [
+      ...next,
+      draftMessage,
+    ]);
+  }
+
+  function forgetRecoverableDraft(viewKey: string, messageID: string, nonce?: string) {
+    const existing = recoverableDraftMessages.get(viewKey);
+    if (!existing) return;
+    const next = existing.filter(
+      (message) => message.id !== messageID && !(nonce && message.nonce === nonce),
+    );
+    const updated = new Map(recoverableDraftMessages);
+    if (next.length > 0) updated.set(viewKey, next);
+    else updated.delete(viewKey);
+    recoverableDraftMessages = updated;
+  }
+
+  async function revealFailedDraft(
+    draft: OutgoingDraft,
+    failedMessage: Message,
+    notice: string,
+  ) {
+    rememberRecoverableDraft(draft.viewKey, failedMessage);
+    if (currentConversationKey() !== draft.viewKey) return;
+    let reloadFailed = false;
+    const originalFilterStillActive =
+      activeTopicFilterID === draft.topicFilterID &&
+      topicFilterGeneration === draft.topicFilterGeneration;
+    if (
+      originalFilterStillActive &&
+      activeTopicFilterID &&
+      draft.topicID !== activeTopicFilterID
+    ) {
+      updateActiveTopicFilter("");
+      scrollMemory.delete(draft.viewKey);
+      messageWindows.delete(draft.viewKey);
+      try {
+        await loadLatestMessages();
+      } catch {
+        reloadFailed = true;
+      }
+    }
+    if (currentConversationKey() !== draft.viewKey) return;
+    if (activeTopicFilterID && draft.topicID !== activeTopicFilterID) {
+      if (!messageBody.trim()) messageBody = draft.body;
+      composerNotice = {
+        kind: "error",
+        text: `${notice} Clear the active topic filter to recover the draft.`,
+      };
+      return;
+    }
+    if (reloadFailed) setActiveMessages(localDraftMessagesForView(draft.viewKey));
+    const failedID = failedMessage.id;
+    const failedNonce = failedMessage.nonce;
+    const existingIndex = messages.findIndex(
+      (message) => message.id === failedID || (failedNonce && message.nonce === failedNonce),
+    );
+    if (existingIndex >= 0) {
+      setActiveMessages(
+        messages.map((message, index) => (index === existingIndex ? failedMessage : message)),
+      );
+    } else {
+      setActiveMessages([...messages, failedMessage]);
+    }
+    composerNotice = {
+      kind: "error",
+      text: reloadFailed ? `${notice} The unfiltered timeline could not reload.` : notice,
+    };
+    await revealOwnSentMessage();
+  }
+
   async function dispatchDraft(draft: OutgoingDraft, existingNonce?: string, existingMessageID?: string) {
     const nonce = existingNonce ?? newNonce();
     const tmpID = `tmp_${nonce}`;
     const localID = existingMessageID ?? tmpID;
-    const shouldRevealSentMessage = !existingNonce && currentConversationKey() === draft.viewKey;
+    const matchesTopicFilter = !activeTopicFilterID || draft.topicID === activeTopicFilterID;
+    const shouldRevealSentMessage =
+      !existingNonce && currentConversationKey() === draft.viewKey && matchesTopicFilter;
     const shouldRefreshLatestAfterSend = shouldRevealSentMessage && activeHasNewer;
     pendingDrafts.set(nonce, draft);
     const placeholder = buildOptimisticMessage(nonce, draft, localID);
+    if (existingNonce) rememberRecoverableDraft(draft.viewKey, placeholder);
     if (existingNonce) {
       setActiveMessages(messages.map((m) => (m.id === localID ? placeholder : m)));
-    } else if (currentConversationKey() === draft.viewKey) {
+    } else if (currentConversationKey() === draft.viewKey && matchesTopicFilter) {
       setActiveMessages([...messages, placeholder]);
       void revealOwnSentMessage();
     }
@@ -2007,6 +2296,7 @@
       : `/api/channels/${draft.channelID}/messages`;
     const payload: Record<string, unknown> = { body: draft.body, nonce };
     if (draft.quotedMessageID) payload.quoted_message_id = draft.quotedMessageID;
+    if (draft.topicID) payload.topic_id = draft.topicID;
     try {
       const data = await api<{ message: Message }>(path, {
         method: "POST",
@@ -2031,10 +2321,15 @@
             status: "failed",
             attachments: draft.upload ? [...(message.attachments || []), draft.upload] : message.attachments,
           };
-          setActiveMessages(messages.map((m) => (m.id === localID ? failedMessage : m)));
+          await revealFailedDraft(
+            draft,
+            failedMessage,
+            "The message was sent, but its attachment failed. Retry or discard it below.",
+          );
           return;
         }
       }
+      forgetRecoverableDraft(draft.viewKey, message.id, nonce);
       pendingDrafts.delete(nonce);
       // Replace placeholder with the real message (or append if a concurrent
       // realtime reload already removed our placeholder).
@@ -2045,6 +2340,7 @@
         setActiveMessages(messages.map((m) => (m.id === message.id ? message : m)));
       } else if (
         belongsToView(message, currentConversationKey()) &&
+        (!activeTopicFilterID || message.topic_id === activeTopicFilterID) &&
         !messages.some((m) => m.id === message.id)
       ) {
         setActiveMessages([...messages, message]);
@@ -2058,9 +2354,11 @@
       }
     } catch (err) {
       console.warn("send failed", err);
-      setActiveMessages(messages.map((m) =>
-        m.id === localID ? { ...m, status: "failed" as const } : m,
-      ));
+      await revealFailedDraft(
+        draft,
+        { ...placeholder, status: "failed" },
+        "The message failed to send. Retry or discard it below.",
+      );
     }
   }
 
@@ -2078,7 +2376,11 @@
   }
 
   function discardFailedMessage(message: Message) {
-    if (message.nonce) pendingDrafts.delete(message.nonce);
+    if (message.nonce) {
+      const draft = pendingDrafts.get(message.nonce);
+      if (draft) forgetRecoverableDraft(draft.viewKey, message.id, message.nonce);
+      pendingDrafts.delete(message.nonce);
+    }
     setActiveMessages(messages.filter((m) => m.id !== message.id));
   }
 
@@ -2472,6 +2774,12 @@
   async function loadMessagesAroundSeq(seq: number, targetMessageID = "") {
     const targetKey = currentConversationKey();
     if (!targetKey) return;
+    if (activeTopicFilterID) {
+      updateActiveTopicFilter("");
+      messageWindows.delete(targetKey);
+      messagesLoading = true;
+    }
+    const targetScopeKey = activeMessageScopeKey();
     if (targetMessageID) {
       scrollMemory.set(targetKey, { atBottom: false, anchorMessageID: targetMessageID, anchorPixelOffset: 0 });
     }
@@ -2482,7 +2790,7 @@
     }
     try {
       const data = await api<MessagePage>(messagePagePath(`around_seq=${encodeURIComponent(String(seq))}&limit=${INITIAL_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== targetKey) return;
+      if (currentConversationKey() !== targetKey || activeMessageScopeKey() !== targetScopeKey) return;
       commitMessageWindow(targetKey, pageToWindow(data), "around");
       await tick();
       if (targetMessageID) {
@@ -2702,6 +3010,7 @@
       loadModerationMembers(workspaceID),
       loadSlashCommands(workspaceID),
       loadBotCommands(workspaceID, true),
+      loadTopics(workspaceID),
     ]);
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     if (selectedChannelID && !channels.some((channel) => channel.id === selectedChannelID)) {
@@ -2797,9 +3106,23 @@
       }
       return;
     }
+    if (
+      event.workspace_id === selectedWorkspaceID &&
+      event.payload.topic_id &&
+      !topics.some((topic) => topic.id === event.payload.topic_id)
+    ) {
+      await loadTopics(event.workspace_id);
+    }
     if (messageEventAlreadyAccounted(event)) return;
-    const affectsActiveView =
+    const affectsConversation =
       event.channel_id === selectedChannelID || event.payload.direct_conversation_id === selectedDirectID;
+    const affectsActiveView =
+      affectsConversation &&
+      !(
+        event.type === "message.created" &&
+        activeTopicFilterID &&
+        event.payload.topic_id !== activeTopicFilterID
+      );
     if (
       affectsActiveView &&
       (event.type === "reaction.added" || event.type === "reaction.removed")
@@ -2960,7 +3283,8 @@
     const { channelID, dmID } = messageEventScope(event);
     if (channelID) {
       const isActive = channelID === selectedChannelID && !selectedDirectID;
-      const activeAtBottom = isActive ? activeWasAtBottom ?? isAtLiveEdge() : false;
+      const activeAtBottom =
+        isActive && !activeTopicFilterID ? activeWasAtBottom ?? isAtLiveEdge() : false;
       const channel = channels.find((c) => c.id === channelID);
       const incomingSeq = seq > 0 ? seq : (channel?.last_seq || 0) + 1;
       if (isActive && !activeAtBottom && (channel?.unread_count || 0) === 0) {
@@ -3536,6 +3860,13 @@
       />
     {/if}
 
+    {#if activeTopic}
+      <div class="topic-filter" role="status">
+        <span>Showing topic <strong>{activeTopic.name}</strong></span>
+        <button type="button" onclick={() => void setTopicFilter("")}>Clear filter</button>
+      </div>
+    {/if}
+
     <MessageList
       messages={visibleMessages}
       {selectedDirect}
@@ -3559,7 +3890,7 @@
       canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
       {deletingMessageIDs}
       onListRef={(handle) => (messageList = handle)}
-      onActivateMessageComposer={() => (activeComposerContext = "message")}
+      onActivateMessageComposer={activateMessageComposer}
       onInlineImagePointerUp={handleInlineImagePointerUp}
       onOpenProfile={openUserProfile}
       onReply={setReplyTarget}
@@ -3581,6 +3912,8 @@
       {editController}
       editScope={activeConversationKey}
       onMessageEdited={applyEditedMessage}
+      {topics}
+      onSelectTopic={(topicID) => void setTopicFilter(topicID)}
     />
 
     <AgentProgress turns={agentProgressTurns} />
@@ -3610,6 +3943,22 @@
       </div>
     {/if}
 
+    {#if selectedChannelID && eligibleTopics.length > 0}
+      <label class="topic-picker">
+        <span>Topic</span>
+        <select
+          aria-label="Message topic"
+          value={selectedComposerTopicID}
+          onchange={(event) => (selectedComposerTopicID = event.currentTarget.value)}
+        >
+          <option value="">No topic</option>
+          {#each eligibleTopics as topic (topic.id)}
+            <option value={topic.id}>{topic.name}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
+
     <ChatComposer
       value={messageBody}
       placeholder={selectedDirect && !selectedDirectWritable ? "No active recipient" : selectedDirect ? `Message ${dmTitle(selectedDirect, user?.id)}` : selectedChannel ? `Message #${channelDisplayTitle(selectedChannel)}` : "Pick a channel to start"}
@@ -3634,7 +3983,7 @@
       }}
       onSubmit={() => void sendMessage()}
       onKeydown={handleComposerKey}
-      onFocus={() => (activeComposerContext = "message")}
+      onFocus={activateMessageComposer}
       onInputRef={(node) => (messageInput = node)}
       onUploadFile={uploadFile}
       onRemoveUpload={() => (pendingUpload = null)}

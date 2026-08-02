@@ -961,12 +961,43 @@ func TestMessagePageHTTPCursors(t *testing.T) {
 		t.Fatal(err)
 	}
 	channel := channels[0]
+	topic, err := st.CreateTopic(ctx, store.CreateTopicInput{
+		WorkspaceID: workspaces[0].ID,
+		ChannelID:   channel.ID,
+		Name:        "HTTP topic",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherChannel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{
+		WorkspaceID: workspaces[0].ID,
+		UserID:      owner.ID,
+		Name:        "other-topic-channel",
+		Kind:        "public",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherTopic, err := st.CreateTopic(ctx, store.CreateTopicInput{
+		WorkspaceID: workspaces[0].ID,
+		ChannelID:   otherChannel.ID,
+		Name:        "Other HTTP topic",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 1; i <= 12; i++ {
-		if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		input := store.CreateMessageInput{
 			ChannelID: channel.ID,
 			AuthorID:  owner.ID,
 			Body:      fmt.Sprintf("http page %02d", i),
-		}); err != nil {
+		}
+		if i%2 == 0 {
+			input.TopicID = topic.ID
+		}
+		if _, _, err := st.CreateMessage(ctx, input); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -998,12 +1029,24 @@ func TestMessagePageHTTPCursors(t *testing.T) {
 		t.Fatalf("unexpected around metadata: %#v", around)
 	}
 
+	filtered := getJSON[store.MessagePage](t, base+"?topic_id="+topic.ID+"&limit=3")
+	expectHTTPExactSeqs(t, filtered.Messages, 8, 10, 12)
+
 	expectStatus(t, http.MethodGet, base+"?before_seq=4&after_seq=7", nil, http.StatusBadRequest)
 	expectStatus(t, http.MethodGet, base+"?before_seq=", nil, http.StatusBadRequest)
 	expectStatus(t, http.MethodGet, base+"?after_seq=bad", nil, http.StatusBadRequest)
 	expectStatus(t, http.MethodGet, base+"?around_seq=-1", nil, http.StatusBadRequest)
 	expectStatus(t, http.MethodGet, base+"?mode=history", nil, http.StatusBadRequest)
 	expectStatus(t, http.MethodGet, base+"?mode=latest&before_seq=4", nil, http.StatusBadRequest)
+	expectStatus(t, http.MethodGet, base+"?topic_id=", nil, http.StatusBadRequest)
+	missingTopicError := getHTTPError(t, base+"?topic_id=top_missing", http.StatusBadRequest)
+	wrongChannelTopicError := getHTTPError(t, base+"?topic_id="+otherTopic.ID, http.StatusBadRequest)
+	if missingTopicError != wrongChannelTopicError {
+		t.Fatalf("topic validation leaked scope details: missing=%q wrong_channel=%q", missingTopicError, wrongChannelTopicError)
+	}
+	if missingTopicError != "invalid message page request: topic is unavailable" {
+		t.Fatalf("unexpected topic validation error: %q", missingTopicError)
+	}
 }
 
 func TestRouteResolverAPI(t *testing.T) {
@@ -2278,6 +2321,26 @@ func expectStatus(t *testing.T, method, endpoint string, body io.Reader, status 
 		payload, _ := io.ReadAll(resp.Body)
 		t.Fatalf("%s %s: expected %d, got %s %s", method, endpoint, status, resp.Status, string(payload))
 	}
+}
+
+func getHTTPError(t *testing.T, endpoint string, status int) string {
+	t.Helper()
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != status {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET %s: expected %d, got %s %s", endpoint, status, resp.Status, string(payload))
+	}
+	var payload struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload.Error
 }
 
 func expectStatusAsUser(t *testing.T, userID, method, endpoint string, body io.Reader, status int) {
@@ -3805,6 +3868,18 @@ func expectHTTPSeqs(t *testing.T, messages []store.Message, first, last int64) {
 		want := first + int64(i)
 		if message.ChannelSeq == nil || *message.ChannelSeq != want {
 			t.Fatalf("message %d: expected seq %d, got %#v", i, want, message.ChannelSeq)
+		}
+	}
+}
+
+func expectHTTPExactSeqs(t *testing.T, messages []store.Message, want ...int64) {
+	t.Helper()
+	if len(messages) != len(want) {
+		t.Fatalf("message count = %d, want %d: %#v", len(messages), len(want), messages)
+	}
+	for i, message := range messages {
+		if message.ChannelSeq == nil || *message.ChannelSeq != want[i] {
+			t.Fatalf("message[%d] seq = %v, want %d: %#v", i, message.ChannelSeq, want[i], messages)
 		}
 	}
 }
