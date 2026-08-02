@@ -46,7 +46,11 @@ async function clickclackAsync(args: string[], env: NodeJS.ProcessEnv = {}): Pro
   return stdout.trim();
 }
 
-async function createGeneralChannelRoute(page: Page, label: string): Promise<string> {
+async function createGeneralChannelRoute(
+  page: Page,
+  label: string,
+  isolatedUser = false,
+): Promise<string> {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: `${label} ${suffix}` },
@@ -55,6 +59,28 @@ async function createGeneralChannelRoute(page: Page, label: string): Promise<str
   const { workspace } = (await workspaceResponse.json()) as {
     workspace: { id: string; route_id: string };
   };
+  if (isolatedUser) {
+    const userID = execFileSync(
+      "go",
+      [
+        "run",
+        "./apps/api/cmd/clickclack",
+        "admin",
+        "user",
+        "create",
+        "--data",
+        "./data/e2e",
+        "--workspace",
+        workspace.id,
+        "--name",
+        `${label} Tester`,
+        "--email",
+        `${label.toLowerCase().replaceAll(" ", "-")}-${suffix}@example.com`,
+      ],
+      { cwd: process.cwd(), encoding: "utf8" },
+    ).trim();
+    await page.setExtraHTTPHeaders({ "X-ClickClack-User": userID });
+  }
   const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
     data: { name: "general", kind: "public" },
   });
@@ -1092,6 +1118,115 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expect.poll(() => messageSide(selfMessage)).toBe("right");
   await expect.poll(() => messageSide(humanMessage)).toBe("right");
   await expect.poll(() => messageSide(agentMessage)).toBe("right");
+});
+
+test("keeps Markdown lists and blockquotes inside right-aligned messages", async ({ page }) => {
+  const route = await createGeneralChannelRoute(page, "Right aligned Markdown", true);
+  const markdownBody = [
+    "Right-aligned Markdown:",
+    "",
+    "- Chat ID: `channel`",
+    "  - Nested message ID: `message`",
+    "",
+    "- First paragraph stays with its marker.",
+    "",
+    "  Second paragraph stays readable.",
+    "",
+    "> Quoted context stays on the message side.",
+    "",
+    "1. Ordered parent",
+    "   1. Ordered nested",
+  ].join("\n");
+
+  await page.goto(route);
+  await waitForAppReady(page);
+  await page.evaluate(() => {
+    localStorage.removeItem("clickclack:message-layout:v1");
+    document.documentElement.removeAttribute("data-message-layout");
+  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-message-layout");
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await page.getByLabel("Message body").fill(markdownBody);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await page.getByRole("button", { name: /Account settings for/ }).click();
+  const settings = page.getByLabel("Account settings");
+  const userAlign = settings.getByLabel("Your message alignment");
+  await userAlign.selectOption("right");
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+
+  const row = page.locator(".message-row", {
+    has: page.getByText("Right-aligned Markdown:", { exact: true }),
+  });
+  const group = row.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' message-group ')][1]",
+  );
+  await expect(group).toHaveClass(/is-self/);
+  const markdown = row.locator(":scope > .message-content > .markdown");
+  await expect(markdown).toBeVisible();
+  await expect(markdown.locator("ul")).toHaveCount(2);
+  await expect(markdown.locator("ol")).toHaveCount(2);
+  await expect(markdown.locator("blockquote")).toHaveCount(1);
+
+  const layout = await markdown.evaluate((element) => {
+    const list = element.querySelector(":scope > ul");
+    const nestedList = element.querySelector(":scope > ul > li > ul");
+    const looseItem = element.querySelector(":scope > ul > li:nth-child(2)");
+    const orderedList = element.querySelector(":scope > ol");
+    const nestedOrderedList = element.querySelector(":scope > ol > li > ol");
+    const quote = element.querySelector("blockquote");
+    if (!list || !nestedList || !looseItem || !orderedList || !nestedOrderedList || !quote) {
+      throw new Error("Expected nested and loose Markdown lists and blockquote");
+    }
+    const listStyle = getComputedStyle(list);
+    const nestedListStyle = getComputedStyle(nestedList);
+    const orderedListStyle = getComputedStyle(orderedList);
+    const nestedOrderedListStyle = getComputedStyle(nestedOrderedList);
+    const firstParagraph = looseItem.querySelector(":scope > p:first-child");
+    if (!firstParagraph) throw new Error("Expected loose list paragraph");
+    const quoteStyle = getComputedStyle(quote);
+    const firstItem = list.querySelector("li");
+    if (!firstItem) throw new Error("Expected Markdown list item");
+    const messageRect = element.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    const itemRect = firstItem.getBoundingClientRect();
+    return {
+      textAlign: getComputedStyle(element).textAlign,
+      listPaddingLeft: listStyle.paddingLeft,
+      listPaddingRight: listStyle.paddingRight,
+      listStylePosition: listStyle.listStylePosition,
+      nestedListPaddingRight: nestedListStyle.paddingRight,
+      nestedListStylePosition: nestedListStyle.listStylePosition,
+      orderedListPaddingRight: orderedListStyle.paddingRight,
+      nestedOrderedListPaddingRight: nestedOrderedListStyle.paddingRight,
+      looseFirstParagraphDisplay: getComputedStyle(firstParagraph).display,
+      listRightInset: messageRect.right - listRect.right,
+      itemRightInset: listRect.right - itemRect.right,
+      quoteBorderLeft: quoteStyle.borderLeftWidth,
+      quoteBorderRight: quoteStyle.borderRightWidth,
+      quotePaddingLeft: quoteStyle.paddingLeft,
+      quotePaddingRight: quoteStyle.paddingRight,
+    };
+  });
+  expect(layout).toEqual({
+    textAlign: "right",
+    listPaddingLeft: "0px",
+    listPaddingRight: "0px",
+    listStylePosition: "inside",
+    nestedListPaddingRight: "22px",
+    nestedListStylePosition: "inside",
+    orderedListPaddingRight: "0px",
+    nestedOrderedListPaddingRight: "22px",
+    looseFirstParagraphDisplay: "inline",
+    listRightInset: expect.any(Number),
+    itemRightInset: 0,
+    quoteBorderLeft: "0px",
+    quoteBorderRight: "3px",
+    quotePaddingLeft: "0px",
+    quotePaddingRight: "12px",
+  });
+  expect(layout.listRightInset).toBeLessThanOrEqual(1);
+  expect(layout.itemRightInset).toBe(0);
 });
 
 test("browser notifications require explicit profile opt-in", async ({ page }) => {
