@@ -85,6 +85,7 @@
   let activeTopicFilterID = "";
   let topicFilterGeneration = 0;
   let topicConversationKey = "";
+  let topicFilterLoading = false;
   let recoverableDraftMessages = new Map<string, Message[]>();
   let selectedThreadState: ThreadState | null = null;
   let selectedProfile: User | null = null;
@@ -271,6 +272,7 @@
   function resetTopicStateForConversation(conversationKey: string) {
     if (conversationKey === topicConversationKey) return;
     topicConversationKey = conversationKey;
+    topicFilterLoading = false;
     selectedComposerTopicID = "";
     updateActiveTopicFilter("");
   }
@@ -1172,12 +1174,80 @@
   }
 
   async function setTopicFilter(topicID: string) {
-    if (!selectedChannelID || topicID === activeTopicFilterID) return;
+    if (!selectedChannelID || topicID === activeTopicFilterID || topicFilterLoading) return;
+    const conversationKey = currentConversationKey();
+    const previousTopicID = activeTopicFilterID;
+    const previousComposerTopicID = selectedComposerTopicID;
+    const previousWindow = messageWindows.get(conversationKey);
+    const previousScroll = scrollMemory.get(conversationKey);
+    topicFilterLoading = true;
     updateActiveTopicFilter(topicID);
+    const generation = topicFilterGeneration;
     if (topicID) selectedComposerTopicID = topicID;
-    scrollMemory.delete(currentConversationKey());
-    messageWindows.delete(currentConversationKey());
-    await loadLatestMessages();
+    scrollMemory.delete(conversationKey);
+    messageWindows.delete(conversationKey);
+    try {
+      await loadLatestMessages();
+      if (
+        currentConversationKey() !== conversationKey ||
+        topicFilterGeneration !== generation
+      ) {
+        return;
+      }
+    } catch (error) {
+      if (
+        currentConversationKey() !== conversationKey ||
+        topicFilterGeneration !== generation
+      ) {
+        return;
+      }
+      updateActiveTopicFilter(previousTopicID);
+      if (selectedComposerTopicID === topicID) {
+        selectedComposerTopicID = previousComposerTopicID;
+      }
+      messageWindows.delete(conversationKey);
+      const rollbackGeneration = topicFilterGeneration;
+      try {
+        await loadLatestMessages();
+        if (
+          currentConversationKey() !== conversationKey ||
+          topicFilterGeneration !== rollbackGeneration
+        ) {
+          return;
+        }
+        if (previousScroll) {
+          scrollMemory.set(conversationKey, previousScroll);
+          viewRestoreState = previousScroll;
+        }
+      } catch {
+        if (
+          currentConversationKey() !== conversationKey ||
+          topicFilterGeneration !== rollbackGeneration
+        ) {
+          return;
+        }
+        if (previousWindow) {
+          rememberMessageWindow(conversationKey, previousWindow);
+          commitView(conversationKey, previousWindow.messages);
+          updateActiveMessageWindowFlags(conversationKey, previousWindow);
+        } else {
+          setActiveMessages(localDraftMessagesForView(conversationKey));
+        }
+        if (previousScroll) {
+          scrollMemory.set(conversationKey, previousScroll);
+          viewRestoreState = previousScroll;
+        }
+      }
+      composerNotice = {
+        kind: "error",
+        text:
+          error instanceof Error
+            ? `Topic could not change: ${error.message}`
+            : "Topic could not change",
+      };
+    } finally {
+      topicFilterLoading = false;
+    }
   }
 
   function pageToWindow(page: MessagePage): MessageWindow {
