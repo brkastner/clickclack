@@ -46,7 +46,11 @@ async function clickclackAsync(args: string[], env: NodeJS.ProcessEnv = {}): Pro
   return stdout.trim();
 }
 
-async function createGeneralChannelRoute(page: Page, label: string): Promise<string> {
+async function createGeneralChannelRoute(
+  page: Page,
+  label: string,
+  isolatedUser = false,
+): Promise<string> {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: `${label} ${suffix}` },
@@ -55,6 +59,28 @@ async function createGeneralChannelRoute(page: Page, label: string): Promise<str
   const { workspace } = (await workspaceResponse.json()) as {
     workspace: { id: string; route_id: string };
   };
+  if (isolatedUser) {
+    const userID = execFileSync(
+      "go",
+      [
+        "run",
+        "./apps/api/cmd/clickclack",
+        "admin",
+        "user",
+        "create",
+        "--data",
+        "./data/e2e",
+        "--workspace",
+        workspace.id,
+        "--name",
+        `${label} Tester`,
+        "--email",
+        `${label.toLowerCase().replaceAll(" ", "-")}-${suffix}@example.com`,
+      ],
+      { cwd: process.cwd(), encoding: "utf8" },
+    ).trim();
+    await page.setExtraHTTPHeaders({ "X-ClickClack-User": userID });
+  }
   const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
     data: { name: "general", kind: "public" },
   });
@@ -1095,7 +1121,7 @@ test("aligns self and other messages independently", async ({ page }) => {
 });
 
 test("keeps Markdown lists and blockquotes inside right-aligned messages", async ({ page }) => {
-  const route = await createGeneralChannelRoute(page, "Right aligned Markdown");
+  const route = await createGeneralChannelRoute(page, "Right aligned Markdown", true);
   const markdownBody = [
     "Right-aligned Markdown:",
     "",
@@ -1114,6 +1140,11 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
 
   await page.goto(route);
   await waitForAppReady(page);
+  await page.evaluate(() => {
+    localStorage.removeItem("clickclack:message-layout:v1");
+    document.documentElement.removeAttribute("data-message-layout");
+  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-message-layout");
   await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
   await page.getByLabel("Message body").fill(markdownBody);
   await page.getByRole("button", { name: "Send" }).click();
@@ -1122,10 +1153,15 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
   const settings = page.getByLabel("Account settings");
   const userAlign = settings.getByLabel("Your message alignment");
   await userAlign.selectOption("right");
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
 
   const row = page.locator(".message-row", {
     has: page.getByText("Right-aligned Markdown:", { exact: true }),
   });
+  const group = row.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' message-group ')][1]",
+  );
+  await expect(group).toHaveClass(/is-self/);
   const markdown = row.locator(":scope > .message-content > .markdown");
   await expect(markdown).toBeVisible();
   await expect(markdown.locator("ul")).toHaveCount(2);
