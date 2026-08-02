@@ -47,6 +47,8 @@ The value is not stored on message rows or exported as a metrics label.
 | Topics        | `/api/workspaces/{id}/topics` | [messages](../features/messages.md) |
 | Channels      | `/api/workspaces/{id}/channels`, `/api/channels/{id}` | [workspaces](../features/workspaces.md) |
 | Messages      | `/api/channels/{id}/messages`, `/api/messages/by-nonce`, `/api/messages/{id}` | [messages](../features/messages.md) |
+| Channel attention | `/api/channels/{id}/notification-settings` | [channel notifications](../features/channel-notifications.md) |
+| Pinned messages | `/api/channels/{id}/pins` | [pinned messages](../features/pinned-messages.md) |
 | Threads       | `/api/messages/{id}/thread`, `/api/messages/{id}/thread/replies` | [threads](../features/threads.md) |
 | Replies       | `quoted_message_id` on any message-create endpoint | [replies](../features/replies.md) |
 | Reactions     | `/api/messages/{id}/reactions` | [reactions](../features/reactions.md) |

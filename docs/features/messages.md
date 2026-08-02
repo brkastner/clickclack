@@ -196,6 +196,6 @@ clients don't need a second round-trip. Avatar URLs are passed through as-is.
 ## What is intentionally missing
 
 - Hard delete. The soft-delete row stays for cursor stability.
-- Pinning and bookmarks.
+- Per-user message bookmarks. Channel pins are shared workspace state.
 - Per-message permissions beyond author edit/delete and workspace-owner channel
   deletion.
