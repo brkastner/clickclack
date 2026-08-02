@@ -2,6 +2,7 @@
 
 ## 0.2.2 - Unreleased
 
+- Updated Go, web, desktop, Cloudflare, CI action, package-manager, and container-base dependencies.
 - Added optional human-readable channel display titles while preserving slug-based routing and uniqueness.
 - Added agent-friendly CLI commands for adding and removing message reactions through the existing public APIs, with exact JSON output and terminal-safe human output. Thanks @PollyBot13.
 - Removed the redundant "Open in ClickClack" link from embedded channel headers, leaving external navigation to the host's own control.
