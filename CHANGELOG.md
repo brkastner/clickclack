@@ -3,9 +3,6 @@
 ## 0.3.0 - 2026-08-02
 
 - Added coherent conversation organization and attention tools: topic selection and filtered timelines, channel-wide pins with a visible 100-message ceiling, per-channel all/mentions/muted notification preferences, resolved mention highlighting whose current-user emphasis follows that preference, and workspace-visible responding-agent identity beside channel and thread composers. Thanks @PollyBot13 and @jjjhenriksen.
-
-## 0.2.2 - 2026-08-01
-
 - Updated Go, web, desktop, Cloudflare, CI action, package-manager, and container-base dependencies.
 - Fixed bot topic endpoints accepting cross-workspace list and create operations by enforcing the token workspace scope. Thanks @ShiroKSH.
 - Fixed right-aligned messages rendering Markdown lists and blockquotes outside the message bubble. Thanks @jjjhenriksen.
