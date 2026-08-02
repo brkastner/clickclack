@@ -232,6 +232,39 @@ func (q *Queries) CountOAuthTransactionsForBinding(ctx context.Context, browserB
 	return count, err
 }
 
+const countPinnedMessage = `-- name: CountPinnedMessage :one
+SELECT COUNT(*) FROM pinned_messages
+WHERE channel_id = $1
+  AND message_id = $2
+`
+
+type CountPinnedMessageParams struct {
+	ChannelID string `json:"channel_id"`
+	MessageID string `json:"message_id"`
+}
+
+func (q *Queries) CountPinnedMessage(ctx context.Context, arg CountPinnedMessageParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPinnedMessage, arg.ChannelID, arg.MessageID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPinnedMessages = `-- name: CountPinnedMessages :one
+SELECT COUNT(*)
+FROM pinned_messages p
+JOIN messages m ON m.id = p.message_id
+WHERE p.channel_id = $1
+  AND m.deleted_at IS NULL
+`
+
+func (q *Queries) CountPinnedMessages(ctx context.Context, channelID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPinnedMessages, channelID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRecentWorkspaceMessagesByAuthor = `-- name: CountRecentWorkspaceMessagesByAuthor :one
 SELECT COUNT(*)
 FROM messages m
@@ -3730,6 +3763,151 @@ func (q *Queries) ListPendingUploadCleanups(ctx context.Context, rowLimit int32)
 	return items, nil
 }
 
+const listPinnedMessages = `-- name: ListPinnedMessages :many
+SELECT m.id, COALESCE(m.route_id, '') AS route_id, m.workspace_id,
+       COALESCE(m.channel_id, '') AS channel_id,
+       COALESCE(m.direct_conversation_id, '') AS direct_conversation_id,
+       m.author_id, m.parent_message_id, m.thread_root_id,
+       COALESCE(m.topic_id, '') AS topic_id, m.channel_seq, m.thread_seq,
+       m.body, m.body_format, m.created_at, m.edited_at, m.deleted_at,
+       u.id AS user_id, u.kind AS user_kind, u.owner_user_id,
+       u.display_name, u.handle, u.avatar_url, u.created_at AS user_created_at,
+       author_tombstone.former_handle AS author_former_handle,
+       author_tombstone.deleted_at AS author_deleted_at,
+       m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id,
+       qu.id AS quoted_user_id, qu.kind AS quoted_user_kind,
+       qu.owner_user_id AS quoted_owner_user_id,
+       qu.display_name AS quoted_display_name, qu.handle AS quoted_handle,
+       qu.avatar_url AS quoted_avatar_url, qu.created_at AS quoted_user_created_at,
+       quoted_tombstone.former_handle AS quoted_former_handle,
+       quoted_tombstone.deleted_at AS quoted_deleted_at,
+       m.client_nonce, m.kind AS message_kind, COALESCE(m.turn_id, '') AS turn_id
+FROM pinned_messages p
+JOIN messages m ON m.id = p.message_id
+JOIN users u ON u.id = m.author_id
+LEFT JOIN bot_tombstones author_tombstone ON author_tombstone.bot_user_id = u.id
+LEFT JOIN users qu ON qu.id = m.quoted_author_id
+LEFT JOIN bot_tombstones quoted_tombstone ON quoted_tombstone.bot_user_id = qu.id
+WHERE p.workspace_id = $1
+  AND p.channel_id = $2
+  AND m.deleted_at IS NULL
+ORDER BY p.created_at DESC
+LIMIT $3
+`
+
+type ListPinnedMessagesParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	LimitCount  int32  `json:"limit_count"`
+}
+
+type ListPinnedMessagesRow struct {
+	ID                   string         `json:"id"`
+	RouteID              string         `json:"route_id"`
+	WorkspaceID          string         `json:"workspace_id"`
+	ChannelID            string         `json:"channel_id"`
+	DirectConversationID string         `json:"direct_conversation_id"`
+	AuthorID             string         `json:"author_id"`
+	ParentMessageID      sql.NullString `json:"parent_message_id"`
+	ThreadRootID         string         `json:"thread_root_id"`
+	TopicID              string         `json:"topic_id"`
+	ChannelSeq           sql.NullInt64  `json:"channel_seq"`
+	ThreadSeq            sql.NullInt64  `json:"thread_seq"`
+	Body                 string         `json:"body"`
+	BodyFormat           string         `json:"body_format"`
+	CreatedAt            string         `json:"created_at"`
+	EditedAt             sql.NullString `json:"edited_at"`
+	DeletedAt            sql.NullString `json:"deleted_at"`
+	UserID               string         `json:"user_id"`
+	UserKind             string         `json:"user_kind"`
+	OwnerUserID          sql.NullString `json:"owner_user_id"`
+	DisplayName          string         `json:"display_name"`
+	Handle               string         `json:"handle"`
+	AvatarUrl            string         `json:"avatar_url"`
+	UserCreatedAt        string         `json:"user_created_at"`
+	AuthorFormerHandle   sql.NullString `json:"author_former_handle"`
+	AuthorDeletedAt      sql.NullString `json:"author_deleted_at"`
+	QuotedMessageID      sql.NullString `json:"quoted_message_id"`
+	QuotedBodySnapshot   string         `json:"quoted_body_snapshot"`
+	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
+	QuotedUserID         sql.NullString `json:"quoted_user_id"`
+	QuotedUserKind       sql.NullString `json:"quoted_user_kind"`
+	QuotedOwnerUserID    sql.NullString `json:"quoted_owner_user_id"`
+	QuotedDisplayName    sql.NullString `json:"quoted_display_name"`
+	QuotedHandle         sql.NullString `json:"quoted_handle"`
+	QuotedAvatarUrl      sql.NullString `json:"quoted_avatar_url"`
+	QuotedUserCreatedAt  sql.NullString `json:"quoted_user_created_at"`
+	QuotedFormerHandle   sql.NullString `json:"quoted_former_handle"`
+	QuotedDeletedAt      sql.NullString `json:"quoted_deleted_at"`
+	ClientNonce          string         `json:"client_nonce"`
+	MessageKind          string         `json:"message_kind"`
+	TurnID               string         `json:"turn_id"`
+}
+
+func (q *Queries) ListPinnedMessages(ctx context.Context, arg ListPinnedMessagesParams) ([]ListPinnedMessagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPinnedMessages, arg.WorkspaceID, arg.ChannelID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPinnedMessagesRow
+	for rows.Next() {
+		var i ListPinnedMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RouteID,
+			&i.WorkspaceID,
+			&i.ChannelID,
+			&i.DirectConversationID,
+			&i.AuthorID,
+			&i.ParentMessageID,
+			&i.ThreadRootID,
+			&i.TopicID,
+			&i.ChannelSeq,
+			&i.ThreadSeq,
+			&i.Body,
+			&i.BodyFormat,
+			&i.CreatedAt,
+			&i.EditedAt,
+			&i.DeletedAt,
+			&i.UserID,
+			&i.UserKind,
+			&i.OwnerUserID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.UserCreatedAt,
+			&i.AuthorFormerHandle,
+			&i.AuthorDeletedAt,
+			&i.QuotedMessageID,
+			&i.QuotedBodySnapshot,
+			&i.QuotedAuthorID,
+			&i.QuotedUserID,
+			&i.QuotedUserKind,
+			&i.QuotedOwnerUserID,
+			&i.QuotedDisplayName,
+			&i.QuotedHandle,
+			&i.QuotedAvatarUrl,
+			&i.QuotedUserCreatedAt,
+			&i.QuotedFormerHandle,
+			&i.QuotedDeletedAt,
+			&i.ClientNonce,
+			&i.MessageKind,
+			&i.TurnID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReactionsForMessages = `-- name: ListReactionsForMessages :many
 SELECT
   r.message_id,
@@ -4505,6 +4683,28 @@ func (q *Queries) LockBotWorkspaceMembership(ctx context.Context, arg LockBotWor
 	return user_id, err
 }
 
+const lockChannelForPinning = `-- name: LockChannelForPinning :one
+SELECT id FROM channels WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockChannelForPinning(ctx context.Context, channelID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockChannelForPinning, channelID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockMessageForPinning = `-- name: LockMessageForPinning :one
+SELECT id FROM messages WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockMessageForPinning(ctx context.Context, messageID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockMessageForPinning, messageID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockMessageForReaction = `-- name: LockMessageForReaction :one
 SELECT id
 FROM messages
@@ -4625,6 +4825,36 @@ func (q *Queries) MembershipRolesForUpdate(ctx context.Context, arg MembershipRo
 		return nil, err
 	}
 	return items, nil
+}
+
+const pinMessage = `-- name: PinMessage :execrows
+INSERT INTO pinned_messages (id, workspace_id, channel_id, message_id, pinned_by, created_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT(channel_id, message_id) DO NOTHING
+`
+
+type PinMessageParams struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	MessageID   string `json:"message_id"`
+	PinnedBy    string `json:"pinned_by"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func (q *Queries) PinMessage(ctx context.Context, arg PinMessageParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, pinMessage,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.ChannelID,
+		arg.MessageID,
+		arg.PinnedBy,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const pruneEvents = `-- name: PruneEvents :execrows
@@ -5098,6 +5328,25 @@ WHERE conversation_id = $1
 func (q *Queries) UnhideDirectConversationForMembers(ctx context.Context, conversationID string) error {
 	_, err := q.db.ExecContext(ctx, unhideDirectConversationForMembers, conversationID)
 	return err
+}
+
+const unpinMessage = `-- name: UnpinMessage :execrows
+DELETE FROM pinned_messages
+WHERE channel_id = $1
+  AND message_id = $2
+`
+
+type UnpinMessageParams struct {
+	ChannelID string `json:"channel_id"`
+	MessageID string `json:"message_id"`
+}
+
+func (q *Queries) UnpinMessage(ctx context.Context, arg UnpinMessageParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, unpinMessage, arg.ChannelID, arg.MessageID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateAppearanceBoardTheme = `-- name: UpdateAppearanceBoardTheme :exec

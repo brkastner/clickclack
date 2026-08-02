@@ -6,6 +6,8 @@
     channelNotifPreference?: ChannelNotificationPreference | null;
     channelNotifSaving?: boolean;
     channelTitle?: string;
+    pinsAvailable?: boolean;
+    pinnedOpen?: boolean;
     externalURL?: string;
     connected: boolean;
     mobileNavigation: boolean;
@@ -20,6 +22,7 @@
     onSearchQuery: (value: string) => void;
     onToggleSidebar: () => void;
     onToggleChannelNotifications?: () => void;
+    onPinnedItems: () => void;
   };
 
   function notifTitle(pref: ChannelNotificationPreference): string {
@@ -32,6 +35,8 @@
     channelNotifPreference = undefined,
     channelNotifSaving = false,
     channelTitle,
+    pinsAvailable = false,
+    pinnedOpen = false,
     externalURL,
     connected,
     mobileNavigation,
@@ -46,6 +51,7 @@
     onSearchQuery,
     onToggleSidebar,
     onToggleChannelNotifications = () => {},
+    onPinnedItems,
   }: Props = $props();
 
   const externalHref = $derived(safeExternalChannelURL(externalURL));
@@ -137,27 +143,41 @@
       <button type="submit" class="search-submit">Search</button>
     </form>
 
-    {#if channelNotifPreference}
+    {#if channelNotifPreference || pinsAvailable}
       <div class="desktop-titlebar-actions" aria-label="Channel tools">
-        <button
-          type="button"
-          title={notifTitle(channelNotifPreference)}
-          aria-label={notifTitle(channelNotifPreference)}
-          aria-busy={channelNotifSaving}
-          disabled={channelNotifSaving}
-          onclick={onToggleChannelNotifications}
-        >
-          {#if channelNotifPreference === "muted"}
-            <span aria-hidden="true">🔕</span>
-          {:else if channelNotifPreference === "mentions"}
-            <span aria-hidden="true">@</span>
-          {:else}
-            <span aria-hidden="true">🔔</span>
-          {/if}
-        </button>
+        {#if channelNotifPreference}
+          <button
+            type="button"
+            title={notifTitle(channelNotifPreference)}
+            aria-label={notifTitle(channelNotifPreference)}
+            aria-busy={channelNotifSaving}
+            disabled={channelNotifSaving}
+            onclick={onToggleChannelNotifications}
+          >
+            {#if channelNotifPreference === "muted"}
+              <span aria-hidden="true">🔕</span>
+            {:else if channelNotifPreference === "mentions"}
+              <span aria-hidden="true">@</span>
+            {:else}
+              <span aria-hidden="true">🔔</span>
+            {/if}
+          </button>
+        {/if}
+        {#if pinsAvailable}
+          <button
+            type="button"
+            title={pinnedOpen ? "Close pinned items" : "Pinned items"}
+            aria-label={pinnedOpen ? "Close pinned items" : "Pinned items"}
+            class:active={pinnedOpen}
+            onclick={onPinnedItems}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
+            </svg>
+          </button>
+        {/if}
       </div>
     {/if}
-
     {#if !connected}
       <span class="desktop-titlebar-status" role="status">Connecting…</span>
     {/if}

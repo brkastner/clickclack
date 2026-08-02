@@ -60,6 +60,14 @@ const (
 	ChannelNotifyMuted    = "muted"
 )
 
+var (
+	ErrAlreadyPinned         = errors.New("message is already pinned")
+	ErrPinnedMessageNotFound = errors.New("pinned message not found")
+	ErrPinnedMessageLimit    = errors.New("channel pin limit reached (maximum 100)")
+)
+
+const MaxPinnedMessagesPerChannel = 100
+
 // ErrUploadNonceConflict is returned when a client reuses an upload nonce in
 // another workspace.
 var ErrUploadNonceConflict = errors.New("upload nonce was already used in another workspace")
@@ -247,6 +255,15 @@ type ReactionSummary struct {
 	Emoji       string `json:"emoji"`
 	Count       int64  `json:"count"`
 	ReactedByMe bool   `json:"reacted_by_me"`
+}
+
+type PinnedMessage struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	MessageID   string `json:"message_id"`
+	PinnedBy    string `json:"pinned_by"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type Message struct {
@@ -1206,12 +1223,15 @@ type Store interface {
 	EnsureThreadRouteID(ctx context.Context, userID, rootMessageID string) (Message, error)
 	CreateMessage(ctx context.Context, input CreateMessageInput) (Message, Event, error)
 	UpdateMessage(ctx context.Context, input UpdateMessageInput) (Message, Event, error)
-	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, Event, error)
+	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, []Event, error)
 	GetThread(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
 	GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
 	CreateThreadReply(ctx context.Context, input CreateThreadReplyInput) (Message, ThreadState, []Event, error)
 	AddReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	RemoveReaction(ctx context.Context, input CreateReactionInput) (Event, error)
+	PinMessage(ctx context.Context, channelID, messageID, userID string) (PinnedMessage, Event, error)
+	UnpinMessage(ctx context.Context, channelID, messageID, userID string) (Event, error)
+	ListPinnedMessages(ctx context.Context, channelID, userID string, limit int) ([]Message, error)
 	LatestEventCursor(ctx context.Context, workspaceID, userID string) (string, error)
 	EventCursorExists(ctx context.Context, workspaceID, userID, cursor string) (bool, error)
 	ListEventsAfter(ctx context.Context, workspaceID, userID, cursor string, limit int) ([]Event, error)

@@ -28,6 +28,9 @@
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
+    channelID?: string;
+    pinnedMessageIDs?: ReadonlySet<string>;
+    onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
@@ -55,6 +58,9 @@
     onRetry,
     onDiscard,
     onDeleteMessage,
+    channelID = "",
+    pinnedMessageIDs = new Set<string>(),
+    onTogglePin,
     editController,
     editScope = "",
     onMessageEdited,
@@ -126,6 +132,9 @@
         {onDeleteMessage}
         {topics}
         {onSelectTopic}
+        {channelID}
+        pinned={pinnedMessageIDs.has(message.id)}
+        {onTogglePin}
       />
     {/each}
   </div>

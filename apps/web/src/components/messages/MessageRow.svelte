@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
+  import { readableAPIError } from "../../lib/api";
   import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
@@ -46,6 +47,9 @@
     onDeleteMessage?: (message: Message) => void;
     topics?: Topic[];
     onSelectTopic?: (topicID: string) => void;
+    channelID?: string;
+    pinned?: boolean;
+    onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
   };
 
   let {
@@ -76,6 +80,9 @@
     onDeleteMessage,
     topics = [],
     onSelectTopic = () => {},
+    channelID = "",
+    pinned = false,
+    onTogglePin,
   }: Props = $props();
 
   let editSession = $derived(editController?.session(editScope));
@@ -171,6 +178,8 @@
   let showReactPicker = $state(false);
   let showMenu = $state(false);
   let copyStatus = $state<"copied" | "failed" | "">("");
+  let pinSaving = $state(false);
+  let pinError = $state("");
   let reactPickerUp = $state(false);
   let menuUp = $state(false);
   let rowEl = $state<HTMLDivElement>();
@@ -474,6 +483,25 @@
     onDeleteMessage?.(message);
   }
 
+  async function menuTogglePin() {
+    if (!channelID || !onTogglePin || pinSaving) return;
+    pinSaving = true;
+    pinError = "";
+    try {
+      await onTogglePin(message, pinned);
+      closeMenu();
+    } catch (error) {
+      pinError = readableAPIError(error, "Could not update pin");
+    } finally {
+      pinSaving = false;
+    }
+  }
+
+  async function sheetTogglePin() {
+    await menuTogglePin();
+    if (!pinError) closeActionSheet();
+  }
+
   $effect(() => {
     if (!showReactPicker && !showMenu) return;
     const onDocClick = (event: MouseEvent) => {
@@ -753,6 +781,15 @@
             </svg>
             Copy text
           </button>
+          {#if channelID && onTogglePin}
+            <button type="button" role="menuitem" disabled={pinSaving} onclick={menuTogglePin}>
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z"/>
+              </svg>
+              {pinned ? "Unpin message" : "Pin message"}
+            </button>
+            {#if pinError}<span class="message-menu-error" role="status">{pinError}</span>{/if}
+          {/if}
           {#if canEditMessage && editController && editScope && !editing}
             <div class="menu-sep" role="separator"></div>
             <button type="button" role="menuitem" onclick={menuEdit}>
@@ -790,6 +827,10 @@
       canReply={!isPending && !isFailed}
       canOpenThread={canOpenThread}
       canEdit={canEditMessage && Boolean(editController) && Boolean(editScope) && !editing}
+      canPin={Boolean(channelID && onTogglePin)}
+      {pinned}
+      pinning={pinSaving}
+      {pinError}
       canDelete={canDeleteMessage && Boolean(onDeleteMessage)}
       {deleting}
       {copyStatus}
@@ -798,6 +839,7 @@
       onReply={sheetReply}
       onCopy={sheetCopy}
       onEdit={sheetEdit}
+      onTogglePin={sheetTogglePin}
       onDelete={sheetDelete}
       onClose={closeActionSheet}
       returnFocus={actionSheetReturnFocus}

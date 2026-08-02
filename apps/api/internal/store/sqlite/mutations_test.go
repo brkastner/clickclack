@@ -57,19 +57,19 @@ func TestMutationsCreateDurableEvents(t *testing.T) {
 	if updatedMessage.Body != "after" || updatedMessage.EditedAt == nil || updateEvent.Type != "message.updated" {
 		t.Fatalf("unexpected message update: %#v %#v", updatedMessage, updateEvent)
 	}
-	deletedMessage, deleteEvent, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
+	deletedMessage, deleteEvents, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if deletedMessage.DeletedAt == nil || deleteEvent.Type != "message.deleted" {
-		t.Fatalf("unexpected message delete: %#v %#v", deletedMessage, deleteEvent)
+	if deletedMessage.DeletedAt == nil || len(deleteEvents) != 1 || deleteEvents[0].Type != "message.deleted" {
+		t.Fatalf("unexpected message delete: %#v %#v", deletedMessage, deleteEvents)
 	}
-	repeatedDelete, repeatedDeleteEvent, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
+	repeatedDelete, repeatedDeleteEvents, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: message.ID, UserID: owner.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if repeatedDelete.DeletedAt == nil || *repeatedDelete.DeletedAt != *deletedMessage.DeletedAt || repeatedDeleteEvent.ID != "" {
-		t.Fatalf("expected repeated delete to preserve state without event, got %#v %#v", repeatedDelete, repeatedDeleteEvent)
+	if repeatedDelete.DeletedAt == nil || *repeatedDelete.DeletedAt != *deletedMessage.DeletedAt || len(repeatedDeleteEvents) != 0 {
+		t.Fatalf("expected repeated delete to preserve state without event, got %#v %#v", repeatedDelete, repeatedDeleteEvents)
 	}
 	second, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Second", Email: "second@example.com"})
 	if err != nil {
@@ -551,12 +551,12 @@ func TestMutationsRejectInvalidInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deletedByAuthor, deleteEvent, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: memberMessage.ID, UserID: member.ID})
+	deletedByAuthor, deleteEvents, err := st.DeleteMessage(ctx, store.DeleteMessageInput{MessageID: memberMessage.ID, UserID: member.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if deletedByAuthor.DeletedAt == nil || deleteEvent.Type != "message.deleted" {
-		t.Fatalf("expected author delete to soft-delete the message, got %#v %#v", deletedByAuthor, deleteEvent)
+	if deletedByAuthor.DeletedAt == nil || len(deleteEvents) != 1 || deleteEvents[0].Type != "message.deleted" {
+		t.Fatalf("expected author delete to soft-delete the message, got %#v %#v", deletedByAuthor, deleteEvents)
 	}
 	anotherMemberMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: member.ID, Body: "owner moderate me"})
 	if err != nil {

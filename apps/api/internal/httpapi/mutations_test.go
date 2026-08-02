@@ -112,6 +112,29 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	if len(notifier.notifications) != 1 || notifier.notifications[0].RecipientKey != "u12345678901234567890123456789" {
 		t.Fatalf("expected one pushover notification, got %#v", notifier.notifications)
 	}
+	pinResult := postJSON[struct {
+		PinnedMessage store.PinnedMessage `json:"pinned_message"`
+		Event         store.Event         `json:"event"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins", map[string]string{"message_id": message.ID})
+	if pinResult.PinnedMessage.MessageID != message.ID || pinResult.Event.Type != "pin.added" {
+		t.Fatalf("unexpected pin response: %#v", pinResult)
+	}
+	pinned := getJSON[struct {
+		Messages []store.Message `json:"messages"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins")
+	if len(pinned.Messages) != 1 || pinned.Messages[0].ID != message.ID {
+		t.Fatalf("unexpected pinned messages response: %#v", pinned)
+	}
+	expectStatus(t, http.MethodPost, server.URL+"/api/channels/"+channels[0].ID+"/pins", strings.NewReader(`{`), http.StatusBadRequest)
+	expectStatus(t, http.MethodPost, server.URL+"/api/channels/"+channels[0].ID+"/pins", strings.NewReader(`{}`), http.StatusBadRequest)
+	expectStatus(t, http.MethodDelete, server.URL+"/api/channels/"+channels[0].ID+"/pins/"+message.ID, nil, http.StatusOK)
+	expectStatus(t, http.MethodDelete, server.URL+"/api/channels/"+channels[0].ID+"/pins/"+message.ID, nil, http.StatusNotFound)
+	emptyPins := getJSON[struct {
+		Messages []store.Message `json:"messages"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins")
+	if emptyPins.Messages == nil || len(emptyPins.Messages) != 0 {
+		t.Fatalf("expected an empty pinned messages array, got %#v", emptyPins)
+	}
 	updatedMessage := patchJSON[struct {
 		Message store.Message `json:"message"`
 		Event   store.Event   `json:"event"`
@@ -126,6 +149,7 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	if deletedMessage.Message.DeletedAt == nil || deletedMessage.Event.Type != "message.deleted" {
 		t.Fatalf("unexpected message delete: %#v", deletedMessage)
 	}
+	expectStatus(t, http.MethodPost, server.URL+"/api/channels/"+channels[0].ID+"/pins", strings.NewReader(`{"message_id":"`+message.ID+`"}`), http.StatusBadRequest)
 	ephemeral := postJSON[struct {
 		Event store.Event `json:"event"`
 	}](t, server.URL+"/api/realtime/ephemeral", map[string]any{"workspace_id": workspaces[0].ID, "channel_id": channels[0].ID, "type": "typing.started"})
@@ -260,6 +284,69 @@ func TestMutationAndEphemeralEndpoints(t *testing.T) {
 	expectStatus(t, http.MethodPost, server.URL+"/api/realtime/ephemeral", bytes.NewReader([]byte(`{`)), http.StatusBadRequest)
 	expectStatus(t, http.MethodPost, server.URL+"/api/realtime/ephemeral", bytes.NewReader([]byte(`{"workspace_id":"`+workspaces[0].ID+`","type":"bad"}`)), http.StatusBadRequest)
 	expectStatus(t, http.MethodPost, server.URL+"/api/realtime/ephemeral", bytes.NewReader([]byte(`{"workspace_id":"missing","type":"typing.started"}`)), http.StatusForbidden)
+}
+
+func TestDeletePinnedMessagePublishesPinRemovalBeforeDeletion(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := sqlitestore.Open("sqlite://" + filepath.Join(dataDir, "clickclack.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "pin-delete-http@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
+	if err != nil || len(channels) == 0 {
+		t.Fatalf("expected a channel, got %v: %v", channels, err)
+	}
+	hub := realtime.NewHub()
+	server := httptest.NewServer(New(st, hub, Options{UploadDir: filepath.Join(dataDir, "uploads")}).Handler())
+	t.Cleanup(server.Close)
+
+	message := postJSON[struct {
+		Message store.Message `json:"message"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/messages", map[string]string{"body": "delete pinned over http"}).Message
+	postJSON[struct {
+		PinnedMessage store.PinnedMessage `json:"pinned_message"`
+		Event         store.Event         `json:"event"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins", map[string]string{"message_id": message.ID})
+
+	events, unsubscribe := hub.Subscribe(workspaces[0].ID)
+	t.Cleanup(unsubscribe)
+	deleted := deleteJSONBody[struct {
+		Message store.Message `json:"message"`
+		Event   store.Event   `json:"event"`
+	}](t, server.URL+"/api/messages/"+message.ID)
+	if deleted.Message.DeletedAt == nil || deleted.Event.Type != "message.deleted" {
+		t.Fatalf("unexpected delete response: %#v", deleted)
+	}
+	for index, want := range []string{"pin.removed", "message.deleted"} {
+		select {
+		case event := <-events:
+			if event.Type != want || event.Payload == nil {
+				t.Fatalf("event %d: expected %s with payload, got %#v", index, want, event)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for event %d (%s)", index, want)
+		}
+	}
+	pinned := getJSON[struct {
+		Messages []store.Message `json:"messages"`
+	}](t, server.URL+"/api/channels/"+channels[0].ID+"/pins")
+	if len(pinned.Messages) != 0 {
+		t.Fatalf("expected deleted message to be absent from pins, got %#v", pinned.Messages)
+	}
 }
 
 func TestDirectTypingEphemeralIsLimitedToConversationMembers(t *testing.T) {

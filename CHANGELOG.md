@@ -2,7 +2,7 @@
 
 ## 0.3.0 - Unreleased
 
-- Added coherent conversation organization and attention tools: topic selection and filtered timelines, per-channel all/mentions/muted notification preferences, and resolved mention highlighting whose current-user emphasis follows that preference across timelines, threads, embeds, and agent preambles. Thanks @PollyBot13 and @jjjhenriksen.
+- Added coherent conversation organization and attention tools: topic selection and filtered timelines, channel-wide pins with a visible 100-message ceiling, per-channel all/mentions/muted notification preferences, and resolved mention highlighting whose current-user emphasis follows that preference across timelines, threads, embeds, pinned messages, and agent preambles. Thanks @PollyBot13 and @jjjhenriksen.
 
 ## 0.2.2 - 2026-08-01
 

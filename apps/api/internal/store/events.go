@@ -11,6 +11,8 @@ var DurableEventTypes = []string{
 	"message.created",
 	"message.deleted",
 	"message.updated",
+	"pin.added",
+	"pin.removed",
 	"reaction.added",
 	"reaction.removed",
 	"thread.reply_created",

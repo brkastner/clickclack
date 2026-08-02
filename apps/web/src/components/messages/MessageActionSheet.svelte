@@ -12,6 +12,10 @@
     showOpenThread = true,
     canOpenThread = false,
     canEdit = false,
+    canPin = false,
+    pinned = false,
+    pinning = false,
+    pinError = "",
     canDelete = false,
     deleting = false,
     copyStatus = "",
@@ -20,6 +24,7 @@
     onReply,
     onCopy,
     onEdit,
+    onTogglePin,
     onDelete,
     onClose,
     returnFocus,
@@ -30,6 +35,10 @@
     showOpenThread?: boolean;
     canOpenThread?: boolean;
     canEdit?: boolean;
+    canPin?: boolean;
+    pinned?: boolean;
+    pinning?: boolean;
+    pinError?: string;
     canDelete?: boolean;
     deleting?: boolean;
     copyStatus?: CopyStatus;
@@ -38,6 +47,7 @@
     onReply: () => void;
     onCopy: () => void;
     onEdit: () => void;
+    onTogglePin?: () => void;
     onDelete: () => void;
     onClose: () => void;
     returnFocus?: HTMLElement;
@@ -173,6 +183,17 @@
           >{copyStatus === "copied" ? "Copied" : "Couldn't copy"}</span>
         {/if}
       </button>
+      {#if canPin && onTogglePin}
+        <button type="button" disabled={pinning} onclick={onTogglePin}>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z"/>
+          </svg>
+          {pinned ? "Unpin message" : "Pin message"}
+        </button>
+        {#if pinError}
+          <p class="sheet-action-error" role="status" aria-live="polite">{pinError}</p>
+        {/if}
+      {/if}
       {#if canEdit}
         <button type="button" onclick={() => runAndClose(onEdit)}>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">

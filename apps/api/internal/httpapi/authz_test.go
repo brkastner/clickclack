@@ -48,6 +48,9 @@ func TestHTTPUnauthorizedRoutes(t *testing.T) {
 		{http.MethodPut, "/api/bots/self/commands", `{"commands":[]}`},
 		{http.MethodGet, "/api/channels/chn_missing/messages", ""},
 		{http.MethodPost, "/api/channels/chn_missing/messages", `{"body":"x"}`},
+		{http.MethodGet, "/api/channels/chn_missing/pins", ""},
+		{http.MethodPost, "/api/channels/chn_missing/pins", `{"message_id":"msg_missing"}`},
+		{http.MethodDelete, "/api/channels/chn_missing/pins/msg_missing", ""},
 		{http.MethodGet, "/api/messages/msg_missing", ""},
 		{http.MethodGet, "/api/messages/msg_missing/thread", ""},
 		{http.MethodPost, "/api/messages/msg_missing/thread/replies", `{"body":"x"}`},
@@ -233,6 +236,9 @@ func TestHTTPBotTokenWorkspaceIsolation(t *testing.T) {
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/channels/"+otherChannel.ID+"/messages", strings.NewReader(`{"body":"nope"}`), http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/channels/"+otherChannel.ID+"/notification-settings", nil, http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPatch, server.URL+"/api/channels/"+otherChannel.ID+"/notification-settings", strings.NewReader(`{"preference":"muted"}`), http.StatusForbidden)
+	expectStatusWithBearer(t, token.Token, http.MethodGet, server.URL+"/api/channels/"+otherChannel.ID+"/pins", nil, http.StatusForbidden)
+	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/channels/"+otherChannel.ID+"/pins", strings.NewReader(`{"message_id":"`+otherMessage.ID+`"}`), http.StatusForbidden)
+	expectStatusWithBearer(t, token.Token, http.MethodDelete, server.URL+"/api/channels/"+otherChannel.ID+"/pins/"+otherMessage.ID, nil, http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/channels/"+otherChannel.ID+"/read", strings.NewReader(`{"seq":1}`), http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/hooks/mattermost/"+otherChannel.ID, strings.NewReader(`{"text":"nope"}`), http.StatusForbidden)
 	expectStatusWithBearer(t, token.Token, http.MethodPost, server.URL+"/api/hooks/slash/"+otherChannel.ID, strings.NewReader(`command=/nope`), http.StatusForbidden)

@@ -416,6 +416,11 @@
   opacity: 0.55;
 }
 
+.desktop-titlebar-actions button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .desktop-titlebar-actions + .desktop-titlebar-status {
   margin-left: 8px;
 }

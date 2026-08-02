@@ -300,6 +300,8 @@ export type MessageInput = MessageInputBase &
 
 export type ReactionSummary = components["schemas"]["ReactionSummary"];
 export type ReactionMutationResponse = components["schemas"]["ReactionMutationResponse"];
+export type PinnedMessage = components["schemas"]["PinnedMessage"];
+export type PinMessageResponse = components["schemas"]["PinMessageResponse"];
 
 export type Message = {
   id: string;
@@ -1074,6 +1076,24 @@ export class ClickClackClient {
         { method: "PATCH", body: JSON.stringify({ preference }) },
       );
       return data.preference;
+    },
+    pinnedMessages: async (channelId: string, limit = 100): Promise<Message[]> => {
+      const data = await this.request<{ messages: Message[] }>(
+        `/api/channels/${channelId}/pins?limit=${limit}`,
+      );
+      return data.messages;
+    },
+    pinMessage: async (channelId: string, messageId: string): Promise<PinMessageResponse> =>
+      this.request<PinMessageResponse>(`/api/channels/${channelId}/pins`, {
+        method: "POST",
+        body: JSON.stringify({ message_id: messageId }),
+      }),
+    unpinMessage: async (channelId: string, messageId: string): Promise<RealtimeEvent> => {
+      const data = await this.request<{ event: RealtimeEvent }>(
+        `/api/channels/${channelId}/pins/${messageId}`,
+        { method: "DELETE" },
+      );
+      return data.event;
     },
   };
 
