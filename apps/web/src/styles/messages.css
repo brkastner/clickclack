@@ -876,6 +876,78 @@
   text-align: right;
 }
 
+:root:not([data-message-layout="outlined"])[data-user-align="right"]
+  .message-group.is-self
+  .markdown
+  ul,
+:root:not([data-message-layout="outlined"])[data-user-align="right"]
+  .message-group.is-self
+  .markdown
+  ol,
+:root:not([data-message-layout="outlined"])[data-other-align="right"]
+  .message-group:not(.is-self)
+  .markdown
+  ul,
+:root:not([data-message-layout="outlined"])[data-other-align="right"]
+  .message-group:not(.is-self)
+  .markdown
+  ol {
+  padding-left: 0;
+  padding-right: 0;
+  list-style-position: inside;
+}
+
+:root:not([data-message-layout="outlined"])[data-user-align="right"]
+  .message-group.is-self
+  .markdown
+  li
+  > ul,
+:root:not([data-message-layout="outlined"])[data-user-align="right"]
+  .message-group.is-self
+  .markdown
+  li
+  > ol,
+:root:not([data-message-layout="outlined"])[data-other-align="right"]
+  .message-group:not(.is-self)
+  .markdown
+  li
+  > ul,
+:root:not([data-message-layout="outlined"])[data-other-align="right"]
+  .message-group:not(.is-self)
+  .markdown
+  li
+  > ol {
+  padding-left: 0;
+  padding-right: 22px;
+}
+
+:root:not([data-message-layout="outlined"])[data-user-align="right"]
+  .message-group.is-self
+  .markdown
+  li
+  > p:first-child,
+:root:not([data-message-layout="outlined"])[data-other-align="right"]
+  .message-group:not(.is-self)
+  .markdown
+  li
+  > p:first-child {
+  display: inline;
+}
+
+:root:not([data-message-layout="outlined"])[data-user-align="right"]
+  .message-group.is-self
+  .markdown
+  blockquote,
+:root:not([data-message-layout="outlined"])[data-other-align="right"]
+  .message-group:not(.is-self)
+  .markdown
+  blockquote {
+  padding-left: 0;
+  padding-right: 12px;
+  border-left: 0;
+  border-right: 3px solid var(--accent);
+}
+
 :root[data-user-align="right"] .message-group.is-self .attachment-grid,
 :root[data-other-align="right"] .message-group:not(.is-self) .attachment-grid {
   margin-left: auto;
