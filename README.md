@@ -64,7 +64,7 @@ Per-feature docs:
 | Auth             | [docs/features/auth.md](docs/features/auth.md) |
 | Moderation       | [docs/features/moderation.md](docs/features/moderation.md) |
 | Workspaces       | [docs/features/workspaces.md](docs/features/workspaces.md) |
-| Messages         | [docs/features/messages.md](docs/features/messages.md) |
+| Messages, topics, pins, and channel attention | [docs/features/messages.md](docs/features/messages.md) |
 | Threads          | [docs/features/threads.md](docs/features/threads.md) |
 | Reactions        | [docs/features/reactions.md](docs/features/reactions.md) |
 | Realtime         | [docs/features/realtime.md](docs/features/realtime.md) |

@@ -50,7 +50,7 @@ it for anything that isn't a local clone.
 
 | Feature | Doc |
 | --- | --- |
-| Channels, messages, edits, soft-delete | [Messages](features/messages.md) |
+| Channels, messages, topics, pins, mentions, edits | [Messages](features/messages.md) |
 | Slack-style threads, one level deep | [Threads](features/threads.md) |
 | Iframe-ready standalone thread panels | [Embedded threads](features/embedding.md) |
 | Reactions on every message | [Reactions](features/reactions.md) |

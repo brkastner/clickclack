@@ -41,6 +41,8 @@ workspaces                         workspace_members
 workspace_member_moderation
 channels
 messages                           thread_state
+topics                             pinned_messages
+channel_notification_settings
 reactions
 events                             auth_magic_links / sessions
 event_recipients
@@ -55,7 +57,8 @@ Full SQLite SQL is in
 and
 [`0002_auth.sql`](../apps/api/internal/store/sqlite/migrations/0002_auth.sql);
 later migrations add auth/session hardening, upload metadata, public route IDs,
-read receipts, bot records, Postgres parity, and member moderation.
+read receipts, bot records, Postgres parity, member moderation, channel
+notification preferences, resolved-mention event metadata, and pinned messages.
 Full Postgres SQL is in
 [`apps/api/internal/store/postgres/migrations/0001_schema.sql`](../apps/api/internal/store/postgres/migrations/0001_schema.sql).
 
