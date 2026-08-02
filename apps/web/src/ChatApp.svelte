@@ -85,6 +85,7 @@
   let activeTopicFilterID = "";
   let topicFilterGeneration = 0;
   let topicConversationKey = "";
+  let recoverableDraftMessages = new Map<string, Message[]>();
   let selectedThreadState: ThreadState | null = null;
   let selectedProfile: User | null = null;
   let moderationMembers: MemberModeration[] = [];
@@ -222,9 +223,7 @@
     ? moderationMembers.find((member) => member.user.id === selectedProfile?.id)
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
-  $: eligibleTopics = selectedChannelID
-    ? topics.filter((topic) => !topic.archived_at && (!topic.channel_id || topic.channel_id === selectedChannelID))
-    : [];
+  $: eligibleTopics = topicsForChannel(topics, selectedChannelID);
   $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
   $: selectedDirectWritable = selectedDirect?.can_send ?? true;
@@ -284,6 +283,13 @@
 
   function activeMessageScopeKey(): string {
     return `${selectedWorkspaceID}:${currentConversationKey()}:${activeTopicFilterID}:${topicFilterGeneration}`;
+  }
+
+  function topicsForChannel(source: Topic[], channelID: string): Topic[] {
+    if (!channelID) return [];
+    return source.filter(
+      (topic) => !topic.archived_at && (!topic.channel_id || topic.channel_id === channelID),
+    );
   }
   // High-level "agent turn is live" signal: any tracked turn that still has an
   // unfinalized line. Drives the compact AgentResponding status above the
@@ -920,6 +926,9 @@
 
   async function loadTopics(workspaceID = selectedWorkspaceID) {
     const serial = ++topicsLoadSerial;
+    const conversationKey = currentConversationKey();
+    const channelID = selectedChannelID;
+    let clearedInvalidFilter = false;
     if (!workspaceID) {
       topics = [];
       return;
@@ -928,8 +937,37 @@
       const data = await api<{ topics: Topic[] }>(`/api/workspaces/${workspaceID}/topics`);
       if (serial !== topicsLoadSerial || workspaceID !== selectedWorkspaceID) return;
       topics = data.topics;
+      if (currentConversationKey() !== conversationKey || selectedChannelID !== channelID) return;
+      const eligibleTopicIDs = new Set(
+        topicsForChannel(data.topics, channelID).map((topic) => topic.id),
+      );
+      if (selectedComposerTopicID && !eligibleTopicIDs.has(selectedComposerTopicID)) {
+        selectedComposerTopicID = "";
+      }
+      if (activeTopicFilterID && !eligibleTopicIDs.has(activeTopicFilterID)) {
+        updateActiveTopicFilter("");
+        scrollMemory.delete(currentConversationKey());
+        messageWindows.delete(currentConversationKey());
+        clearedInvalidFilter = true;
+      }
     } catch {
-      if (serial === topicsLoadSerial && workspaceID === selectedWorkspaceID) topics = [];
+      // A transient refresh failure is not authoritative. Preserve the last
+      // known topics so an active filter and its clear control stay visible.
+      return;
+    }
+    if (!clearedInvalidFilter || currentConversationKey() !== conversationKey) return;
+    try {
+      await loadLatestMessages();
+    } catch (error) {
+      if (currentConversationKey() !== conversationKey || activeTopicFilterID) return;
+      setActiveMessages(localDraftMessagesForView(conversationKey));
+      composerNotice = {
+        kind: "error",
+        text:
+          error instanceof Error
+            ? `Topic changed, but messages could not reload: ${error.message}`
+            : "Topic changed, but messages could not reload",
+      };
     }
   }
 
@@ -1823,12 +1861,7 @@
     // Preserve outgoing optimistic placeholders for this view that the server
     // hasn't echoed yet. Without this the placeholder would flicker out when a
     // sibling realtime event triggers a reload mid-flight.
-    const localOptimistic = messages.filter(
-      (m) =>
-        (m.status === "pending" || m.status === "failed") &&
-        belongsToView(m, key) &&
-        (!activeTopicFilterID || m.topic_id === activeTopicFilterID),
-    );
+    const localOptimistic = localDraftMessagesForView(key);
     const localByID = new Map(localOptimistic.map((m) => [m.id, m]));
     const localByNonce = new Map(localOptimistic.filter((m) => m.nonce).map((m) => [m.nonce, m]));
     reactionController.seedMessages(msgs);
@@ -1851,7 +1884,7 @@
     });
     const knownIDs = new Set(merged.map((m) => m.id));
     const knownNonces = new Set(merged.map((m) => m.nonce).filter(Boolean));
-    const preserve = messages.filter(
+    const preserve = localOptimistic.filter(
       (m) =>
         (m.status === "pending" || m.status === "failed") &&
         m.id.startsWith("tmp_") &&
@@ -1940,6 +1973,8 @@
     channelID?: string;
     directConversationID?: string;
     topicID?: string;
+    topicFilterID: string;
+    topicFilterGeneration: number;
     viewKey: string;
   };
 
@@ -2017,6 +2052,8 @@
       channelID: selectedChannelID || undefined,
       directConversationID: selectedDirectID || undefined,
       topicID: selectedChannelID ? selectedComposerTopicID || undefined : undefined,
+      topicFilterID: activeTopicFilterID,
+      topicFilterGeneration,
       viewKey: currentConversationKey(),
     };
     messageBody = "";
@@ -2073,6 +2110,100 @@
     return err.message;
   }
 
+  function localDraftMessagesForView(viewKey: string): Message[] {
+    const candidates = [...messages, ...(recoverableDraftMessages.get(viewKey) || [])].filter(
+      (message) =>
+        (message.status === "pending" || message.status === "failed") &&
+        belongsToView(message, viewKey) &&
+        (!activeTopicFilterID || message.topic_id === activeTopicFilterID),
+    );
+    const drafts = new Map<string, Message>();
+    for (const message of candidates) {
+      const key = message.nonce ? `nonce:${message.nonce}` : `id:${message.id}`;
+      drafts.set(key, message);
+    }
+    return [...drafts.values()];
+  }
+
+  function rememberRecoverableDraft(viewKey: string, draftMessage: Message) {
+    const existing = recoverableDraftMessages.get(viewKey) || [];
+    const next = existing.filter(
+      (message) =>
+        message.id !== draftMessage.id &&
+        !(draftMessage.nonce && message.nonce === draftMessage.nonce),
+    );
+    recoverableDraftMessages = new Map(recoverableDraftMessages).set(viewKey, [
+      ...next,
+      draftMessage,
+    ]);
+  }
+
+  function forgetRecoverableDraft(viewKey: string, messageID: string, nonce?: string) {
+    const existing = recoverableDraftMessages.get(viewKey);
+    if (!existing) return;
+    const next = existing.filter(
+      (message) => message.id !== messageID && !(nonce && message.nonce === nonce),
+    );
+    const updated = new Map(recoverableDraftMessages);
+    if (next.length > 0) updated.set(viewKey, next);
+    else updated.delete(viewKey);
+    recoverableDraftMessages = updated;
+  }
+
+  async function revealFailedDraft(
+    draft: OutgoingDraft,
+    failedMessage: Message,
+    notice: string,
+  ) {
+    rememberRecoverableDraft(draft.viewKey, failedMessage);
+    if (currentConversationKey() !== draft.viewKey) return;
+    let reloadFailed = false;
+    const originalFilterStillActive =
+      activeTopicFilterID === draft.topicFilterID &&
+      topicFilterGeneration === draft.topicFilterGeneration;
+    if (
+      originalFilterStillActive &&
+      activeTopicFilterID &&
+      draft.topicID !== activeTopicFilterID
+    ) {
+      updateActiveTopicFilter("");
+      scrollMemory.delete(draft.viewKey);
+      messageWindows.delete(draft.viewKey);
+      try {
+        await loadLatestMessages();
+      } catch {
+        reloadFailed = true;
+      }
+    }
+    if (currentConversationKey() !== draft.viewKey) return;
+    if (activeTopicFilterID && draft.topicID !== activeTopicFilterID) {
+      if (!messageBody.trim()) messageBody = draft.body;
+      composerNotice = {
+        kind: "error",
+        text: `${notice} Clear the active topic filter to recover the draft.`,
+      };
+      return;
+    }
+    if (reloadFailed) setActiveMessages(localDraftMessagesForView(draft.viewKey));
+    const failedID = failedMessage.id;
+    const failedNonce = failedMessage.nonce;
+    const existingIndex = messages.findIndex(
+      (message) => message.id === failedID || (failedNonce && message.nonce === failedNonce),
+    );
+    if (existingIndex >= 0) {
+      setActiveMessages(
+        messages.map((message, index) => (index === existingIndex ? failedMessage : message)),
+      );
+    } else {
+      setActiveMessages([...messages, failedMessage]);
+    }
+    composerNotice = {
+      kind: "error",
+      text: reloadFailed ? `${notice} The unfiltered timeline could not reload.` : notice,
+    };
+    await revealOwnSentMessage();
+  }
+
   async function dispatchDraft(draft: OutgoingDraft, existingNonce?: string, existingMessageID?: string) {
     const nonce = existingNonce ?? newNonce();
     const tmpID = `tmp_${nonce}`;
@@ -2083,6 +2214,7 @@
     const shouldRefreshLatestAfterSend = shouldRevealSentMessage && activeHasNewer;
     pendingDrafts.set(nonce, draft);
     const placeholder = buildOptimisticMessage(nonce, draft, localID);
+    if (existingNonce) rememberRecoverableDraft(draft.viewKey, placeholder);
     if (existingNonce) {
       setActiveMessages(messages.map((m) => (m.id === localID ? placeholder : m)));
     } else if (currentConversationKey() === draft.viewKey && matchesTopicFilter) {
@@ -2119,10 +2251,15 @@
             status: "failed",
             attachments: draft.upload ? [...(message.attachments || []), draft.upload] : message.attachments,
           };
-          setActiveMessages(messages.map((m) => (m.id === localID ? failedMessage : m)));
+          await revealFailedDraft(
+            draft,
+            failedMessage,
+            "The message was sent, but its attachment failed. Retry or discard it below.",
+          );
           return;
         }
       }
+      forgetRecoverableDraft(draft.viewKey, message.id, nonce);
       pendingDrafts.delete(nonce);
       // Replace placeholder with the real message (or append if a concurrent
       // realtime reload already removed our placeholder).
@@ -2147,9 +2284,11 @@
       }
     } catch (err) {
       console.warn("send failed", err);
-      setActiveMessages(messages.map((m) =>
-        m.id === localID ? { ...m, status: "failed" as const } : m,
-      ));
+      await revealFailedDraft(
+        draft,
+        { ...placeholder, status: "failed" },
+        "The message failed to send. Retry or discard it below.",
+      );
     }
   }
 
@@ -2167,7 +2306,11 @@
   }
 
   function discardFailedMessage(message: Message) {
-    if (message.nonce) pendingDrafts.delete(message.nonce);
+    if (message.nonce) {
+      const draft = pendingDrafts.get(message.nonce);
+      if (draft) forgetRecoverableDraft(draft.viewKey, message.id, message.nonce);
+      pendingDrafts.delete(message.nonce);
+    }
     setActiveMessages(messages.filter((m) => m.id !== message.id));
   }
 

@@ -207,6 +207,199 @@ test("topic selector, labels, filter, clear, and realtime stay coherent", async 
   }
 });
 
+test("topic refresh and off-filter send failures recover visibly", async ({ page }) => {
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 10);
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `Topic recovery ${suffix}` },
+  });
+  expect(workspaceResponse.ok()).toBe(true);
+  const { workspace } = (await workspaceResponse.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: "topic-recovery", kind: "public" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+  const { channel } = (await channelResponse.json()) as {
+    channel: { id: string; route_id: string };
+  };
+  const topicResponse = await page.request.post(`/api/workspaces/${workspace.id}/topics`, {
+    data: { name: "Release", channel_id: channel.id },
+  });
+  expect(topicResponse.ok()).toBe(true);
+  const { topic } = (await topicResponse.json()) as { topic: { id: string } };
+  const messageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: "release recovery baseline", topic_id: topic.id },
+  });
+  expect(messageResponse.ok()).toBe(true);
+
+  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+  await waitForAppReady(page);
+  const topicSelect = page.getByLabel("Message topic");
+  await page.getByRole("button", { name: "Filter by topic Release" }).click();
+  await expect(page.getByText("Showing topic")).toContainText("Release");
+
+  await topicSelect.selectOption("");
+  let failNextUnfilteredReload = true;
+  await page.route(`**/api/channels/${channel.id}/messages*`, async (route) => {
+    const request = route.request();
+    const body = request.method() === "POST" ? request.postDataJSON() : undefined;
+    if (body?.body === "off-filter failure") {
+      await route.abort("failed");
+      return;
+    }
+    const url = new URL(request.url());
+    if (
+      request.method() === "GET" &&
+      failNextUnfilteredReload &&
+      !url.searchParams.has("topic_id")
+    ) {
+      failNextUnfilteredReload = false;
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+  await page.getByLabel("Message body").fill("off-filter failure");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("Showing topic")).toHaveCount(0);
+  await expect(page.getByText("off-filter failure")).toBeVisible();
+  await expect(page.getByText("release recovery baseline")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  const refreshResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: "same-view realtime refresh" },
+  });
+  expect(refreshResponse.ok()).toBe(true);
+  await expect(page.getByText("same-view realtime refresh")).toBeVisible();
+  await expect(page.getByText("off-filter failure")).toHaveCount(1);
+  await page.getByRole("button", { name: "Discard" }).click();
+
+  await page.getByRole("button", { name: "Filter by topic Release" }).click();
+  await expect(page.getByText("Showing topic")).toContainText("Release");
+  const topicsPath = `**/api/workspaces/${workspace.id}/topics`;
+  await page.route(topicsPath, async (route) => route.abort("failed"));
+  const failedTopicsRefresh = page.waitForRequest(
+    (request) =>
+      request.method() === "GET" &&
+      request.url().includes(`/api/workspaces/${workspace.id}/topics`),
+  );
+  await page.getByLabel("Message body").focus();
+  await failedTopicsRefresh;
+  await expect(page.getByText("Showing topic")).toContainText("Release");
+  await page.unroute(topicsPath);
+  await page.getByLabel("Message body").press("Tab");
+  const unfilteredReload = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      request.method() === "GET" &&
+      url.pathname === `/api/channels/${channel.id}/messages` &&
+      !url.searchParams.has("topic_id")
+    );
+  });
+  await page.route(topicsPath, async (route) => {
+    await route.fulfill({ json: { topics: [] } });
+  });
+  failNextUnfilteredReload = true;
+  await page.getByLabel("Message body").focus();
+  await unfilteredReload;
+  await expect(page.getByText("Showing topic")).toHaveCount(0);
+  await expect(topicSelect).toHaveCount(0);
+  await expect(page.getByText("release recovery baseline")).toHaveCount(0);
+  await expect(page.getByText(/Topic changed, but messages could not reload/)).toBeVisible();
+});
+
+test("failed topic drafts stay with their conversation during navigation", async ({ page }) => {
+  test.slow();
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 10);
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `Topic navigation ${suffix}` },
+  });
+  const { workspace } = (await workspaceResponse.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  const firstChannelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: "topic-origin", kind: "public" },
+  });
+  const secondChannelResponse = await page.request.post(
+    `/api/workspaces/${workspace.id}/channels`,
+    { data: { name: "topic-destination", kind: "public" } },
+  );
+  expect(workspaceResponse.ok()).toBe(true);
+  expect(firstChannelResponse.ok()).toBe(true);
+  expect(secondChannelResponse.ok()).toBe(true);
+  const { channel: firstChannel } = (await firstChannelResponse.json()) as {
+    channel: { id: string; route_id: string };
+  };
+  const topicResponse = await page.request.post(`/api/workspaces/${workspace.id}/topics`, {
+    data: { name: "Release", channel_id: firstChannel.id },
+  });
+  expect(topicResponse.ok()).toBe(true);
+  const { topic } = (await topicResponse.json()) as { topic: { id: string } };
+  await page.request.post(`/api/channels/${firstChannel.id}/messages`, {
+    data: { body: "origin topic message", topic_id: topic.id },
+  });
+
+  await page.goto(`/app/${workspace.route_id}/${firstChannel.route_id}`);
+  await waitForAppReady(page);
+  await page.getByRole("button", { name: "Filter by topic Release" }).click();
+  await page.getByLabel("Message topic").selectOption("");
+
+  let releaseReload: (() => void) | undefined;
+  const reloadBlocked = new Promise<void>((resolve) => {
+    releaseReload = resolve;
+  });
+  let reloadSeen: (() => void) | undefined;
+  const reloadRequested = new Promise<void>((resolve) => {
+    reloadSeen = resolve;
+  });
+  let sendAttempts = 0;
+  let releaseRetry: (() => void) | undefined;
+  const retryBlocked = new Promise<void>((resolve) => {
+    releaseRetry = resolve;
+  });
+  await page.route(`**/api/channels/${firstChannel.id}/messages*`, async (route) => {
+    const request = route.request();
+    const body = request.method() === "POST" ? request.postDataJSON() : undefined;
+    if (body?.body === "failed in origin") {
+      sendAttempts += 1;
+      if (sendAttempts > 1) {
+        await retryBlocked;
+      }
+      await route.abort("failed");
+      return;
+    }
+    const url = new URL(request.url());
+    if (request.method() === "GET" && !url.searchParams.has("topic_id")) {
+      reloadSeen?.();
+      await reloadBlocked;
+    }
+    await route.continue();
+  });
+  await page.getByLabel("Message body").fill("failed in origin");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await reloadRequested;
+  await page.getByRole("link", { name: "# topic-destination", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "#topic-destination" })).toBeVisible();
+  releaseReload?.();
+  await expect(page.getByText("failed in origin")).toHaveCount(0);
+
+  await page.getByRole("link", { name: "# topic-origin", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "#topic-origin" })).toBeVisible();
+  await expect(page.getByText("failed in origin")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  await page.getByRole("link", { name: "# topic-destination", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "#topic-destination" })).toBeVisible();
+  releaseRetry?.();
+  await expect(page.getByText("failed in origin")).toHaveCount(0);
+  await page.getByRole("link", { name: "# topic-origin", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "#topic-origin" })).toBeVisible();
+  await expect(page.getByText("failed in origin")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+});
+
 test("switching topic filters discards delayed pagination from the previous filter", async ({
   page,
 }) => {
