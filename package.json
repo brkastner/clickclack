@@ -35,17 +35,17 @@
     "crabbox:stop": "crabbox stop",
     "crabbox:warmup": "crabbox warmup"
   },
-  "packageManager": "pnpm@11.13.1",
+  "packageManager": "pnpm@11.19.0",
   "devDependencies": {
     "@cloudflare/containers": "0.3.7",
-    "@playwright/test": "^1.61.1",
-    "@types/node": "^26.1.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.1.2",
     "@typescript/native": "npm:typescript@^7.0.2",
     "fflate": "^0.8.3",
-    "oxfmt": "^0.59.0",
-    "oxlint": "^1.74.0",
+    "oxfmt": "^0.61.0",
+    "oxlint": "^1.76.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "wrangler": "4.111.0"
+    "wrangler": "4.116.0"
   },
   "engines": {
     "node": ">=24"
