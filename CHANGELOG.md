@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 - Unreleased
+## 0.3.0 - 2026-08-02
 
 - Added coherent conversation organization and attention tools: topic selection and filtered timelines, channel-wide pins with a visible 100-message ceiling, per-channel all/mentions/muted notification preferences, resolved mention highlighting whose current-user emphasis follows that preference, and workspace-visible responding-agent identity beside channel and thread composers. Thanks @PollyBot13 and @jjjhenriksen.
 
