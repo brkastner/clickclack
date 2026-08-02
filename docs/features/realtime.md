@@ -110,6 +110,12 @@ fall back to a workspace-wide broadcast.
 `POST /api/realtime/ephemeral` validates workspace membership and tags the
 payload with `user_id` from the caller before publishing.
 
+While a turn is live, the web app resolves that authenticated `user_id` through
+the shared workspace identity cache and names the responding agent beside both
+channel and thread composers. Agent identity is workspace-visible by design to
+members who can receive that channel or DM progress event. Concurrent agents
+are keyed by `(user_id, turn_id)`; an unresolved sender is shown as `Agent`.
+
 The TypeScript SDK exports `AgentProgressLine`, `AgentProgressPayload`, and
 `EphemeralEventInput`. Its input union requires one target for typing and agent
 progress while retaining targetless, workspace-wide presence events.

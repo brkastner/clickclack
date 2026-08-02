@@ -13,6 +13,7 @@
   };
 
   export type AgentProgressTurn = {
+    key: string;
     turnId: string;
     userId: string;
     lines: AgentProgressLineView[];
@@ -58,7 +59,7 @@
 
 {#if turns.length > 0}
   <div class="agent-progress" aria-live="polite">
-    {#each turns as turn (turn.turnId)}
+    {#each turns as turn (turn.key)}
       <div class="agent-progress__turn">
         {#each turn.lines as line (line.id)}
           <div
