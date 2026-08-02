@@ -21,6 +21,7 @@
   import ReactionsBar from "../messages/ReactionsBar.svelte";
   import AddReactionButton from "../messages/AddReactionButton.svelte";
   import MessageActionSheet from "../messages/MessageActionSheet.svelte";
+  import AgentResponding from "../messages/AgentResponding.svelte";
 
   type Props = {
     root: Message;
@@ -33,6 +34,8 @@
     reactionsDisabled?: boolean;
     mentionPeople?: User[];
     mentionAttentionUserID?: string;
+    agentResponding?: boolean;
+    respondingAgentNames?: string[];
     replyDisabled?: boolean;
     headerLabel?: string;
     headerDetail?: string;
@@ -73,6 +76,8 @@
     reactionsDisabled = false,
     mentionPeople = [],
     mentionAttentionUserID,
+    agentResponding = false,
+    respondingAgentNames = [],
     replyDisabled = false,
     headerLabel = "Thread",
     headerDetail,
@@ -693,6 +698,7 @@
     returnFocus={actionSheetReturnFocus}
   />
 {/if}
+<AgentResponding active={agentResponding} agentNames={respondingAgentNames} />
 <ChatComposer
   value={replyBody}
   placeholder={replyDisabled ? "No active recipient" : "Reply in thread"}

@@ -3614,6 +3614,8 @@
 
   function lookupUser(userID: string): User | undefined {
     if (user?.id === userID) return user;
+    const fromWorkspace = workspaceMemberUsers.find((member) => member.id === userID);
+    if (fromWorkspace) return fromWorkspace;
     const fromMessages = messages.find((msg) => msg.author?.id === userID)?.author;
     if (fromMessages) return fromMessages;
     const fromReplies = replies.find((msg) => msg.author?.id === userID)?.author;
@@ -4210,7 +4212,10 @@
     <TypingIndicator entries={typingEntries} currentUserID={user?.id} />
 
     <div class="composer-dock">
-    <AgentResponding active={agentResponding} agentNames={activeRespondingAgentNames} />
+    <AgentResponding
+      active={agentResponding && selectedThread === null}
+      agentNames={activeRespondingAgentNames}
+    />
 
     {#if composerNotice}
       <div
@@ -4345,6 +4350,8 @@
         replyTarget={replyTarget && replyContext === "thread" ? replyTarget : null}
         {mentionPeople}
         {mentionAttentionUserID}
+        {agentResponding}
+        respondingAgentNames={activeRespondingAgentNames}
         replyDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
         onClose={closeSidePanel}
         onBack={searchThreadDetour && searchSession ? () => void returnToSearchFromThread() : undefined}
