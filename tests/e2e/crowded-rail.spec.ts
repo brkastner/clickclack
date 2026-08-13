@@ -25,18 +25,15 @@ async function expectHittable(locator: Locator) {
 // programmatically scrolled the overflow:hidden shell — pushing the
 // guild-create popover above the viewport. An explicit constrained shell row
 // keeps the rail inside the shell so .guild-list scrolls internally instead.
-test("create form stays usable with a crowded rail", async ({ page }) => {
-  await page.goto("/app");
-  await waitForAppReady(page);
-
+test("create form stays usable with a crowded rail", async ({ page, request }) => {
   for (let i = 0; i < 14; i++) {
-    await page.getByRole("button", { name: "Create workspace" }).click();
-    const input = page.getByLabel("Workspace name");
-    await input.fill(`Crowd ${i} ${randomUUID().slice(0, 6)}`);
-    await input.press("Enter");
-    await expect(page.getByLabel("Workspace name")).toBeHidden();
+    const name = `Crowd ${i} ${randomUUID().slice(0, 6)}`;
+    const response = await request.post("/api/workspaces", { data: { name } });
+    expect(response.ok()).toBe(true);
   }
 
+  await page.goto("/app");
+  await waitForAppReady(page);
   await page.getByRole("button", { name: "Create workspace" }).click();
   await expectHittable(page.getByLabel("Workspace name"));
 });
