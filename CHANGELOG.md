@@ -1,14 +1,18 @@
 # Changelog
 
-## 0.3.0 - Unreleased
+## v0.3.0 - 2026-08-13
 
+**Highlight:** conversations get real organization — topics with filtered
+timelines, channel-wide pins, per-channel notification preferences, and
+copyable links to any message or thread.
+
+- Added coherent conversation organization and attention tools: topic selection and filtered timelines, channel-wide pins with a visible 100-message ceiling, per-channel all/mentions/muted notification preferences, resolved mention highlighting whose current-user emphasis follows that preference, and workspace-visible responding-agent identity beside channel and thread composers. Thanks @PollyBot13 and @jjjhenriksen.
 - Added stable, permission-checked Copy link actions for channel root messages, with lazy route allocation, canonical configured-origin URLs, and an accessible clipboard fallback.
-- Fixed blank embedded views caused by stale browser assets and returned proper JSON errors for unknown API routes while preserving app deep links.
 - Hardened integration callbacks against server-side requests to non-public networks and enforced guest visibility, moderation, and write limits for topics and registered slash commands. Thanks @jason-allen-oneal.
+- Fixed blank embedded views caused by stale browser assets and returned proper JSON errors for unknown API routes while preserving app deep links.
+- Fixed the crowded-rail layout regression where creating a workspace with many existing workspaces scrolled the form out of view. Thanks @sercada.
 - Updated web font, sanitizing, Markdown, virtualization, and build packages plus Electron and the Cloudflare Wrangler toolchain.
 - Updated the Go SQLite driver and runtime, formatting and linting tools, and pnpm toolchain.
-- Added coherent conversation organization and attention tools: topic selection and filtered timelines, channel-wide pins with a visible 100-message ceiling, per-channel all/mentions/muted notification preferences, resolved mention highlighting whose current-user emphasis follows that preference, and workspace-visible responding-agent identity beside channel and thread composers. Thanks @PollyBot13 and @jjjhenriksen.
-
 ## 0.2.2 - 2026-08-01
 
 - Updated Go, web, desktop, Cloudflare, CI action, package-manager, and container-base dependencies.
