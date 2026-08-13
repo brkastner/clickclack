@@ -41,6 +41,10 @@ test("keeps navigation inside ClickClack app routes", () => {
 test("maps explicit deep-link forms to app routes", () => {
   assert.equal(deepLinkToRoute("clickclack://app/team/general"), "/app/team/general");
   assert.equal(
+    deepLinkToRoute("clickclack://app/T1234567890ABCDEF/M1234567890ABCDEF"),
+    "/app/T1234567890ABCDEF/M1234567890ABCDEF",
+  );
+  assert.equal(
     deepLinkToRoute("clickclack://open?path=%2Fapp%2Fteam%2Fgeneral"),
     "/app/team/general",
   );

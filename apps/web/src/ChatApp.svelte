@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
-  import { APIError, api, apiResourceURL, apiURL, readableAPIError } from "./lib/api";
+  import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
@@ -623,6 +623,19 @@
     return targetRouteID ? `${workspacePath}/${encodeURIComponent(targetRouteID)}` : workspacePath;
   }
 
+  async function ensureMessageLink(message: Message): Promise<string> {
+    if (!message.channel_id || message.parent_message_id) throw new Error("Only channel roots have links");
+    const data = await api<{ message: Message }>(`/api/messages/${message.id}/route`, {
+      method: "POST",
+    });
+    if (!data.message.route_id) throw new Error("Message route was not allocated");
+    applyEditedMessage(data.message);
+    const workspaceRouteID = routeWorkspaceIDFor(data.message.workspace_id);
+    if (!workspaceRouteID) throw new Error("Workspace route is unavailable");
+    const path = `/app/${encodeURIComponent(workspaceRouteID)}/${encodeURIComponent(data.message.route_id)}`;
+    return new URL(path, `${frontendBaseURL()}/`).toString();
+  }
+
   function notificationHref(targetID: string): string {
     const targetRouteID = channels.find((channel) => channel.id === targetID)?.route_id ||
       directConversations.find((conversation) => conversation.id === targetID)?.route_id;
@@ -949,10 +962,25 @@
     }
     const sameThread = selectedThread?.id === route.target_id && viewKey === currentConversationKey();
     selectedProfile = null;
+    pinnedPanelOpen = false;
     activeComposerContext = "thread";
     mobileNavOpen = false;
     await refreshThread(route.target_id);
     if (parentChannelID) await loadPinnedMessages(parentChannelID, "");
+    if (
+      !sameThread &&
+      parentChannelID &&
+      selectedThread &&
+      (selectedThread.thread_state?.reply_count ?? 0) === 0
+    ) {
+      const root = selectedThread;
+      selectedThread = null;
+      selectedThreadState = null;
+      replies = [];
+      activeComposerContext = "message";
+      await loadMessagesAround(root);
+      return true;
+    }
     if (!sameThread && selectedThread) await loadMessagesAround(selectedThread);
     return true;
   }
@@ -2785,11 +2813,17 @@
   }
 
   async function highlightMessage(messageID: string) {
-    await tick();
-    const node = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageID)}"]`);
-    if (!node) return;
-    node.classList.add("highlight");
-    window.setTimeout(() => node.classList.remove("highlight"), 1500);
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      await tick();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const node = document.querySelector<HTMLElement>(
+        `[data-message-id="${CSS.escape(messageID)}"]`,
+      );
+      if (!node) continue;
+      node.classList.add("highlight");
+      window.setTimeout(() => node.classList.remove("highlight"), 1500);
+      return;
+    }
   }
 
   async function searchMessages() {
@@ -4201,6 +4235,7 @@
       channelID={selectedChannelID}
       {pinnedMessageIDs}
       onTogglePin={toggleMessagePin}
+      onCopyLink={ensureMessageLink}
       messages={visibleMessages}
       {selectedDirect}
       {selectedChannel}
@@ -4415,6 +4450,7 @@
         channelID={selectedChannelID}
         {pinnedMessageIDs}
         onTogglePin={toggleMessagePin}
+        onCopyLink={ensureMessageLink}
         {editController}
         editScope={activeConversationKey}
         onMessageEdited={applyEditedMessage}

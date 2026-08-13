@@ -155,6 +155,14 @@ func ensureThreadRouteIDTx(ctx context.Context, tx *sql.Tx, root store.Message) 
 }
 
 func (s *Store) EnsureThreadRouteID(ctx context.Context, userID, rootMessageID string) (store.Message, error) {
+	return s.ensureRouteID(ctx, userID, rootMessageID, false)
+}
+
+func (s *Store) EnsureMessageRouteID(ctx context.Context, userID, rootMessageID string) (store.Message, error) {
+	return s.ensureRouteID(ctx, userID, rootMessageID, true)
+}
+
+func (s *Store) ensureRouteID(ctx context.Context, userID, rootMessageID string, channelOnly bool) (store.Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.Message{}, err
@@ -163,6 +171,9 @@ func (s *Store) EnsureThreadRouteID(ctx context.Context, userID, rootMessageID s
 	root, err := getMessageTx(ctx, tx, rootMessageID)
 	if err != nil {
 		return store.Message{}, err
+	}
+	if channelOnly && (root.ChannelID == "" || root.DirectConversationID != "" || root.ParentMessageID != nil) {
+		return store.Message{}, sql.ErrNoRows
 	}
 	if err := requireMessageAccessTx(ctx, tx, root, userID); err != nil {
 		return store.Message{}, err

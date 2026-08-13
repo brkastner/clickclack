@@ -828,6 +828,23 @@ export interface paths {
     patch: operations["updateMessage"];
     trace?: never;
   };
+  "/api/messages/{message_id}/route": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Ensure an immutable public route for a channel root message */
+    post: operations["ensureMessageRoute"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/messages/{message_id}/thread": {
     parameters: {
       query?: never;
@@ -1875,7 +1892,7 @@ export interface components {
     };
     Message: {
       id: string;
-      /** @description Immutable public route ID for thread roots. Omitted when the message has no route. */
+      /** @description Immutable public route ID for root messages. Omitted until a thread or channel citation needs one. */
       route_id?: string;
       workspace_id: string;
       channel_id?: string;
@@ -4086,6 +4103,35 @@ export interface operations {
     responses: {
       /** @description Updated message */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  ensureMessageRoute: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        message_id: components["parameters"]["message_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Channel root with its existing or newly allocated route ID */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MessageResponse"];
+        };
+      };
+      /** @description Message was missing, inaccessible, a reply, or outside a channel */
+      404: {
         headers: {
           [name: string]: unknown;
         };

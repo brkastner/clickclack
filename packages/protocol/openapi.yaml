@@ -1265,6 +1265,21 @@ paths:
       responses:
         "200":
           description: Soft-deleted message
+  /api/messages/{message_id}/route:
+    post:
+      operationId: ensureMessageRoute
+      summary: Ensure an immutable public route for a channel root message
+      parameters:
+        - $ref: "#/components/parameters/message_id"
+      responses:
+        "200":
+          description: Channel root with its existing or newly allocated route ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "404":
+          description: Message was missing, inaccessible, a reply, or outside a channel
   /api/messages/{message_id}/thread:
     get:
       operationId: getThread
@@ -3086,7 +3101,7 @@ components:
           type: string
         route_id:
           type: string
-          description: Immutable public route ID for thread roots. Omitted when the message has no route.
+          description: Immutable public route ID for root messages. Omitted until a thread or channel citation needs one.
         workspace_id:
           type: string
         channel_id:

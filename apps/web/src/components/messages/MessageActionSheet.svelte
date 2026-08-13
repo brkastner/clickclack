@@ -4,6 +4,7 @@
   import { SHEET_QUICK_REACTS } from "./EmojiPicker.svelte";
 
   type CopyStatus = "copied" | "failed" | "";
+  type CopyLinkStatus = "pending" | "failed" | "";
 
   let {
     id,
@@ -19,10 +20,13 @@
     canDelete = false,
     deleting = false,
     copyStatus = "",
+    canCopyLink = false,
+    copyLinkStatus = "",
     onReact,
     onOpenThread,
     onReply,
     onCopy,
+    onCopyLink,
     onEdit,
     onTogglePin,
     onDelete,
@@ -42,10 +46,13 @@
     canDelete?: boolean;
     deleting?: boolean;
     copyStatus?: CopyStatus;
+    canCopyLink?: boolean;
+    copyLinkStatus?: CopyLinkStatus;
     onReact: (emoji: string) => void;
     onOpenThread: () => void;
     onReply: () => void;
     onCopy: () => void;
+    onCopyLink?: () => void;
     onEdit: () => void;
     onTogglePin?: () => void;
     onDelete: () => void;
@@ -183,6 +190,17 @@
           >{copyStatus === "copied" ? "Copied" : "Couldn't copy"}</span>
         {/if}
       </button>
+      {#if canCopyLink && onCopyLink}
+        <button type="button" disabled={copyLinkStatus === "pending"} onclick={onCopyLink}>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+          {copyLinkStatus === "pending" ? "Creating link…" : "Copy link"}
+          {#if copyLinkStatus === "failed"}
+            <span class="sheet-copy-status is-error" role="status" aria-live="polite">Couldn't create link</span>
+          {/if}
+        </button>
+      {/if}
       {#if canPin && onTogglePin}
         <button type="button" disabled={pinning} onclick={onTogglePin}>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
