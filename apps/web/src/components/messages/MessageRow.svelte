@@ -10,6 +10,7 @@
   import ReactionsBar from "./ReactionsBar.svelte";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
   import MessageActionSheet from "./MessageActionSheet.svelte";
+  import CopyLinkFallback from "./CopyLinkFallback.svelte";
   import { shouldOpenUpward } from "../../lib/popover";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, Topic, Upload, User } from "../../lib/types";
@@ -50,6 +51,7 @@
     channelID?: string;
     pinned?: boolean;
     onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
+    onCopyLink?: (message: Message) => Promise<string>;
   };
 
   let {
@@ -83,6 +85,7 @@
     channelID = "",
     pinned = false,
     onTogglePin,
+    onCopyLink,
   }: Props = $props();
 
   let editSession = $derived(editController?.session(editScope));
@@ -178,6 +181,9 @@
   let showReactPicker = $state(false);
   let showMenu = $state(false);
   let copyStatus = $state<"copied" | "failed" | "">("");
+  let copyLinkStatus = $state<"pending" | "failed" | "">("");
+  let copyLinkFallback = $state("");
+  let copyLinkReturnFocus = $state<HTMLElement>();
   let pinSaving = $state(false);
   let pinError = $state("");
   let reactPickerUp = $state(false);
@@ -316,6 +322,40 @@
     } catch {
       setCopyStatus("failed");
       return false;
+    }
+  }
+
+  async function writeMessageLink(): Promise<{ copied: boolean; fallback?: string }> {
+    if (!onCopyLink || copyLinkStatus === "pending") return { copied: false };
+    copyLinkStatus = "pending";
+    let url: string;
+    try {
+      url = await onCopyLink(message);
+    } catch {
+      copyLinkStatus = "failed";
+      return { copied: false };
+    }
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(url);
+      copyLinkStatus = "";
+      setCopyStatus("copied");
+      return { copied: true };
+    } catch {
+      copyLinkStatus = "";
+      return { copied: false, fallback: url };
+    }
+  }
+
+  async function menuCopyLink() {
+    const result = await writeMessageLink();
+    if (!result.copied && !result.fallback) return;
+    closeMenu(false);
+    if (result.fallback) {
+      copyLinkReturnFocus = moreButton;
+      copyLinkFallback = result.fallback;
+    } else {
+      moreButton?.focus();
     }
   }
 
@@ -471,6 +511,18 @@
       sheetCloseTimer = undefined;
       if (!destroyed && generation === actionSheetGeneration) closeActionSheet();
     }, 900);
+  }
+
+  async function sheetCopyLink() {
+    const result = await writeMessageLink();
+    if (!result.copied && !result.fallback) return;
+    const returnFocus = actionSheetReturnFocus;
+    closeActionSheet();
+    if (result.fallback) {
+      await tick();
+      copyLinkReturnFocus = returnFocus;
+      copyLinkFallback = result.fallback;
+    }
   }
 
   function sheetEdit() {
@@ -781,6 +833,20 @@
             </svg>
             Copy text
           </button>
+          {#if channelID && onCopyLink}
+            <button
+              type="button"
+              role="menuitem"
+              disabled={copyLinkStatus === "pending"}
+              onclick={() => void menuCopyLink()}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              {copyLinkStatus === "pending" ? "Creating link…" : "Copy link"}
+            </button>
+            {#if copyLinkStatus === "failed"}<span class="message-menu-error" role="status">Couldn't create link</span>{/if}
+          {/if}
           {#if channelID && onTogglePin}
             <button type="button" role="menuitem" disabled={pinSaving} onclick={menuTogglePin}>
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
@@ -834,15 +900,25 @@
       canDelete={canDeleteMessage && Boolean(onDeleteMessage)}
       {deleting}
       {copyStatus}
+      canCopyLink={Boolean(channelID && onCopyLink)}
+      {copyLinkStatus}
       onReact={sheetReact}
       onOpenThread={sheetOpenThread}
       onReply={sheetReply}
       onCopy={sheetCopy}
+      onCopyLink={sheetCopyLink}
       onEdit={sheetEdit}
       onTogglePin={sheetTogglePin}
       onDelete={sheetDelete}
       onClose={closeActionSheet}
       returnFocus={actionSheetReturnFocus}
+    />
+  {/if}
+  {#if copyLinkFallback}
+    <CopyLinkFallback
+      url={copyLinkFallback}
+      onClose={() => (copyLinkFallback = "")}
+      returnFocus={copyLinkReturnFocus}
     />
   {/if}
 </div>

@@ -21,6 +21,7 @@
   import ReactionsBar from "../messages/ReactionsBar.svelte";
   import AddReactionButton from "../messages/AddReactionButton.svelte";
   import MessageActionSheet from "../messages/MessageActionSheet.svelte";
+  import CopyLinkFallback from "../messages/CopyLinkFallback.svelte";
   import AgentResponding from "../messages/AgentResponding.svelte";
 
   type Props = {
@@ -54,6 +55,7 @@
     channelID?: string;
     pinnedMessageIDs?: ReadonlySet<string>;
     onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
+    onCopyLink?: (message: Message) => Promise<string>;
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
@@ -96,6 +98,7 @@
     channelID = "",
     pinnedMessageIDs = new Set<string>(),
     onTogglePin,
+    onCopyLink,
     editController,
     editScope = "",
     onMessageEdited,
@@ -162,6 +165,9 @@
   let actionMessage = $state<Message>();
   let actionSheetReturnFocus = $state<HTMLElement>();
   let actionCopyStatus = $state<"copied" | "failed" | "">("");
+  let copyLinkStatus = $state<"pending" | "failed" | "">("");
+  let copyLinkFallback = $state("");
+  let copyLinkReturnFocus = $state<HTMLElement>();
   let pinSaving = $state(false);
   let pinError = $state("");
   let longPressTimer: number | undefined;
@@ -297,6 +303,50 @@
     }
   }
 
+  async function writeRootLink(): Promise<{ copied: boolean; fallback?: string }> {
+    if (!onCopyLink || copyLinkStatus === "pending") return { copied: false };
+    copyLinkStatus = "pending";
+    let url: string;
+    try {
+      url = await onCopyLink(root);
+    } catch {
+      copyLinkStatus = "failed";
+      return { copied: false };
+    }
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(url);
+      copyLinkStatus = "";
+      return { copied: true };
+    } catch {
+      copyLinkStatus = "";
+      return { copied: false, fallback: url };
+    }
+  }
+
+  async function copyRootLink(returnFocus?: HTMLElement) {
+    const result = await writeRootLink();
+    if (!result.copied && !result.fallback) return;
+    if (result.fallback) {
+      copyLinkReturnFocus = returnFocus;
+      copyLinkFallback = result.fallback;
+    } else {
+      returnFocus?.focus({ preventScroll: true });
+    }
+  }
+
+  async function sheetCopyLink() {
+    const result = await writeRootLink();
+    if (!result.copied && !result.fallback) return;
+    const returnFocus = actionSheetReturnFocus;
+    closeActionSheet();
+    if (result.fallback) {
+      await tick();
+      copyLinkReturnFocus = returnFocus;
+      copyLinkFallback = result.fallback;
+    }
+  }
+
   function sheetEdit() {
     const message = actionMessage;
     const returnFocus = actionSheetReturnFocus;
@@ -357,6 +407,9 @@
     <strong>{headerDetail ?? `${threadState?.reply_count ?? replies.length} ${(threadState?.reply_count ?? replies.length) === 1 ? "reply" : "replies"}`}</strong>
     {#if pinError}
       <span class="thread-pin-error" role="status" aria-live="polite">{pinError}</span>
+    {/if}
+    {#if copyLinkStatus === "failed"}
+      <span class="thread-pin-error" role="status" aria-live="polite">Couldn't create link</span>
     {/if}
   </div>
   {#if openHref}
@@ -419,6 +472,20 @@
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v3"/>
             </svg>
           </button>
+          {#if channelID && onCopyLink}
+            <button
+              type="button"
+              class="thread-action-btn"
+              aria-label="Copy link"
+              data-tooltip={copyLinkStatus === "pending" ? "Creating link…" : "Copy link"}
+              disabled={copyLinkStatus === "pending"}
+              onclick={(event) => void copyRootLink(event.currentTarget)}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+            </button>
+          {/if}
           {#if channelID && onTogglePin}
             <button
               type="button"
@@ -687,15 +754,25 @@
     canDelete={canDelete(actionMessage) && Boolean(onDeleteMessage)}
     deleting={deletingMessageIDs.has(actionMessage.id)}
     copyStatus={actionCopyStatus}
+    canCopyLink={actionMessage.id === root.id && Boolean(channelID && onCopyLink)}
+    {copyLinkStatus}
     onReact={sheetReact}
     onOpenThread={() => {}}
     onReply={sheetReply}
     onCopy={sheetCopy}
+    onCopyLink={sheetCopyLink}
     onEdit={sheetEdit}
     onTogglePin={sheetTogglePin}
     onDelete={sheetDelete}
     onClose={closeActionSheet}
     returnFocus={actionSheetReturnFocus}
+  />
+{/if}
+{#if copyLinkFallback}
+  <CopyLinkFallback
+    url={copyLinkFallback}
+    onClose={() => (copyLinkFallback = "")}
+    returnFocus={copyLinkReturnFocus}
   />
 {/if}
 <AgentResponding active={agentResponding} agentNames={respondingAgentNames} />

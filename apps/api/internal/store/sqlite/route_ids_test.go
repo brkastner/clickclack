@@ -83,6 +83,9 @@ func TestRouteIDsCreationResolutionAndPermissions(t *testing.T) {
 	if root.RouteID != "" {
 		t.Fatalf("new root message should not eagerly get M route_id: %#v", root)
 	}
+	if _, err := st.EnsureMessageRouteID(ctx, owner.ID, root.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected DM root citation route to be rejected, got %v", err)
+	}
 	root, err = st.EnsureThreadRouteID(ctx, owner.ID, root.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +127,7 @@ func TestRouteIDsCreationResolutionAndPermissions(t *testing.T) {
 	}
 }
 
-func TestThreadRouteIDAssignmentIsConcurrentSafeAndImmutable(t *testing.T) {
+func TestMessageRouteIDAssignmentIsConcurrentSafeAndImmutable(t *testing.T) {
 	t.Parallel()
 	ctx, st, owner, _, channel := seededStore(t)
 	root, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "thread root"})
@@ -140,7 +143,7 @@ func TestThreadRouteIDAssignmentIsConcurrentSafeAndImmutable(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			message, err := st.EnsureThreadRouteID(ctx, owner.ID, root.ID)
+			message, err := st.EnsureMessageRouteID(ctx, owner.ID, root.ID)
 			if err != nil {
 				errs <- err
 				return
@@ -231,6 +234,9 @@ func TestRouteTargetEdgesAndThreadCreationPaths(t *testing.T) {
 	}
 	if _, err := st.EnsureThreadRouteID(ctx, owner.ID, reply.ID); err == nil {
 		t.Fatal("expected reply message to be rejected as thread route root")
+	}
+	if _, err := st.EnsureMessageRouteID(ctx, owner.ID, reply.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected reply citation route to be rejected, got %v", err)
 	}
 
 	rootFromGetThread, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "get thread root"})

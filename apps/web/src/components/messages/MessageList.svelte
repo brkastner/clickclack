@@ -84,6 +84,7 @@
     channelID?: string;
     pinnedMessageIDs?: ReadonlySet<string>;
     onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
+    onCopyLink?: (message: Message) => Promise<string>;
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
@@ -136,6 +137,7 @@
     channelID = "",
     pinnedMessageIDs = new Set<string>(),
     onTogglePin,
+    onCopyLink,
     editController,
     editScope = "",
     onMessageEdited,
@@ -912,6 +914,7 @@
               {channelID}
               {pinnedMessageIDs}
               {onTogglePin}
+              {onCopyLink}
             />
           {/if}
         {/snippet}

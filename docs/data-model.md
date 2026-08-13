@@ -30,8 +30,9 @@ Sortable ULID-style text IDs with semantic prefixes:
 
 Public app URLs use separate immutable random route IDs. They do not replace
 the internal IDs above. Workspaces expose `T...`, channels expose `C...`,
-direct conversations expose `D...`, and thread root messages expose `M...`
-only when a thread URL is needed.
+direct conversations expose `D...`, and root messages expose `M...` when a
+thread or channel-message citation URL is needed. Channel citations allocate
+this ID on first use; replies never receive their own route ID.
 
 ## Tables (V1)
 

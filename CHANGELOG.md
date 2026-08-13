@@ -2,6 +2,7 @@
 
 ## 0.3.0 - Unreleased
 
+- Added stable, permission-checked Copy link actions for channel root messages, with lazy route allocation, canonical configured-origin URLs, and an accessible clipboard fallback.
 - Fixed blank embedded views caused by stale browser assets and returned proper JSON errors for unknown API routes while preserving app deep links.
 - Hardened integration callbacks against server-side requests to non-public networks and enforced guest visibility, moderation, and write limits for topics and registered slash commands. Thanks @jason-allen-oneal.
 - Updated web font, sanitizing, Markdown, virtualization, and build packages plus Electron and the Cloudflare Wrangler toolchain.

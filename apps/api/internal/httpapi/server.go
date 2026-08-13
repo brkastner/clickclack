@@ -221,6 +221,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/messages/{message_id}", s.getMessage)
 		r.Patch("/messages/{message_id}", s.updateMessage)
 		r.Delete("/messages/{message_id}", s.deleteMessage)
+		r.Post("/messages/{message_id}/route", s.ensureMessageRoute)
 		r.Get("/messages/{message_id}/thread", s.getThread)
 		r.Post("/messages/{message_id}/thread/replies", s.createThreadReply)
 		r.Post("/messages/{message_id}/reactions", s.addReaction)
@@ -1121,6 +1122,32 @@ func (s *Server) getMessageByNonce(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) ensureMessageRoute(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if err := act.requireScope("threads:read"); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	messageID := chi.URLParam(r, "message_id")
+	if _, ok := s.requireBotMessageResource(w, r, act, messageID, "dms:read"); !ok {
+		return
+	}
+	message, err := s.store.EnsureMessageRouteID(r.Context(), act.user.ID, messageID)
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrModerationRestricted) {
+		writeError(w, http.StatusNotFound, errors.New("message not found"))
+		return
+	}
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"message": message})
+}
+
 func (s *Server) getThread(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {
@@ -1658,7 +1685,10 @@ func isMissingBrowserAssetPath(urlPath string) bool {
 }
 
 func (s *Server) injectRuntimeConfig(index []byte) []byte {
-	config, err := json.Marshal(map[string]string{"apiBaseUrl": s.publicAPIURL})
+	config, err := json.Marshal(map[string]string{
+		"apiBaseUrl":      s.publicAPIURL,
+		"frontendBaseUrl": s.frontendURL,
+	})
 	if err != nil {
 		return index
 	}

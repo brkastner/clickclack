@@ -1243,6 +1243,7 @@ type Store interface {
 	ListMessages(ctx context.Context, channelID, userID string, page MessagePageRequest) (MessagePage, error)
 	GetMessage(ctx context.Context, messageID, userID string) (Message, error)
 	GetMessageByNonce(ctx context.Context, authorID, nonce string) (Message, error)
+	EnsureMessageRouteID(ctx context.Context, userID, rootMessageID string) (Message, error)
 	EnsureThreadRouteID(ctx context.Context, userID, rootMessageID string) (Message, error)
 	CreateMessage(ctx context.Context, input CreateMessageInput) (Message, Event, error)
 	UpdateMessage(ctx context.Context, input UpdateMessageInput) (Message, Event, error)

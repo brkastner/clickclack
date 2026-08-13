@@ -21,6 +21,7 @@ POST   /api/channels/{channel_id}/messages
 POST   /api/channels/{channel_id}/read
 GET    /api/messages/by-nonce?workspace_id=...&nonce=...
 GET    /api/messages/{message_id}
+POST   /api/messages/{message_id}/route
 PATCH  /api/messages/{message_id}
 DELETE /api/messages/{message_id}
 ```
@@ -50,6 +51,9 @@ DELETE /api/messages/{message_id}
   message sequence.
 - `GET /api/messages/{message_id}` returns a single message visible to the
   current user. DM messages require direct conversation membership.
+- `POST /api/messages/{message_id}/route` idempotently ensures the immutable
+  `M...` route used by Copy link for an accessible channel root. It does not
+  support replies or direct messages, and it performs no historical backfill.
 - `PATCH` accepts `{body}` and only the original author can edit. Sets
   `edited_at`.
 - `DELETE` is a soft delete — sets `deleted_at`, keeps the row and the
@@ -60,6 +64,11 @@ DELETE /api/messages/{message_id}
 Message create, edit, delete, and read updates emit durable events:
 `message.created`, `message.updated`, `message.deleted`, `channel.read`.
 Read events are private to the user who advanced the pointer.
+
+The web message menu exposes **Copy link** for channel roots. It builds the
+absolute URL from the configured public frontend origin and the canonical
+`/app/{workspace_route_id}/{message_route_id}` path. If clipboard access is
+blocked, a focused read-only field exposes the selected URL for manual copy.
 
 ## Editing in the web app
 

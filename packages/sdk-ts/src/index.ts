@@ -1128,6 +1128,12 @@ export class ClickClackClient {
       });
       return data.message;
     },
+    ensureRoute: async (messageId: string): Promise<Message> => {
+      const data = await this.request<{ message: Message }>(`/api/messages/${messageId}/route`, {
+        method: "POST",
+      });
+      return data.message;
+    },
     addReaction: async (messageId: string, emoji: string): Promise<ReactionMutationResponse> =>
       this.request<ReactionMutationResponse>(`/api/messages/${messageId}/reactions`, {
         method: "POST",
