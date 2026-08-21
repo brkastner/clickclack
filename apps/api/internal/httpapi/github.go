@@ -568,23 +568,21 @@ func (s *Server) cookiePath() string {
 }
 
 func (s *Server) secureCookies(r *http.Request) bool {
-	if publicURL, err := url.Parse(strings.TrimSpace(s.publicAPIURL)); err == nil && publicURL.Scheme == "https" {
-		return true
-	}
-	if publicURL, err := url.Parse(strings.TrimSpace(s.githubOAuth.PublicURL)); err == nil {
-		if publicURL.Scheme == "https" {
-			return true
-		}
-	}
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		return true
-	}
-	if publicURL, err := url.Parse(strings.TrimSpace(s.githubOAuth.PublicURL)); err == nil {
-		if !s.disableDevAuth && publicURL.Scheme == "http" && isLocalHostPort(publicURL.Host) {
-			return false
-		}
-	}
-	return !(!s.disableDevAuth && isLocalHostPort(r.RemoteAddr) && isLocalHostPort(r.Host))
+	publicAPIURL, publicAPIErr := url.Parse(strings.TrimSpace(s.publicAPIURL))
+	githubPublicURL, githubPublicErr := url.Parse(strings.TrimSpace(s.githubOAuth.PublicURL))
+	requestHTTPS := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	configuredLoopbackHTTP := !s.disableDevAuth &&
+		githubPublicErr == nil &&
+		githubPublicURL.Scheme == "http" &&
+		isLocalHostPort(githubPublicURL.Host)
+	requestLoopbackHTTP := !s.disableDevAuth && isLocalHostPort(r.RemoteAddr) && isLocalHostPort(r.Host)
+
+	// Loopback HTTP is a documented local-development contract. Every other
+	// origin fails closed to Secure, including configured and proxied HTTPS.
+	return publicAPIErr == nil && publicAPIURL.Scheme == "https" ||
+		githubPublicErr == nil && githubPublicURL.Scheme == "https" ||
+		requestHTTPS ||
+		!(configuredLoopbackHTTP || requestLoopbackHTTP)
 }
 
 func (s *Server) oauthBrowserBinding(w http.ResponseWriter, r *http.Request) (string, error) {

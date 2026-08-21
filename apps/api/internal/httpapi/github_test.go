@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -33,6 +34,69 @@ func TestGitHubOAuthDefaultHTTPClientTimeout(t *testing.T) {
 	cfg = GitHubOAuthConfig{HTTPClient: customClient}.withDefaults()
 	if cfg.HTTPClient != customClient {
 		t.Fatal("expected custom client to be preserved")
+	}
+}
+
+func TestAuthenticationCookiesRoundTripOnLoopbackHTTP(t *testing.T) {
+	t.Parallel()
+	srv := New(nil, nil, Options{})
+	session := store.Session{
+		Token:     "tok_loopback",
+		ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339Nano),
+	}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/issue":
+			if _, err := srv.oauthBrowserBinding(w, r); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			srv.setSessionCookie(w, r, session)
+			w.WriteHeader(http.StatusNoContent)
+		case "/verify":
+			binding, bindingErr := r.Cookie(srv.cookies.OAuthBinding)
+			sessionCookie, sessionErr := r.Cookie(srv.cookies.Session)
+			if bindingErr != nil ||
+				!validDesktopCode(binding.Value, oauthEncodedSecretLength, oauthEncodedSecretLength) ||
+				sessionErr != nil ||
+				sessionCookie.Value != session.Token {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+
+	response, err := client.Get(server.URL + "/issue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected cookie issue success, got %s", response.Status)
+	}
+	bindingCookie := findCookie(response.Cookies(), srv.cookies.OAuthBinding)
+	sessionCookie := findCookie(response.Cookies(), srv.cookies.Session)
+	if bindingCookie == nil || bindingCookie.Secure || sessionCookie == nil || sessionCookie.Secure {
+		t.Fatalf("expected loopback HTTP cookies without Secure: binding=%#v session=%#v", bindingCookie, sessionCookie)
+	}
+
+	response, err = client.Get(server.URL + "/verify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected cookie jar to return both loopback cookies, got %s", response.Status)
 	}
 }
 
