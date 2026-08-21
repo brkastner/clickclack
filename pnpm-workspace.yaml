@@ -38,3 +38,5 @@ minimumReleaseAgeExclude:
   - '@typescript/typescript-win32-arm64@7.0.2'
   - '@typescript/typescript-win32-x64@7.0.2'
   - typescript@7.0.2
+patchedDependencies:
+  pdfjs-dist@6.2.108: patches/pdfjs-dist@6.2.108.patch

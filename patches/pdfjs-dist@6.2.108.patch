@@ -1,0 +1,52 @@
+diff --git a/build/pdf.worker.mjs b/build/pdf.worker.mjs
+index 66ae0d0b2282d6763eaa00b53983964e07b295dd..159e0a486daa6d7c37d7cfee97b6b0df042b37ed 100644
+--- a/build/pdf.worker.mjs
++++ b/build/pdf.worker.mjs
+@@ -38725,0 +38726,18 @@ function clearGlobalCaches() {
++function normalizeFileSpecFilename(filename) {
++  let normalized = "";
++  for (let index = 0; index < filename.length; index++) {
++    const char = filename[index];
++    if (char !== "\\") {
++      normalized += char;
++      continue;
++    }
++    if (filename[index + 1] === "\\") {
++      index++;
++    }
++    if (filename[index + 1] === "/") {
++      index++;
++    }
++    normalized += "/";
++  }
++  return normalized;
++}
+@@ -38742 +38760 @@ class FileSpec {
+-      return stringToPDFString(item, true).replaceAll("\\\\", "\\").replaceAll("\\/", "/").replaceAll("\\", "/");
++      return normalizeFileSpecFilename(stringToPDFString(item, true));
+diff --git a/legacy/build/pdf.worker.mjs b/legacy/build/pdf.worker.mjs
+index ff381bb9b154685f8ed641b6c1adabb4c732e1f3..5c8af17690096dbb1c34772078a2135ca67c7b22 100644
+--- a/legacy/build/pdf.worker.mjs
++++ b/legacy/build/pdf.worker.mjs
+@@ -44625,0 +44626,18 @@ function clearGlobalCaches() {
++function normalizeFileSpecFilename(filename) {
++  let normalized = "";
++  for (let index = 0; index < filename.length; index++) {
++    const char = filename[index];
++    if (char !== "\\") {
++      normalized += char;
++      continue;
++    }
++    if (filename[index + 1] === "\\") {
++      index++;
++    }
++    if (filename[index + 1] === "/") {
++      index++;
++    }
++    normalized += "/";
++  }
++  return normalized;
++}
+@@ -44642 +44660 @@ class FileSpec {
+-      return stringToPDFString(item, true).replaceAll("\\\\", "\\").replaceAll("\\/", "/").replaceAll("\\", "/");
++      return normalizeFileSpecFilename(stringToPDFString(item, true));

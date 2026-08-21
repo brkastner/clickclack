@@ -38722,6 +38722,24 @@ function clearGlobalCaches() {
 
 
 
+function normalizeFileSpecFilename(filename) {
+  let normalized = "";
+  for (let index = 0; index < filename.length; index++) {
+    const char = filename[index];
+    if (char !== "\\") {
+      normalized += char;
+      continue;
+    }
+    if (filename[index + 1] === "\\") {
+      index++;
+    }
+    if (filename[index + 1] === "/") {
+      index++;
+    }
+    normalized += "/";
+  }
+  return normalized;
+}
 
 class FileSpec {
   constructor(root) {
@@ -38739,7 +38757,7 @@ class FileSpec {
   get filename() {
     const item = FileSpec.pickPlatformItem(this.root);
     if (item && typeof item === "string") {
-      return stringToPDFString(item, true).replaceAll("\\\\", "\\").replaceAll("\\/", "/").replaceAll("\\", "/");
+      return normalizeFileSpecFilename(stringToPDFString(item, true));
     }
     return "";
   }

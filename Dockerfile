@@ -4,6 +4,7 @@ ENV CLICKCLACK_WEB_VERSION=$CLICKCLACK_WEB_VERSION
 WORKDIR /src
 RUN npm install -g pnpm@11.20.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches patches
 COPY apps/web/package.json apps/web/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/sdk-ts/package.json packages/sdk-ts/package.json

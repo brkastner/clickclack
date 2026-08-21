@@ -13,6 +13,9 @@ overrides:
   tar@7: 7.5.21
   undici@6: 6.28.0
 
+patchedDependencies:
+  pdfjs-dist@6.2.108: 05fc2425c4db091d6852e0ad7030d1f4b1fa812a8677de071f7e6d91a1737c39
+
 importers:
 
   .:
@@ -85,7 +88,7 @@ importers:
         version: 18.0.9
       pdfjs-dist:
         specifier: ^6.2.108
-        version: 6.2.108
+        version: 6.2.108(patch_hash=05fc2425c4db091d6852e0ad7030d1f4b1fa812a8677de071f7e6d91a1737c39)
       sax:
         specifier: ^1.6.1
         version: 1.6.1
@@ -4646,7 +4649,7 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdfjs-dist@6.2.108:
+  pdfjs-dist@6.2.108(patch_hash=05fc2425c4db091d6852e0ad7030d1f4b1fa812a8677de071f7e6d91a1737c39):
     optionalDependencies:
       '@napi-rs/canvas': 1.0.5
 
