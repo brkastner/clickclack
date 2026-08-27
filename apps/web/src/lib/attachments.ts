@@ -13,6 +13,19 @@ export type PendingAttachment = {
   error?: string;
 };
 
+type ClipboardItem = Pick<DataTransferItem, "kind" | "type" | "getAsFile">;
+
+export function clipboardImageFiles(items: ArrayLike<ClipboardItem>): File[] {
+  const images: File[] = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item.kind !== "file" || !item.type.toLowerCase().startsWith("image/")) continue;
+    const file = item.getAsFile();
+    if (file) images.push(file);
+  }
+  return images;
+}
+
 export function appendPendingAttachments(
   existing: PendingAttachment[],
   files: Iterable<File>,

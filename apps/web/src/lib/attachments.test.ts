@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   MAX_MESSAGE_ATTACHMENTS,
   appendPendingAttachments,
+  clipboardImageFiles,
   mergeUploads,
   readyUploads,
   uploadsMissingAttachments,
@@ -25,6 +26,19 @@ function upload(id: string, filename = `${id}.txt`): Upload {
     created_at: "2026-01-01T00:00:00Z",
   };
 }
+
+test("extracts only pasted image files from clipboard items", () => {
+  const image = file("pasted.png");
+  const document = file("notes.txt");
+  const items = [
+    { kind: "string", type: "text/plain", getAsFile: () => null },
+    { kind: "file", type: "text/plain", getAsFile: () => document },
+    { kind: "file", type: "image/png", getAsFile: () => image },
+    { kind: "file", type: "image/jpeg", getAsFile: () => null },
+  ];
+
+  assert.deepEqual(clipboardImageFiles(items), [image]);
+});
 
 test("appends multiple files in selection order with stable local keys", () => {
   let serial = 0;

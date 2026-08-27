@@ -6,8 +6,8 @@
     handleLabel,
     type ChannelProfileShortcut,
   } from "../../lib/chat/people";
+  import { clipboardImageFiles, type PendingAttachment } from "../../lib/attachments";
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
-  import type { PendingAttachment } from "../../lib/attachments";
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
   import ComposerToolbar from "./ComposerToolbar.svelte";
@@ -58,6 +58,7 @@
     onFocus: () => void;
     onInputRef: (node: HTMLTextAreaElement | null) => void;
     onUploadFile?: (event: Event) => void;
+    onPasteFiles?: (files: File[]) => void;
     onRemoveUpload?: (key: string) => void;
     onRetryUpload?: (key: string) => void;
     onClearReply?: () => void;
@@ -93,6 +94,7 @@
     onFocus,
     onInputRef,
     onUploadFile = () => {},
+    onPasteFiles,
     onRemoveUpload = () => {},
     onRetryUpload = () => {},
     onClearReply = () => {},
@@ -260,6 +262,14 @@
     onFocus();
   }
 
+  function handlePaste(event: ClipboardEvent) {
+    if (!onPasteFiles || !event.clipboardData) return;
+    const files = clipboardImageFiles(event.clipboardData.items);
+    if (files.length === 0) return;
+    event.preventDefault();
+    onPasteFiles(files);
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (activeSuggestions.length > 0) {
       if (event.key === "ArrowDown") {
@@ -393,6 +403,7 @@
         {disabled}
         oninput={handleInput}
         onfocus={handleFocus}
+        onpaste={handlePaste}
         onkeydown={handleKeydown}
         onkeyup={() => updateCaret()}
         onmouseup={() => updateCaret()}

@@ -3222,10 +3222,7 @@
     }
   }
 
-  async function uploadFiles(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const files = [...(input.files || [])];
-    input.value = "";
+  async function enqueueFiles(files: File[]) {
     if (files.length === 0 || !selectedWorkspaceID) return;
     const previousKeys = new Set(pendingAttachments.map((attachment) => attachment.key));
     const result = appendPendingAttachments(
@@ -3253,6 +3250,13 @@
       }
     }
     await Promise.all(Array.from({ length: Math.min(2, uploadKeys.length) }, uploadNext));
+  }
+
+  async function uploadFiles(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = [...(input.files || [])];
+    input.value = "";
+    await enqueueFiles(files);
   }
 
   function removePendingAttachment(key: string) {
@@ -4570,6 +4574,7 @@
       onFocus={activateMessageComposer}
       onInputRef={(node) => (messageInput = node)}
       onUploadFile={uploadFiles}
+      onPasteFiles={(files) => void enqueueFiles(files)}
       onRemoveUpload={removePendingAttachment}
       onRetryUpload={(key) => void uploadPendingAttachment(key)}
       onClearReply={clearReplyTarget}

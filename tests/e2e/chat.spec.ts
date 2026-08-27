@@ -1727,6 +1727,30 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
     multiUploadGroup.getByLabel("Attachments").getByText("second-note.txt"),
   ).toBeVisible();
 
+  const composer = page.getByLabel("Message body");
+  await composer.evaluate((node) => {
+    const bytes = Uint8Array.from(
+      atob(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      ),
+      (character) => character.charCodeAt(0),
+    );
+    const clipboard = new DataTransfer();
+    clipboard.items.add(new File([bytes], "pasted-image.png", { type: "image/png" }));
+    node.dispatchEvent(
+      new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }),
+    );
+  });
+  await expect(page.getByLabel("Pending attachments").getByText("pasted-image.png")).toBeVisible();
+  await composer.fill("message with pasted image");
+  await page.getByRole("button", { name: "Send" }).click();
+  const pastedImageGroup = page.locator(".message-group", {
+    has: page.locator(".markdown").filter({ hasText: "message with pasted image" }),
+  });
+  await expect(
+    pastedImageGroup.getByLabel("Attachments").getByText("pasted-image.png"),
+  ).toBeVisible();
+
   await page.getByLabel("Upload file").setInputFiles({
     name: "pixel.png",
     mimeType: "image/png",
