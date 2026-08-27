@@ -30,8 +30,7 @@ export function splitSlashDraft(body: string): { command: string; text: string }
   return { command: normalizeCommandToken(match[1]), text: match[2].trim() };
 }
 
-// HTTP-registered commands win over bot-declared menu entries at dispatch
-// time; bot-declared and unknown commands fall through to a plain message.
+// HTTP-registered commands win over bot-declared menu entries at dispatch.
 export function findRegisteredCommand(
   commands: SlashCommand[],
   commandToken: string,

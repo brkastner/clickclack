@@ -149,7 +149,7 @@ test("dispatches a registered slash command through the hook without posting the
     // Slack semantics: the invocation itself is never posted.
     await expect(page.locator(".markdown").filter({ hasText: "/deploy prod" })).toHaveCount(0);
     // Composer is cleared and ready for the next message.
-    await expect(page.getByLabel("Message body")).toHaveValue("");
+    await expect(page.getByLabel("Message body")).toHaveText("");
 
     expect(probe.payloads).toHaveLength(1);
     expect(probe.payloads[0].command).toBe("/deploy");
@@ -200,6 +200,38 @@ test("unregistered slash text falls through to a plain message", async ({ page }
 
   await expect(page.locator(".markdown").filter({ hasText: "/shrug oh well" })).toBeVisible();
   await expect(page.locator(".composer-notice")).toHaveCount(0);
+});
+
+test("preserves a unique bot command owner in realtime metadata", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, "Owned", stamp);
+  const channel = await createChannel(page, workspace.id);
+  const { bot, bot_token: token } = await createBot(page, workspace.id, stamp, "owned");
+  await setBotCommands(page, token.token, [
+    { command: "pin", description: "Pin this channel to the bot" },
+  ]);
+
+  await openChannel(page, workspace.route_id, channel.name);
+  await page.getByLabel("Message body").fill("/pin main");
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/api/channels/${channel.id}/messages`),
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const response = await created;
+  expect(response.ok()).toBe(true);
+  const result = (await response.json()) as {
+    event: {
+      mentioned_user_ids?: string[];
+      payload: Record<string, unknown>;
+    };
+  };
+  expect(result.event.mentioned_user_ids).toEqual([bot.id]);
+  expect(result.event.payload.bot_command_owner_user_id).toBe(bot.id);
+  expect(result.event.payload.bot_command_id).toEqual(expect.any(String));
+  await expect(page.locator(".markdown").filter({ hasText: "/pin main" })).toBeVisible();
 });
 
 test("quoted registered slash text falls through to a quoted plain message", async ({ page }) => {
@@ -253,7 +285,7 @@ test("restores a registered slash draft when callback dispatch fails", async ({ 
     await page.getByRole("button", { name: "Send" }).click();
 
     await expect(page.locator(".composer-notice--error")).toBeVisible();
-    await expect(page.getByLabel("Message body")).toHaveValue("/broken retry-me");
+    await expect(page.getByLabel("Message body")).toHaveText("/broken retry-me");
     await expect(page.locator(".markdown").filter({ hasText: "/broken retry-me" })).toHaveCount(0);
   } finally {
     probe.release();
@@ -285,12 +317,12 @@ test("does not apply delayed slash callback state after a conversation change", 
     await expect(page.getByRole("heading", { name: `#${secondChannel.name}` })).toBeVisible();
     probe.release();
     await expect(page.locator(".composer-notice")).toHaveCount(0);
-    await expect(page.getByLabel("Message body")).toHaveValue("");
+    await expect(page.getByLabel("Message body")).toHaveText("");
 
     await page.getByRole("link", { name: `# ${firstChannel.name}` }).click();
     await expect(page.getByRole("heading", { name: `#${firstChannel.name}` })).toBeVisible();
     await expect(page.locator(".composer-notice")).toHaveCount(0);
-    await expect(page.getByLabel("Message body")).toHaveValue("");
+    await expect(page.getByLabel("Message body")).toHaveText("");
   } finally {
     probe.release();
     await probe.close();

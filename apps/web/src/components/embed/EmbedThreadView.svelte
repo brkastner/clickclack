@@ -7,6 +7,7 @@
   import { requestCurrentUser } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
+  import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
   import { listWorkspaceMembersPage } from "../../lib/workspace-members";
   import {
     MessageEditController,
@@ -54,7 +55,7 @@
   let parentLabel = $state("Thread");
   let replyBody = $state("");
   let replyTarget = $state<Message | null>(null);
-  let replyInput = $state<HTMLTextAreaElement | null>(null);
+  let replyInput = $state<ComposerInputElement | null>(null);
   let replyError = $state("");
   let realtimeError = $state("");
   let replySending = $state(false);

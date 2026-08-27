@@ -805,10 +805,15 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 	if input.TurnID != "" {
 		eventFields["turn_id"] = input.TurnID
 	}
+	if input.BotCommandID != "" {
+		eventFields["bot_command_id"] = input.BotCommandID
+		eventFields["bot_command_owner_user_id"] = input.BotCommandOwnerUserID
+	}
 	mentionedIDs, err := mentionedUserIDs(ctx, qtx, workspaceID, body)
 	if err != nil {
 		return store.Message{}, store.Event{}, err
 	}
+	mentionedIDs = compactStrings(append(mentionedIDs, input.BotCommandOwnerUserID))
 	event, err := insertEventWithRecipientsAndMentions(ctx, tx, workspaceID, input.ChannelID, "message.created", &seq, eventPayload(ctx, eventFields, nonce), nil, mentionedIDs)
 	if err != nil {
 		return store.Message{}, store.Event{}, err

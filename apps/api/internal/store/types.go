@@ -890,12 +890,14 @@ type DeleteChannelBotPresentationInput struct {
 }
 
 type CreateMessageInput struct {
-	ChannelID       string
-	AuthorID        string
-	Body            string
-	QuotedMessageID *string
-	Nonce           string
-	TopicID         string
+	ChannelID             string
+	AuthorID              string
+	Body                  string
+	QuotedMessageID       *string
+	Nonce                 string
+	TopicID               string
+	BotCommandID          string
+	BotCommandOwnerUserID string
 	// Kind defaults to 'message' when empty. Activity kinds are gated at the
 	// API layer by AgentActivityWriteScope.
 	Kind   string

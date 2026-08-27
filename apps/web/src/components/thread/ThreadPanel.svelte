@@ -13,6 +13,7 @@
     type ChannelProfileShortcut,
   } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
+  import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
   import type { ReactionController } from "../../lib/reactions.svelte";
@@ -52,7 +53,7 @@
     onSubmitReply: () => void;
     onReplyKeydown: (event: KeyboardEvent) => void;
     onReplyFocus: () => void;
-    onReplyInputRef: (node: HTMLTextAreaElement | null) => void;
+    onReplyInputRef: (node: ComposerInputElement | null) => void;
     canDeleteAnyMessage?: boolean;
     deletingMessageIDs?: ReadonlySet<string>;
     onSetReplyTarget: (message: Message, context: "thread") => void;

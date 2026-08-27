@@ -7,6 +7,7 @@
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
+  import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
   import { listWorkspaceMembersPage } from "../../lib/workspace-members";
   import {
     MessageEditController,
@@ -54,7 +55,7 @@
   let loadingOlder = $state(false);
   let messageBody = $state("");
   let replyTarget = $state<Message | null>(null);
-  let messageInput = $state<HTMLTextAreaElement | null>(null);
+  let messageInput = $state<ComposerInputElement | null>(null);
   let messageList = $state<MessageListHandle | null>(null);
   let sendError = $state("");
   let realtimeError = $state("");

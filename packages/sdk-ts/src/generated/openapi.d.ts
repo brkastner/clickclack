@@ -1737,6 +1737,13 @@ export interface components {
       /** @description Optional topic id. Channel-scoped topics can only be used in their channel. */
       topic_id?: string;
       /**
+       * @description Optional bot-declared command ID for an ordinary unquoted channel
+       *     message. The API validates that the command belongs to the channel
+       *     workspace and matches the leading command token in `body`, then
+       *     preserves its owning bot in realtime routing metadata.
+       */
+      bot_command_id?: string;
+      /**
        * @description Durable message kind; omitted values default to message. Agent
        *     activity kinds require bot-token auth
        *     with the explicit agent_activity:write scope and are supported on
@@ -1926,7 +1933,7 @@ export interface components {
       payload: {
         [key: string]: unknown;
       } | null;
-      /** @description Workspace user IDs explicitly mentioned by a message event. */
+      /** @description Workspace user IDs explicitly mentioned by a message event, including a validated bot-command owner. */
       mentioned_user_ids?: string[];
     };
     ChannelNotificationSettings: {

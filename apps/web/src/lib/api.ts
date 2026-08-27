@@ -21,7 +21,11 @@ export function readableAPIError(error: unknown, fallback: string): string {
 
 declare global {
   interface Window {
-    __CLICKCLACK_CONFIG__?: { apiBaseUrl?: string; frontendBaseUrl?: string };
+    __CLICKCLACK_CONFIG__?: {
+      apiBaseUrl?: string;
+      frontendBaseUrl?: string;
+      voiceBaseUrl?: string;
+    };
   }
 }
 
@@ -33,6 +37,13 @@ export function apiBaseURL(): string {
 export function frontendBaseURL(): string {
   if (typeof window === "undefined") return "";
   return (window.__CLICKCLACK_CONFIG__?.frontendBaseUrl || window.location.origin)
+    .trim()
+    .replace(/\/$/, "");
+}
+
+export function voiceBaseURL(): string {
+  if (typeof window === "undefined") return "";
+  return (window.__CLICKCLACK_CONFIG__?.voiceBaseUrl || "http://127.0.0.1:7860")
     .trim()
     .replace(/\/$/, "");
 }

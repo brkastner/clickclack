@@ -160,6 +160,37 @@ func TestHTTPBotCommandAuthorizationAndRealtime(t *testing.T) {
 	expectStatusWithBearer(t, zetaToken.Token, http.MethodGet, server.URL+"/api/workspaces/"+otherWorkspace.ID+"/bot-commands", nil, http.StatusForbidden)
 	expectStatusAsUser(t, outsider.ID, http.MethodGet, server.URL+"/api/workspaces/"+workspace.ID+"/bot-commands", nil, http.StatusForbidden)
 
+	channels, err := st.ListChannels(ctx, workspace.ID, member.ID)
+	if err != nil || len(channels) == 0 {
+		t.Fatalf("list command test channel: %#v: %v", channels, err)
+	}
+	var statusCommand store.BotCommand
+	for _, command := range setResult.BotCommands {
+		if command.Command == "/status" {
+			statusCommand = command
+			break
+		}
+	}
+	if statusCommand.ID == "" {
+		t.Fatalf("missing status command in %#v", setResult.BotCommands)
+	}
+	messageEndpoint := server.URL + "/api/channels/" + channels[0].ID + "/messages"
+	created := postJSONAsUser[struct {
+		Event store.Event `json:"event"`
+	}](t, member.ID, messageEndpoint, map[string]string{
+		"body":           "/status now",
+		"bot_command_id": statusCommand.ID,
+	})
+	if !slices.Equal(created.Event.MentionedUserIDs, []string{zetaBot.ID}) {
+		t.Fatalf("bot command owner was not preserved as a mention: %#v", created.Event)
+	}
+	payload, ok := created.Event.Payload.(map[string]any)
+	if !ok || payload["bot_command_id"] != statusCommand.ID || payload["bot_command_owner_user_id"] != zetaBot.ID {
+		t.Fatalf("bot command routing metadata missing from event: %#v", created.Event.Payload)
+	}
+	expectStatusAsUser(t, member.ID, http.MethodPost, messageEndpoint, strings.NewReader(`{"body":"/wrong","bot_command_id":"`+statusCommand.ID+`"}`), http.StatusBadRequest)
+	expectStatusAsUser(t, member.ID, http.MethodPost, messageEndpoint, strings.NewReader(`{"body":"/status","bot_command_id":"cmd_missing"}`), http.StatusBadRequest)
+
 	if _, _, err := st.UpdateMemberModeration(ctx, store.UpdateMemberModerationInput{
 		WorkspaceID:  workspace.ID,
 		TargetUserID: zetaBot.ID,

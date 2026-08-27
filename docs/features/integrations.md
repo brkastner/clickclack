@@ -152,9 +152,12 @@ message list.
 Bot-declared command menus are a separate backend metadata source for the web
 composer integration. When that integration merges both systems, an
 HTTP-registered slash command wins at dispatch time if the same name exists in
-both. Bot-declared and otherwise unknown commands fall through to normal
-plain-message delivery. The two systems intentionally have no cross-system
-uniqueness constraint.
+both. Bot-declared and otherwise unknown commands still use normal plain-message
+delivery. When exactly one bot owns a declared command, however, the client
+preserves that ownership through a server-validated `bot_command_id`; realtime
+metadata names and mentions the owning bot. Duplicate declarations remain
+undirected. The two systems intentionally have no cross-system uniqueness
+constraint.
 
 The same composer menu supports `@` mentions for workspace people and bots.
 Mention suggestions work in channel, DM, and thread composers; selection uses

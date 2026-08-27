@@ -304,8 +304,12 @@ type MessageInputBase = {
 
 export type MessageInput = MessageInputBase &
   (
-    | { kind?: "message"; turn_id?: never }
-    | { kind: "agent_commentary" | "agent_tool"; turn_id?: string }
+    | { kind?: "message"; turn_id?: never; bot_command_id?: string }
+    | {
+        kind: "agent_commentary" | "agent_tool";
+        turn_id?: string;
+        bot_command_id?: never;
+      }
   );
 
 export type ReactionSummary = components["schemas"]["ReactionSummary"];

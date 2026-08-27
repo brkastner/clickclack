@@ -8,13 +8,18 @@ test("inline quote-reply renders, jumps, and survives source delete", async ({ p
   // Send the original message we'll reply to.
   await page.getByLabel("Message body").fill("the quoted original");
   await page.getByRole("button", { name: "Send" }).click();
-  const original = page.locator(".markdown").filter({ hasText: "the quoted original" });
+  const original = page.locator(".markdown").filter({ hasText: "the quoted original" }).first();
   await expect(original).toBeVisible();
 
   // Click Quote on the row, ensure composer chip appears, send a reply.
-  const originalRow = page.locator(".message-row", {
-    has: page.locator(".markdown").filter({ hasText: "the quoted original" }),
-  });
+  const originalRow = page
+    .locator(".message-row")
+    .filter({
+      has: page.locator(":scope > .message-content > .markdown").filter({
+        hasText: "the quoted original",
+      }),
+    })
+    .first();
   await originalRow.hover();
   await originalRow.getByRole("button", { name: "Reply" }).click();
   await expect(page.getByLabel("Replying to message")).toBeVisible();

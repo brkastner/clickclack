@@ -1,9 +1,11 @@
+export type ComposerInputElement = HTMLTextAreaElement | HTMLElement;
+
 type RedirectTypingOptions = {
   authRequired: boolean;
   isModalOpen: () => boolean;
-  messageInput: HTMLTextAreaElement | null;
-  replyInput: HTMLTextAreaElement | null;
-  target: () => HTMLTextAreaElement | null;
+  messageInput: ComposerInputElement | null;
+  replyInput: ComposerInputElement | null;
+  target: () => ComposerInputElement | null;
 };
 
 let pointerFocusedControl: HTMLElement | null = null;
@@ -110,7 +112,14 @@ function shouldRedirectKeystroke(event: KeyboardEvent, options: RedirectTypingOp
   if (event.key.length !== 1) return false;
   if (hasMessageTextSelection()) return false;
   const active = document.activeElement as HTMLElement | null;
-  if (active === options.messageInput || active === options.replyInput) return false;
+  if (
+    active === options.messageInput ||
+    active === options.replyInput ||
+    options.messageInput?.contains(active) ||
+    options.replyInput?.contains(active)
+  ) {
+    return false;
+  }
   if (isEditableElement(active)) return false;
   if (consumesKeystrokes(active)) return false;
   return true;
@@ -119,15 +128,31 @@ function shouldRedirectKeystroke(event: KeyboardEvent, options: RedirectTypingOp
 export function redirectTypingToComposer(event: KeyboardEvent, options: RedirectTypingOptions) {
   if (!shouldRedirectKeystroke(event, options)) return;
   const target = options.target();
-  if (!target || target.disabled || target.readOnly) return;
+  if (!target) return;
+  if (target instanceof HTMLTextAreaElement) {
+    if (target.disabled || target.readOnly) return;
+    if (event.key === " ") event.preventDefault();
+    target.focus({ preventScroll: true });
+    const len = target.value.length;
+    target.setSelectionRange(len, len);
+    if (event.key === " ") {
+      const start = target.selectionStart ?? len;
+      const end = target.selectionEnd ?? len;
+      target.setRangeText(" ", start, end, "end");
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    return;
+  }
+  if (target.getAttribute("contenteditable") !== "true") return;
   if (event.key === " ") event.preventDefault();
   target.focus({ preventScroll: true });
-  const len = target.value.length;
-  target.setSelectionRange(len, len);
-  if (event.key === " ") {
-    const start = target.selectionStart ?? len;
-    const end = target.selectionEnd ?? len;
-    target.setRangeText(" ", start, end, "end");
-    target.dispatchEvent(new Event("input", { bubbles: true }));
+  const selection = window.getSelection();
+  if (selection) {
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
+  if (event.key === " ") document.execCommand("insertText", false, " ");
 }

@@ -162,6 +162,26 @@ export function desktopBridgeAllowed(currentOrigin: string, trustedOrigin: strin
   }
 }
 
+export function desktopAudioPermissionAllowed(
+  permission: string,
+  requestingOrigin: string,
+  serverUrl: string,
+  mediaTypes: readonly string[],
+): boolean {
+  if (
+    permission !== "media" ||
+    mediaTypes.length === 0 ||
+    mediaTypes.some((mediaType) => mediaType !== "audio")
+  ) {
+    return false;
+  }
+  try {
+    return new URL(requestingOrigin).origin === normalizeServerURL(serverUrl);
+  } catch {
+    return false;
+  }
+}
+
 export function desktopMainWindowNavigationAllowed(
   input: string,
   serverUrl: string,

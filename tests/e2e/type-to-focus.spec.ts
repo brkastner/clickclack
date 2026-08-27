@@ -25,7 +25,7 @@ test.describe("type-to-focus composer", () => {
 
     await page.keyboard.type("hello world");
     await expect(composer).toBeFocused();
-    await expect(composer).toHaveValue("hello world");
+    await expect(composer).toHaveText("hello world");
   });
 
   test("typing after clicking the active channel redirects to the composer", async ({ page }) => {
@@ -40,7 +40,7 @@ test.describe("type-to-focus composer", () => {
 
     await page.keyboard.type("nav draft");
     await expect(composer).toBeFocused();
-    await expect(composer).toHaveValue("nav draft");
+    await expect(composer).toHaveText("nav draft");
   });
 
   test("modifier-key combos are not redirected", async ({ page }) => {
@@ -72,7 +72,7 @@ test.describe("type-to-focus composer", () => {
     const afterScroll = await messages.evaluate((el) => el.scrollTop);
     expect(afterScroll).toBe(beforeScroll);
     await expect(composer).toBeFocused();
-    await expect(composer).toHaveValue(" ");
+    await expect.poll(() => composer.textContent()).toBe(" ");
   });
 
   test("redirect targets the thread composer when a thread is open", async ({ page }) => {
@@ -90,7 +90,7 @@ test.describe("type-to-focus composer", () => {
     await expect(threadComposer).not.toBeFocused();
     await page.keyboard.type("inside thread");
     await expect(threadComposer).toBeFocused();
-    await expect(threadComposer).toHaveValue("inside thread");
+    await expect(threadComposer).toHaveText("inside thread");
   });
 
   test("typing after chat action buttons still redirects to the active composer", async ({
@@ -114,14 +114,14 @@ test.describe("type-to-focus composer", () => {
     await expect(composer).not.toBeFocused();
     await page.keyboard.type("channel draft");
     await expect(composer).toBeFocused();
-    await expect(composer).toHaveValue("channel draft");
+    await expect(composer).toHaveText("channel draft");
     await composer.fill("");
 
     await clickThreadRootReplyButton(page);
     await expect(threadComposer).not.toBeFocused();
     await page.keyboard.type("thread draft");
     await expect(threadComposer).toBeFocused();
-    await expect(threadComposer).toHaveValue("thread draft");
+    await expect(threadComposer).toHaveText("thread draft");
   });
 
   test("typing with selected thread quote text does not redirect to composer", async ({ page }) => {
@@ -157,7 +157,7 @@ test.describe("type-to-focus composer", () => {
 
     await page.keyboard.type("x");
     await expect(threadComposer).not.toBeFocused();
-    await expect(threadComposer).toHaveValue("");
+    await expect(threadComposer).toHaveText("");
   });
 
   test("composer auto-grows with newlines and shrinks back after send", async ({ page }) => {

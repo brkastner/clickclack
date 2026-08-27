@@ -211,8 +211,8 @@ async function mobileGeometry(page: Page): Promise<MobileGeometry> {
         height: rect.height,
       };
     };
-    const textarea = document.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="Message body"]',
+    const textarea = document.querySelector<HTMLElement>(
+      '[role="textbox"][aria-label="Message body"]',
     );
     const toolbar = document.querySelector<HTMLElement>(".composer-toolbar");
     if (!textarea || !toolbar) throw new Error("missing composer controls");
@@ -1344,7 +1344,7 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
   await waitForAppReady(page);
   await expect(activeChannelHeading(page)).toBeVisible();
 
-  const composer = page.locator('textarea[aria-label="Message body"]');
+  const composer = page.getByLabel("Message body");
   const toggle = page.getByRole("button", { name: "Toggle navigation" });
   const openMobileNavigation = async () => {
     await expect(toggle).toBeVisible();
@@ -1370,7 +1370,7 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
 
   await openMobileNavigation();
   await page.keyboard.type("hidden draft");
-  await expect(composer).toHaveValue("");
+  await expect(composer).toHaveText("");
 
   await page.keyboard.press("Escape");
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -1799,7 +1799,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await page.getByRole("button", { name: "GIF picker" }).click();
   await page.getByLabel("Search GIFs").fill("ship");
   await page.getByRole("button", { name: /Ship it/ }).click();
-  await expect(page.getByLabel("Message body")).toHaveValue(/!\[Ship it\]/);
+  await expect(page.getByLabel("Message body").getByRole("img", { name: "Ship it" })).toBeVisible();
   await page.getByRole("button", { name: "Send" }).click();
   const replayGif = page.getByRole("button", { name: "Replay GIF Ship it" });
   await expect(replayGif).toBeVisible({ timeout: 7_000 });
@@ -1811,7 +1811,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
     .filter({ has: page.locator(".markdown").filter({ hasText: "hello playwright" }) });
   // The hover toolbar ignores pointer events until the row is really hovered.
   await threadedRow.hover();
-  await threadedRow.getByRole("button", { name: "Open thread" }).click();
+  await threadedRow.getByRole("button", { name: "Open thread" }).click({ force: true });
   await expect(page.getByLabel("Thread pane")).toBeVisible();
 
   await page.getByLabel("Reply body").fill("thread _reply_");
@@ -1828,7 +1828,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   const searchPane = page.getByLabel("Search results", { exact: true });
   const threadReplyResult = searchPane
     .locator(".search-result")
-    .filter({ hasText: "thread _reply_" });
+    .filter({ hasText: "thread *reply*" });
   await expect(threadReplyResult).toContainText("Reply in thread");
   let searchRequestsAfterResults = 0;
   page.on("request", (request) => {

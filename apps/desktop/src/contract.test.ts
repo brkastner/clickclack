@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   appURL,
   clampUnreadCount,
+  desktopAudioPermissionAllowed,
   desktopBridgeAllowed,
   desktopMainWindowNavigationAllowed,
   desktopOAuthCallbackCode,
@@ -22,6 +23,30 @@ test("normalizes hosted and loopback servers", () => {
   assert.throws(() => normalizeServerURL("http://chat.example.com"), /HTTPS/);
   assert.throws(() => normalizeServerURL("https://user:secret@chat.example.com"), /credentials/);
   assert.throws(() => normalizeServerURL("https://chat.example.com/tenant"), /extra path/);
+});
+
+test("allows only microphone access from the configured ClickClack origin", () => {
+  const serverUrl = "http://127.0.0.1:5173";
+  assert.equal(
+    desktopAudioPermissionAllowed("media", "http://127.0.0.1:5173/app", serverUrl, ["audio"]),
+    true,
+  );
+  assert.equal(
+    desktopAudioPermissionAllowed("media", "http://localhost:5173/app", serverUrl, ["audio"]),
+    false,
+  );
+  assert.equal(
+    desktopAudioPermissionAllowed("media", "http://127.0.0.1:5173", serverUrl, ["video"]),
+    false,
+  );
+  assert.equal(
+    desktopAudioPermissionAllowed("media", "http://127.0.0.1:5173", serverUrl, ["audio", "video"]),
+    false,
+  );
+  assert.equal(
+    desktopAudioPermissionAllowed("notifications", "http://127.0.0.1:5173", serverUrl, ["audio"]),
+    false,
+  );
 });
 
 test("keeps navigation inside ClickClack app routes", () => {

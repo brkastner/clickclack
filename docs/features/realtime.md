@@ -82,7 +82,11 @@ conversation members.
 
 `message.created` carries the message sequence in top-level `seq` and includes
 `message_id`, `author_id`, optional `direct_conversation_id`, and optional
-`nonce` in `payload`. `message.created` and `thread.reply_created` also include
+`nonce` in `payload`. Messages created from a uniquely owned bot-declared
+command also include validated `bot_command_id` and
+`bot_command_owner_user_id`; the owner is included in top-level
+`mentioned_user_ids` even though the visible body remains `/command ...`.
+`message.created` and `thread.reply_created` also include
 the request's validated `correlation_id` when one is available. This metadata
 survives both cursor replay and live WebSocket delivery; it is omitted for
 events created outside a correlated request and never contains message bodies.

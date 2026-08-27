@@ -20,6 +20,7 @@ import path from "node:path";
 import {
   appURL,
   clampUnreadCount,
+  desktopAudioPermissionAllowed,
   DESKTOP_AUTH_PROTOCOL,
   deepLinkToRoute,
   defaultSettings,
@@ -460,10 +461,38 @@ function requireSettingsSender(id: number) {
 }
 
 function secureSession() {
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) =>
-    callback(false),
+  session.defaultSession.setPermissionRequestHandler(
+    (webContents, permission, callback, details) => {
+      const securityOrigin =
+        "securityOrigin" in details && details.securityOrigin
+          ? details.securityOrigin
+          : webContents.getURL();
+      const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
+      callback(
+        Boolean(
+          mainWindow &&
+          !mainWindow.isDestroyed() &&
+          mainWindow.webContents.id === webContents.id &&
+          desktopAudioPermissionAllowed(permission, securityOrigin, settings.serverUrl, mediaTypes),
+        ),
+      );
+    },
   );
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionCheckHandler(
+    (webContents, permission, requestingOrigin, details) =>
+      Boolean(
+        mainWindow &&
+        webContents &&
+        !mainWindow.isDestroyed() &&
+        mainWindow.webContents.id === webContents.id &&
+        desktopAudioPermissionAllowed(
+          permission,
+          details.securityOrigin ?? requestingOrigin,
+          settings.serverUrl,
+          details.mediaType ? [details.mediaType] : [],
+        ),
+      ),
+  );
 }
 
 function installDownloadHandling() {

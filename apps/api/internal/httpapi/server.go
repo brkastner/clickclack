@@ -1004,6 +1004,7 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 		TopicID         string `json:"topic_id"`
 		Kind            string `json:"kind"`
 		TurnID          string `json:"turn_id"`
+		BotCommandID    string `json:"bot_command_id"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -1013,10 +1014,23 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.requireBotChannelWorkspace(w, r, act, chi.URLParam(r, "channel_id")) {
+	channelID := chi.URLParam(r, "channel_id")
+	if !s.requireBotChannelWorkspace(w, r, act, channelID) {
 		return
 	}
-	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: chi.URLParam(r, "channel_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, Kind: kind, TurnID: turnID})
+	var botCommand store.WorkspaceBotCommand
+	if body.BotCommandID != "" {
+		if kind != store.MessageKindMessage || body.QuotedMessageID != "" {
+			writeError(w, http.StatusBadRequest, errors.New("bot_command_id is only valid for ordinary unquoted messages"))
+			return
+		}
+		botCommand, err = s.resolveBotCommand(r.Context(), channelID, act.user.ID, body.Body, body.BotCommandID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: channelID, AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, Kind: kind, TurnID: turnID, BotCommandID: botCommand.ID, BotCommandOwnerUserID: botCommand.Bot.ID})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {
@@ -1024,6 +1038,31 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeMessageCreateResult(w, message, event, err)
+}
+
+func (s *Server) resolveBotCommand(ctx context.Context, channelID, requesterID, body, commandID string) (store.WorkspaceBotCommand, error) {
+	channel, err := s.store.GetChannel(ctx, channelID, requesterID)
+	if err != nil {
+		return store.WorkspaceBotCommand{}, err
+	}
+	commands, err := s.store.ListBotCommands(ctx, channel.WorkspaceID, requesterID)
+	if err != nil {
+		return store.WorkspaceBotCommand{}, err
+	}
+	fields := strings.Fields(strings.TrimSpace(body))
+	if len(fields) == 0 {
+		return store.WorkspaceBotCommand{}, errors.New("bot command body is required")
+	}
+	for _, command := range commands {
+		if command.ID != commandID {
+			continue
+		}
+		if !strings.EqualFold(fields[0], command.Command) {
+			return store.WorkspaceBotCommand{}, errors.New("bot command does not match message body")
+		}
+		return command, nil
+	}
+	return store.WorkspaceBotCommand{}, errors.New("bot command is not available in this workspace")
 }
 
 // resolveMessageKind validates a caller-supplied message kind and turn_id and

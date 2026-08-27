@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
-  import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError } from "./lib/api";
+  import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError, voiceBaseURL } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
@@ -31,7 +31,11 @@
   } from "./lib/chat/people";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
   import { channelDisplayTitle } from "./lib/chat/channels";
-  import { redirectTypingToComposer, rememberTypeToFocusPointer } from "./lib/chat/typeToFocus";
+  import {
+    redirectTypingToComposer,
+    rememberTypeToFocusPointer,
+    type ComposerInputElement,
+  } from "./lib/chat/typeToFocus";
   import {
     MessageEditController,
     type MessageEditSession,
@@ -69,6 +73,8 @@
   import { listWorkspaceMembersPage } from "./lib/workspace-members";
   import type { Channel, ChannelBotPresentation, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
+  import { findUniqueBotCommand } from "./lib/bot-command-routing";
+  import { BrowserVoiceSession, type VoiceState } from "./lib/voice";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
@@ -138,6 +144,8 @@
   let artifactModalInertElements = new Set<HTMLElement>();
   let messageBody = "";
   let replyBody = "";
+  let voiceSession: BrowserVoiceSession | null = null;
+  let voiceState: VoiceState = { status: "idle" };
   let workspaceName = "";
   let channelName = "";
   let directMemberID = "";
@@ -205,8 +213,8 @@
   let mobileNavViewport = false;
   let replyTarget: Message | null = null;
   let replyContext: "channel" | "dm" | "thread" | null = null;
-  let messageInput: HTMLTextAreaElement | null = null;
-  let replyInput: HTMLTextAreaElement | null = null;
+  let messageInput: ComposerInputElement | null = null;
+  let replyInput: ComposerInputElement | null = null;
   let activeComposerContext: "message" | "thread" = "message";
   let typingEntries: TypingEntry[] = [];
   let typingSweeper: number | undefined;
@@ -385,6 +393,10 @@
     : [];
 
   onMount(() => {
+    voiceSession = new BrowserVoiceSession({
+      baseURL: voiceBaseURL(),
+      onState: (state) => (voiceState = state),
+    });
     loadActivityPrefs();
     activityClockSweeper = window.setInterval(() => {
       activityClock = Date.now();
@@ -408,6 +420,15 @@
       stopDesktopQuickCompose?.();
     };
   });
+
+  function toggleVoiceSession() {
+    if (!voiceSession) return;
+    if (voiceState.status === "connecting" || voiceState.status === "listening") {
+      voiceSession.disconnect();
+      return;
+    }
+    void voiceSession.connect();
+  }
 
   function focusActiveComposer() {
     void tick().then(() => {
@@ -495,6 +516,8 @@
   }
 
   onDestroy(() => {
+    voiceSession?.disconnect();
+    voiceSession = null;
     socket?.close();
     socket = null;
     connected = false;
@@ -2361,6 +2384,7 @@
     channelID?: string;
     directConversationID?: string;
     topicID?: string;
+    botCommandID?: string;
     topicFilterID: string;
     topicFilterGeneration: number;
     viewKey: string;
@@ -2422,7 +2446,9 @@
     const quote = replyTarget && replyContext === activeContext ? replyTarget : null;
     // Registered HTTP slash commands dispatch through the hook endpoint in
     // channels (Slack semantics: the invocation itself is never posted).
-    // Bot-declared and unknown commands fall through to a plain message.
+    // A uniquely owned bot-declared command remains a plain message, but its
+    // owner is preserved as validated realtime routing metadata.
+    let botCommandID: string | undefined;
     if (selectedChannelID && !selectedDirectID && pendingAttachments.length === 0 && !quote) {
       const slash = splitSlashDraft(body);
       const registered = slash ? findRegisteredCommand(slashCommands, slash.command) : undefined;
@@ -2438,6 +2464,7 @@
         );
         return;
       }
+      if (slash) botCommandID = findUniqueBotCommand(botCommands, slash.command)?.id;
     }
     const draft: OutgoingDraft = {
       body,
@@ -2447,6 +2474,7 @@
       channelID: selectedChannelID || undefined,
       directConversationID: selectedDirectID || undefined,
       topicID: selectedChannelID ? selectedComposerTopicID || undefined : undefined,
+      botCommandID,
       topicFilterID: activeTopicFilterID,
       topicFilterGeneration,
       viewKey: currentConversationKey(),
@@ -2622,6 +2650,7 @@
     const payload: Record<string, unknown> = { body: draft.body, nonce };
     if (draft.quotedMessageID) payload.quoted_message_id = draft.quotedMessageID;
     if (draft.topicID) payload.topic_id = draft.topicID;
+    if (draft.botCommandID) payload.bot_command_id = draft.botCommandID;
     try {
       const data = await api<{ message: Message }>(path, {
         method: "POST",
@@ -2890,7 +2919,7 @@
     return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || channelSettingsOpen || showCreateChannel || showCreateDirect;
   }
 
-  function activeComposerTarget(): HTMLTextAreaElement | null {
+  function activeComposerTarget(): ComposerInputElement | null {
     if (activeComposerContext === "thread" && selectedThread && replyInput) return replyInput;
     return messageInput;
   }
@@ -4556,6 +4585,10 @@
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
       showUpload
       showToolbar
+      showVoice
+      voiceStatus={voiceState.status}
+      voiceError={voiceState.error}
+      onToggleVoice={toggleVoiceSession}
       showGifPicker={showGifPicker}
       gifQuery={gifQuery}
       filteredGifs={filteredGifs}

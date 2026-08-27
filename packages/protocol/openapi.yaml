@@ -2812,6 +2812,13 @@ components:
         topic_id:
           type: string
           description: Optional topic id. Channel-scoped topics can only be used in their channel.
+        bot_command_id:
+          type: string
+          description: |
+            Optional bot-declared command ID for an ordinary unquoted channel
+            message. The API validates that the command belongs to the channel
+            workspace and matches the leading command token in `body`, then
+            preserves its owning bot in realtime routing metadata.
         kind:
           type: string
           enum: [message, agent_commentary, agent_tool]
@@ -3157,7 +3164,7 @@ components:
           type: array
           items:
             type: string
-          description: Workspace user IDs explicitly mentioned by a message event.
+          description: Workspace user IDs explicitly mentioned by a message event, including a validated bot-command owner.
     ChannelNotificationSettings:
       type: object
       required: [preference]
