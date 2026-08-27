@@ -15,6 +15,7 @@ type VoiceSessionDependencies = {
 type VoiceSessionOptions = {
   baseURL: string;
   onState: (state: VoiceState) => void;
+  onRemoteAudio?: (stream: MediaStream | null) => void;
   dependencies?: VoiceSessionDependencies;
 };
 
@@ -27,6 +28,7 @@ type SmallWebRTCAnswer = {
 export class BrowserVoiceSession {
   private readonly baseURL: string;
   private readonly onState: (state: VoiceState) => void;
+  private readonly onRemoteAudio: (stream: MediaStream | null) => void;
   private readonly createPeerConnection: () => RTCPeerConnection;
   private readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
   private readonly request: typeof fetch;
@@ -34,12 +36,16 @@ export class BrowserVoiceSession {
   private peer: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
   private input: MediaStream | null = null;
+  private remoteStream: MediaStream | null = null;
+  private remoteTrack: MediaStreamTrack | null = null;
+  private remoteTrackEnded: (() => void) | null = null;
   private state: VoiceState = { status: "idle" };
   private attempt = 0;
 
   constructor(options: VoiceSessionOptions) {
     this.baseURL = options.baseURL.replace(/\/+$/u, "");
     this.onState = options.onState;
+    this.onRemoteAudio = options.onRemoteAudio ?? (() => undefined);
     this.createPeerConnection =
       options.dependencies?.createPeerConnection ?? (() => new RTCPeerConnection());
     this.getUserMedia =
@@ -71,9 +77,16 @@ export class BrowserVoiceSession {
       this.peer = peer;
       this.dataChannel = peer.createDataChannel("chat", { ordered: true });
       peer.ontrack = (event) => {
-        const [stream] = event.streams;
-        this.audio.srcObject = stream ?? new MediaStream([event.track]);
-        void this.audio.play().catch(() => undefined);
+        if (
+          peer !== this.peer ||
+          event.track.kind !== "audio" ||
+          event.track.readyState === "ended"
+        ) {
+          return;
+        }
+        const [eventStream] = event.streams;
+        const stream = eventStream ?? new MediaStream([event.track]);
+        this.replaceRemoteAudio(event.track, stream);
       };
       peer.onconnectionstatechange = () => {
         if (peer !== this.peer) return;
@@ -134,8 +147,36 @@ export class BrowserVoiceSession {
     }
     stopStream(this.input);
     this.input = null;
+    this.clearRemoteAudio();
+  }
+
+  private replaceRemoteAudio(track: MediaStreamTrack, stream: MediaStream): void {
+    if (track === this.remoteTrack && stream === this.remoteStream) return;
+    this.clearRemoteAudio();
+
+    const handleEnded = () => {
+      if (track === this.remoteTrack) this.clearRemoteAudio();
+    };
+    this.remoteTrack = track;
+    this.remoteStream = stream;
+    this.remoteTrackEnded = handleEnded;
+    track.addEventListener("ended", handleEnded);
+    this.audio.srcObject = stream;
+    this.onRemoteAudio(stream);
+    void this.audio.play().catch(() => undefined);
+  }
+
+  private clearRemoteAudio(): void {
+    const hadRemoteAudio = this.remoteTrack !== null || this.remoteStream !== null;
+    if (this.remoteTrack && this.remoteTrackEnded) {
+      this.remoteTrack.removeEventListener("ended", this.remoteTrackEnded);
+    }
+    this.remoteTrack = null;
+    this.remoteStream = null;
+    this.remoteTrackEnded = null;
     this.audio.pause();
     this.audio.srcObject = null;
+    if (hadRemoteAudio) this.onRemoteAudio(null);
   }
 
   private publish(state: VoiceState): void {

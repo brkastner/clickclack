@@ -19,6 +19,7 @@
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
   import type { VoiceStatus } from "../../lib/voice";
+  import VoiceVisualizer from "../VoiceVisualizer.svelte";
   import ComposerToolbar from "./ComposerToolbar.svelte";
   import GifPicker from "./GifPicker.svelte";
   import ReplyPreview from "./ReplyPreview.svelte";
@@ -104,6 +105,7 @@
     showVoice?: boolean;
     voiceStatus?: VoiceStatus;
     voiceError?: string;
+    voiceStream?: MediaStream | null;
     showGifPicker?: boolean;
     gifQuery?: string;
     filteredGifs?: GifItem[];
@@ -144,6 +146,7 @@
     showVoice = false,
     voiceStatus = "idle",
     voiceError = "",
+    voiceStream = null,
     showGifPicker = false,
     gifQuery = "",
     filteredGifs = [],
@@ -786,11 +789,18 @@
     </div>
     {#if showVoice && voiceStatus !== "idle"}
       <div class:voice-error={voiceStatus === "failed"} class="composer-voice-status" role="status">
-        {voiceStatus === "connecting"
-          ? "Connecting to local voice service…"
-          : voiceStatus === "listening"
-            ? "Voice connected · click the microphone to disconnect"
-            : voiceError || "Voice connection failed"}
+        <span class="composer-voice-status__text">
+          {voiceStatus === "connecting"
+            ? "Connecting to local voice service…"
+            : voiceStatus === "listening"
+              ? "Voice connected · click the microphone to disconnect"
+              : voiceError || "Voice connection failed"}
+        </span>
+        <span class="composer-voice-visualizer-slot" aria-hidden="true">
+          {#if voiceStream}
+            <VoiceVisualizer stream={voiceStream} barCount={24} gap={1.5} maxHeight={18} />
+          {/if}
+        </span>
       </div>
     {/if}
     {#if showToolbar}
