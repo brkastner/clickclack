@@ -7,8 +7,9 @@
     type ChannelProfileShortcut,
   } from "../../lib/chat/people";
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
+  import type { PendingAttachment } from "../../lib/attachments";
   import type { GifItem } from "../../lib/gifs";
-  import type { Message, SlashCommand, Upload, User, WorkspaceBotCommand } from "../../lib/types";
+  import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
   import ComposerToolbar from "./ComposerToolbar.svelte";
   import GifPicker from "./GifPicker.svelte";
   import ReplyPreview from "./ReplyPreview.svelte";
@@ -38,7 +39,7 @@
     ariaLabel: string;
     submitLabel: string;
     formClass?: string;
-    pendingUpload?: Upload | null;
+    pendingAttachments?: PendingAttachment[];
     replyTarget?: Message | null;
     showUpload?: boolean;
     showToolbar?: boolean;
@@ -50,13 +51,15 @@
     mentionPeople?: User[];
     mentionProfiles?: ChannelProfileShortcut[];
     disabled?: boolean;
+    submitDisabled?: boolean;
     onValue: (value: string) => void;
     onSubmit: () => void;
     onKeydown: (event: KeyboardEvent) => void;
     onFocus: () => void;
     onInputRef: (node: HTMLTextAreaElement | null) => void;
     onUploadFile?: (event: Event) => void;
-    onRemoveUpload?: () => void;
+    onRemoveUpload?: (key: string) => void;
+    onRetryUpload?: (key: string) => void;
     onClearReply?: () => void;
     onApplyMarkdownWrap?: (before: string, after?: string) => void;
     onAppendToComposer?: (snippet: string) => void;
@@ -71,7 +74,7 @@
     ariaLabel,
     submitLabel,
     formClass = "composer",
-    pendingUpload = null,
+    pendingAttachments = [],
     replyTarget = null,
     showUpload = false,
     showToolbar = false,
@@ -83,6 +86,7 @@
     mentionPeople = [],
     mentionProfiles = [],
     disabled = false,
+    submitDisabled = false,
     onValue,
     onSubmit,
     onKeydown,
@@ -90,6 +94,7 @@
     onInputRef,
     onUploadFile = () => {},
     onRemoveUpload = () => {},
+    onRetryUpload = () => {},
     onClearReply = () => {},
     onApplyMarkdownWrap = () => {},
     onAppendToComposer = () => {},
@@ -286,7 +291,7 @@
   class={formClass}
   onsubmit={(event) => {
     event.preventDefault();
-    if (disabled) return;
+    if (disabled || submitDisabled) return;
     onSubmit();
   }}
 >
@@ -326,16 +331,44 @@
     </div>
   {/if}
   <div class="composer-card">
-    {#if pendingUpload}
-      <div class="composer-attachment">
-        <span class="attachment-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21.44 11.05 12.5 20a6 6 0 0 1-8.49-8.49l8.49-8.48a4 4 0 0 1 5.66 5.66l-8.49 8.49a2 2 0 0 1-2.83-2.83L13.41 7.5"/></svg>
-        </span>
-        {#if isImageUpload(pendingUpload)}
-          <img class="pending-image" src={uploadURL(pendingUpload)} alt={pendingUpload.filename} />
-        {/if}
-        <span class="attachment-name">{pendingUpload.filename} · {formatBytes(pendingUpload.byte_size)}</span>
-        <button type="button" class="attachment-remove" aria-label="Remove attachment" onclick={onRemoveUpload}>×</button>
+    {#if pendingAttachments.length > 0}
+      <div class="composer-attachments" aria-label="Pending attachments">
+        {#each pendingAttachments as attachment (attachment.key)}
+          <div class="composer-attachment" class:is-failed={attachment.state === "failed"}>
+            <span class="attachment-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21.44 11.05 12.5 20a6 6 0 0 1-8.49-8.49l8.49-8.48a4 4 0 0 1 5.66 5.66l-8.49 8.49a2 2 0 0 1-2.83-2.83L13.41 7.5"/></svg>
+            </span>
+            {#if attachment.upload && isImageUpload(attachment.upload)}
+              <img class="pending-image" src={uploadURL(attachment.upload)} alt={attachment.file.name} />
+            {/if}
+            <span class="attachment-copy">
+              <span class="attachment-name">{attachment.file.name} · {formatBytes(attachment.file.size)}</span>
+              <span class="attachment-state" role="status">
+                {#if attachment.state === "uploading"}
+                  Uploading…
+                {:else if attachment.state === "failed"}
+                  Upload failed
+                {:else}
+                  Ready
+                {/if}
+              </span>
+            </span>
+            {#if attachment.state === "failed"}
+              <button
+                type="button"
+                class="attachment-retry"
+                aria-label={`Retry attachment ${attachment.file.name}`}
+                onclick={() => onRetryUpload(attachment.key)}
+              >Retry</button>
+            {/if}
+            <button
+              type="button"
+              class="attachment-remove"
+              aria-label={`Remove attachment ${attachment.file.name}`}
+              onclick={() => onRemoveUpload(attachment.key)}
+            >×</button>
+          </div>
+        {/each}
       </div>
     {/if}
     {#if replyTarget}
@@ -344,7 +377,7 @@
     <div class="composer-row">
       {#if showUpload}
         <label class="composer-icon" title="Upload file">
-          <input type="file" aria-label="Upload file" {disabled} onchange={onUploadFile} />
+          <input type="file" aria-label="Upload file" {disabled} multiple onchange={onUploadFile} />
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21.44 11.05 12.5 20a6 6 0 0 1-8.49-8.49l8.49-8.48a4 4 0 0 1 5.66 5.66l-8.49 8.49a2 2 0 0 1-2.83-2.83L13.41 7.5"/>
           </svg>
@@ -365,7 +398,7 @@
         onmouseup={() => updateCaret()}
         onselect={() => updateCaret()}
       ></textarea>
-      <button type="submit" class="send" aria-label={submitLabel} disabled={disabled || !value.trim()}>
+      <button type="submit" class="send" aria-label={submitLabel} disabled={disabled || submitDisabled || !value.trim()}>
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <path fill="currentColor" d="M3 3.5 21 12 3 20.5l3.6-7.5L15 12 6.6 11l-3.6-7.5Z"/>
         </svg>

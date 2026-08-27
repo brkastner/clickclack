@@ -1701,6 +1701,32 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".markdown").filter({ hasText: "message with upload" })).toBeVisible();
 
+  await page.getByLabel("Upload file").setInputFiles([
+    {
+      name: "first-note.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("first attachment"),
+    },
+    {
+      name: "second-note.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("second attachment"),
+    },
+  ]);
+  await expect(page.getByLabel("Pending attachments").getByText("first-note.txt")).toBeVisible();
+  await expect(page.getByLabel("Pending attachments").getByText("second-note.txt")).toBeVisible();
+  await page.getByLabel("Message body").fill("message with multiple uploads");
+  await page.getByRole("button", { name: "Send" }).click();
+  const multiUploadGroup = page.locator(".message-group", {
+    has: page.locator(".markdown").filter({ hasText: "message with multiple uploads" }),
+  });
+  await expect(
+    multiUploadGroup.getByLabel("Attachments").getByText("first-note.txt"),
+  ).toBeVisible();
+  await expect(
+    multiUploadGroup.getByLabel("Attachments").getByText("second-note.txt"),
+  ).toBeVisible();
+
   await page.getByLabel("Upload file").setInputFiles({
     name: "pixel.png",
     mimeType: "image/png",

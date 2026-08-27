@@ -692,7 +692,7 @@
           <button type="button" class="message-failed__action" onclick={() => onRetry?.(message)}>Retry</button>
         {/if}
         {#if onDiscard}
-          <button type="button" class="message-failed__action message-failed__action--ghost" onclick={() => onDiscard?.(message)}>Discard</button>
+          <button type="button" class="message-failed__action message-failed__action--ghost" onclick={() => onDiscard?.(message)}>{message.delivery_failure === "attachments" ? "Dismiss" : "Discard"}</button>
         {/if}
       </div>
     {/if}

@@ -5,6 +5,13 @@
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
+  import {
+    appendPendingAttachments,
+    mergeUploads,
+    readyUploads,
+    uploadsMissingAttachments,
+    type PendingAttachment,
+  } from "./lib/attachments";
   import { gifLibrary } from "./lib/gifs";
   import { markdownImageViewerURL } from "./lib/actions/markdown";
   import {
@@ -142,7 +149,7 @@
   let searchThreadDetour = false;
   let searchReturnScrollTop = 0;
   let searchRequestID = 0;
-  let pendingUpload: Upload | null = null;
+  let pendingAttachments: PendingAttachment[] = [];
   let showGifPicker = false;
   let settingsModalOpen = false;
   let settingsModalSection: AccountSettingsSectionId = "profile";
@@ -849,6 +856,7 @@
       captureScrollMemory();
       editController.clear();
       selectedWorkspaceID = workspace.id;
+      pendingAttachments = [];
       topicsLoadSerial += 1;
       slashCommandsLoadSerial += 1;
       botCommandsLoadSerial += 1;
@@ -2347,7 +2355,8 @@
   type OutgoingDraft = {
     body: string;
     quotedMessageID?: string;
-    upload?: Upload;
+    uploads: Upload[];
+    attachedUploadIDs?: string[];
     workspaceID: string;
     channelID?: string;
     directConversationID?: string;
@@ -2380,7 +2389,7 @@
       body_format: "markdown",
       created_at: now,
       author: user || undefined,
-      attachments: draft.upload ? [draft.upload] : [],
+      attachments: draft.uploads,
       quoted_message_id: draft.quotedMessageID,
       nonce,
       status: "pending",
@@ -2390,6 +2399,13 @@
   async function sendMessage() {
     const body = messageBody.trim();
     if (!body) return;
+    if (pendingAttachments.some((attachment) => attachment.state !== "ready")) {
+      composerNotice = {
+        kind: "error",
+        text: "Finish, retry, or remove pending attachments before sending.",
+      };
+      return;
+    }
     if (selectedDirect && !selectedDirectWritable) {
       status = "This conversation has no active recipient";
       return;
@@ -2407,7 +2423,7 @@
     // Registered HTTP slash commands dispatch through the hook endpoint in
     // channels (Slack semantics: the invocation itself is never posted).
     // Bot-declared and unknown commands fall through to a plain message.
-    if (selectedChannelID && !selectedDirectID && !pendingUpload && !quote) {
+    if (selectedChannelID && !selectedDirectID && pendingAttachments.length === 0 && !quote) {
       const slash = splitSlashDraft(body);
       const registered = slash ? findRegisteredCommand(slashCommands, slash.command) : undefined;
       if (slash && registered) {
@@ -2426,7 +2442,7 @@
     const draft: OutgoingDraft = {
       body,
       quotedMessageID: quote?.id,
-      upload: pendingUpload || undefined,
+      uploads: readyUploads(pendingAttachments),
       workspaceID: selectedWorkspaceID,
       channelID: selectedChannelID || undefined,
       directConversationID: selectedDirectID || undefined,
@@ -2437,7 +2453,7 @@
     };
     messageBody = "";
     if (quote) clearReplyTarget();
-    pendingUpload = null;
+    pendingAttachments = [];
     await dispatchDraft(draft);
   }
 
@@ -2612,31 +2628,44 @@
         body: JSON.stringify(payload),
       });
       let message = data.message;
-      if (draft.upload) {
+      const attachedUploadIDs = new Set([
+        ...(draft.attachedUploadIDs || []),
+        ...(message.attachments || []).map((upload) => upload.id),
+      ]);
+      const failedUploads: Upload[] = [];
+      for (const upload of uploadsMissingAttachments(draft.uploads, attachedUploadIDs)) {
         try {
           await api(`/api/messages/${message.id}/attachments`, {
             method: "POST",
-            body: JSON.stringify({ upload_id: draft.upload.id }),
+            body: JSON.stringify({ upload_id: upload.id }),
           });
-          message = {
-            ...message,
-            attachments: [...(message.attachments || []), draft.upload],
-          };
+          attachedUploadIDs.add(upload.id);
         } catch (err) {
           console.warn("attachment failed", err);
-          const failedMessage: Message = {
-            ...message,
-            nonce,
-            status: "failed",
-            attachments: draft.upload ? [...(message.attachments || []), draft.upload] : message.attachments,
-          };
-          await revealFailedDraft(
-            draft,
-            failedMessage,
-            "The message was sent, but its attachment failed. Retry or discard it below.",
-          );
-          return;
+          failedUploads.push(upload);
         }
+      }
+      draft.attachedUploadIDs = [...attachedUploadIDs];
+      const attachedUploads = draft.uploads.filter((upload) => attachedUploadIDs.has(upload.id));
+      message = {
+        ...message,
+        attachments: mergeUploads(message.attachments, attachedUploads),
+      };
+      if (failedUploads.length > 0) {
+        const noun = failedUploads.length === 1 ? "attachment" : "attachments";
+        const failedMessage: Message = {
+          ...message,
+          nonce,
+          status: "failed",
+          delivery_failure: "attachments",
+          attachments: mergeUploads(message.attachments, failedUploads),
+        };
+        await revealFailedDraft(
+          draft,
+          failedMessage,
+          `The message was sent, but ${failedUploads.length} ${noun} failed. Retry or discard the local retry below.`,
+        );
+        return;
       }
       forgetRecoverableDraft(draft.viewKey, message.id, nonce);
       pendingDrafts.delete(nonce);
@@ -2665,7 +2694,7 @@
       console.warn("send failed", err);
       await revealFailedDraft(
         draft,
-        { ...placeholder, status: "failed" },
+        { ...placeholder, status: "failed", delivery_failure: "message" },
         "The message failed to send. Retry or discard it below.",
       );
     }
@@ -2685,12 +2714,30 @@
   }
 
   function discardFailedMessage(message: Message) {
+    const draft = message.nonce ? pendingDrafts.get(message.nonce) : undefined;
     if (message.nonce) {
-      const draft = pendingDrafts.get(message.nonce);
       if (draft) forgetRecoverableDraft(draft.viewKey, message.id, message.nonce);
       pendingDrafts.delete(message.nonce);
     }
-    setActiveMessages(messages.filter((m) => m.id !== message.id));
+    if (message.delivery_failure === "attachments" && draft) {
+      const attachedUploadIDs = new Set(draft.attachedUploadIDs || []);
+      setActiveMessages(
+        messages.map((candidate) =>
+          candidate.id === message.id
+            ? {
+                ...candidate,
+                status: undefined,
+                delivery_failure: undefined,
+                attachments: (candidate.attachments || []).filter((upload) =>
+                  attachedUploadIDs.has(upload.id),
+                ),
+              }
+            : candidate,
+        ),
+      );
+      return;
+    }
+    setActiveMessages(messages.filter((candidate) => candidate.id !== message.id));
   }
 
   async function revealEditSession(scope: string, session: MessageEditSession) {
@@ -3122,20 +3169,94 @@
     }
   }
 
-  async function uploadFile(event: Event) {
+  function updatePendingAttachment(
+    key: string,
+    update: (attachment: PendingAttachment) => PendingAttachment,
+  ) {
+    pendingAttachments = pendingAttachments.map((attachment) =>
+      attachment.key === key ? update(attachment) : attachment,
+    );
+  }
+
+  async function uploadPendingAttachment(key: string) {
+    const pending = pendingAttachments.find((attachment) => attachment.key === key);
+    if (!pending || pending.workspaceID !== selectedWorkspaceID) return;
+    updatePendingAttachment(key, (attachment) => ({
+      ...attachment,
+      state: "uploading",
+      upload: undefined,
+      error: undefined,
+    }));
+    try {
+      const probe = await probeMediaDimensions(pending.file);
+      const form = new FormData();
+      form.set("workspace_id", pending.workspaceID);
+      form.set("file", pending.file);
+      if (probe.width > 0) form.set("width", String(probe.width));
+      if (probe.height > 0) form.set("height", String(probe.height));
+      if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
+      const uploadPath = `/api/uploads?workspace_id=${encodeURIComponent(pending.workspaceID)}&nonce=${encodeURIComponent(pending.key)}`;
+      const data = await api<{ upload: Upload }>(uploadPath, {
+        method: "POST",
+        body: form,
+      });
+      if (pending.workspaceID !== selectedWorkspaceID) return;
+      updatePendingAttachment(key, (attachment) => ({
+        ...attachment,
+        state: "ready",
+        upload: data.upload,
+        error: undefined,
+      }));
+    } catch (error) {
+      if (pending.workspaceID !== selectedWorkspaceID) return;
+      updatePendingAttachment(key, (attachment) => ({
+        ...attachment,
+        state: "failed",
+        upload: undefined,
+        error: readableAPIError(error),
+      }));
+      composerNotice = {
+        kind: "error",
+        text: `Could not upload ${pending.file.name}. Retry or remove it before sending.`,
+      };
+    }
+  }
+
+  async function uploadFiles(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file || !selectedWorkspaceID) return;
-    const probe = await probeMediaDimensions(file);
-    const form = new FormData();
-    form.set("workspace_id", selectedWorkspaceID);
-    form.set("file", file);
-    if (probe.width > 0) form.set("width", String(probe.width));
-    if (probe.height > 0) form.set("height", String(probe.height));
-    if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
-    const data = await api<{ upload: Upload }>("/api/uploads", { method: "POST", body: form });
-    pendingUpload = data.upload;
+    const files = [...(input.files || [])];
     input.value = "";
+    if (files.length === 0 || !selectedWorkspaceID) return;
+    const previousKeys = new Set(pendingAttachments.map((attachment) => attachment.key));
+    const result = appendPendingAttachments(
+      pendingAttachments,
+      files,
+      selectedWorkspaceID,
+      newNonce,
+    );
+    pendingAttachments = result.attachments;
+    if (result.rejectedCount > 0) {
+      composerNotice = {
+        kind: "error",
+        text: `${result.rejectedCount} attachment${result.rejectedCount === 1 ? " was" : "s were"} not added. A message can contain up to 10 attachments.`,
+      };
+    }
+    const uploadKeys = result.attachments
+      .filter((attachment) => !previousKeys.has(attachment.key))
+      .map((attachment) => attachment.key);
+    let cursor = 0;
+    async function uploadNext() {
+      while (cursor < uploadKeys.length) {
+        const key = uploadKeys[cursor];
+        cursor += 1;
+        await uploadPendingAttachment(key);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(2, uploadKeys.length) }, uploadNext));
+  }
+
+  function removePendingAttachment(key: string) {
+    pendingAttachments = pendingAttachments.filter((attachment) => attachment.key !== key);
   }
 
   async function loadDirectConversations(workspaceID = selectedWorkspaceID) {
@@ -4392,7 +4513,7 @@
         aria-live="polite"
       >
         <span class="composer-notice__label">
-          {composerNotice.kind === "ephemeral" ? "Only visible to you" : "Command failed"}
+          {composerNotice.kind === "ephemeral" ? "Only visible to you" : "Couldn’t send"}
         </span>
         <span class="composer-notice__text">{composerNotice.text}</span>
         <button
@@ -4426,7 +4547,8 @@
       ariaLabel="Message body"
       submitLabel="Send"
       disabled={!!selectedDirect && !selectedDirectWritable}
-      pendingUpload={pendingUpload}
+      {pendingAttachments}
+      submitDisabled={pendingAttachments.some((attachment) => attachment.state !== "ready")}
       replyTarget={replyTarget && replyContext === (selectedDirectID ? "dm" : "channel") ? replyTarget : null}
       showUpload
       showToolbar
@@ -4447,8 +4569,9 @@
       onKeydown={handleComposerKey}
       onFocus={activateMessageComposer}
       onInputRef={(node) => (messageInput = node)}
-      onUploadFile={uploadFile}
-      onRemoveUpload={() => (pendingUpload = null)}
+      onUploadFile={uploadFiles}
+      onRemoveUpload={removePendingAttachment}
+      onRetryUpload={(key) => void uploadPendingAttachment(key)}
       onClearReply={clearReplyTarget}
       onApplyMarkdownWrap={applyMarkdownWrap}
       onAppendToComposer={appendToComposer}

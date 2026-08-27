@@ -154,6 +154,9 @@ export type Message = {
   reactions?: ReactionSummary[];
   // Client-only status. Absent for sent messages.
   status?: "pending" | "failed";
+  // Client-only failure phase. Attachment failures mean the base message is
+  // already durable and the secondary attachment operations can be retried.
+  delivery_failure?: "message" | "attachments";
 };
 
 export type MessagePage = {

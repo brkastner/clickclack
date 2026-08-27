@@ -179,7 +179,6 @@
   color: var(--text-strong);
 }
 
-
 .composer-toolbar {
   display: inline-flex;
   align-items: center;
@@ -372,7 +371,10 @@
   align-self: start;
   width: var(--composer-control-size);
   height: var(--composer-control-size);
-  margin-top: calc(var(--composer-text-padding-block) + (var(--composer-line-height) - var(--composer-control-size)) / 2);
+  margin-top: calc(
+    var(--composer-text-padding-block) +
+      (var(--composer-line-height) - var(--composer-control-size)) / 2
+  );
   display: grid;
   place-items: center;
   color: var(--muted);
@@ -423,7 +425,10 @@
   align-self: start;
   width: var(--composer-control-size);
   height: var(--composer-control-size);
-  margin-top: calc(var(--composer-text-padding-block) + (var(--composer-line-height) - var(--composer-control-size)) / 2);
+  margin-top: calc(
+    var(--composer-text-padding-block) +
+      (var(--composer-line-height) - var(--composer-control-size)) / 2
+  );
   display: grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--accent) 70%, var(--text-strong));
@@ -458,9 +463,14 @@
   box-shadow: none;
 }
 
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+
 .composer-attachment {
-  margin-top: 8px;
-  margin-bottom: 8px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -471,6 +481,11 @@
   color: var(--text);
   font-size: 13px;
   width: fit-content;
+  max-width: 100%;
+}
+
+.composer-attachment.is-failed {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
 }
 
 .attachment-icon {
@@ -492,11 +507,40 @@
   background: var(--panel-2);
 }
 
+.attachment-copy {
+  display: grid;
+  min-width: 0;
+}
+
 .attachment-name {
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.attachment-state {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.composer-attachment.is-failed .attachment-state {
+  color: var(--danger);
+}
+
+.attachment-retry {
+  min-height: 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.attachment-retry:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .attachment-remove {
