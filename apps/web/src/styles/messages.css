@@ -601,7 +601,7 @@
 
 .message-group {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 75px minmax(0, 1fr);
   padding: 8px 18px;
   position: relative;
 }
@@ -623,6 +623,13 @@
   box-shadow: 0 6px 20px -10px rgba(0, 0, 0, 0.6);
   margin-top: 2px;
   overflow: hidden;
+}
+
+.message-group > .avatar {
+  width: 57px;
+  height: 57px;
+  border-radius: 15px;
+  font-size: 21px;
 }
 
 .avatar-button {
@@ -673,8 +680,8 @@
    padding so the hover highlight reads as one continuous band with the first
    message row. Thread-panel headers reuse .group-body but keep normal flow. */
 .message-group .group-body > header {
-  margin: 0 -18px 0 -56px;
-  padding: 0 18px 2px 56px;
+  margin: 0 -18px 0 -75px;
+  padding: 0 18px 2px 75px;
 }
 
 .group-body > header strong {
@@ -741,9 +748,9 @@
 }
 
 .message-row {
-  margin-left: -56px;
+  margin-left: -75px;
   margin-right: -18px;
-  padding: 1px 18px 1px 56px;
+  padding: 1px 18px 1px 75px;
   position: relative;
   border-radius: 0;
   transition: background 80ms ease;
@@ -896,7 +903,7 @@
    preferences. "Other" includes both human teammates and agents. */
 :root[data-user-align="right"] .message-group.is-self,
 :root[data-other-align="right"] .message-group:not(.is-self) {
-  grid-template-columns: minmax(0, 1fr) 56px;
+  grid-template-columns: minmax(0, 1fr) 75px;
 }
 
 :root[data-user-align="right"] .message-group.is-self > .avatar,
@@ -916,16 +923,16 @@
 :root[data-user-align="right"] .message-group.is-self .group-body > header,
 :root[data-other-align="right"] .message-group:not(.is-self) .group-body > header {
   justify-content: flex-end;
-  margin: 0 -56px 0 -18px;
-  padding: 0 56px 2px 18px;
+  margin: 0 -75px 0 -18px;
+  padding: 0 75px 2px 18px;
 }
 
 :root[data-user-align="right"] .message-group.is-self .message-row,
 :root[data-other-align="right"] .message-group:not(.is-self) .message-row {
   margin-left: -18px;
-  margin-right: -56px;
+  margin-right: -75px;
   padding-left: 18px;
-  padding-right: 56px;
+  padding-right: 75px;
 }
 
 :root[data-user-align="right"] .message-group.is-self .message-content,
@@ -2487,45 +2494,45 @@
 
 @media (max-width: 520px) {
   .message-group {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 63px minmax(0, 1fr);
     padding: 7px 12px;
   }
 
-  /* Keep the right-adjusted self layout aligned to the same 44px avatar gutter
-     the rest of the mobile list uses, instead of the desktop 56px column. */
+  /* Keep the right-adjusted self layout aligned to the same 63px avatar gutter
+     the rest of the mobile list uses, instead of the desktop 75px column. */
   :root[data-user-align="right"] .message-group.is-self,
   :root[data-other-align="right"] .message-group:not(.is-self) {
-    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-columns: minmax(0, 1fr) 63px;
   }
 
   .message-row {
-    margin-left: -44px;
+    margin-left: -63px;
     margin-right: -12px;
-    padding-left: 44px;
+    padding-left: 63px;
     padding-right: 12px;
   }
 
   :root[data-user-align="right"] .message-group.is-self .message-row,
   :root[data-other-align="right"] .message-group:not(.is-self) .message-row {
     margin-left: -12px;
-    margin-right: -44px;
+    margin-right: -63px;
     padding-left: 12px;
-    padding-right: 44px;
+    padding-right: 63px;
   }
 
   .message-group .group-body > header {
-    margin-left: -44px;
+    margin-left: -63px;
     margin-right: -12px;
-    padding-left: 44px;
+    padding-left: 63px;
     padding-right: 12px;
   }
 
   :root[data-user-align="right"] .message-group.is-self .group-body > header,
   :root[data-other-align="right"] .message-group:not(.is-self) .group-body > header {
     margin-left: -12px;
-    margin-right: -44px;
+    margin-right: -63px;
     padding-left: 12px;
-    padding-right: 44px;
+    padding-right: 63px;
   }
 
   .row-stamp {
@@ -2661,20 +2668,20 @@
    .message-row indent mirrors the .message-group gutter, so the two must
    change together. */
 :root[data-density="compact"] .message-group {
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 55px minmax(0, 1fr);
   padding: 2px 18px;
 }
 
 :root[data-density="compact"][data-user-align="right"] .message-group.is-self,
 :root[data-density="compact"][data-other-align="right"] .message-group:not(.is-self) {
-  grid-template-columns: minmax(0, 1fr) 42px;
+  grid-template-columns: minmax(0, 1fr) 55px;
 }
 
 :root[data-density="compact"] .message-group > .avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  font-size: 11px;
+  width: 39px;
+  height: 39px;
+  border-radius: 11px;
+  font-size: 17px;
 }
 
 :root[data-density="compact"] .group-body > header {
@@ -2683,8 +2690,8 @@
 }
 
 :root[data-density="compact"] .message-group .group-body > header {
-  margin-left: -42px;
-  padding-left: 42px;
+  margin-left: -55px;
+  padding-left: 55px;
 }
 
 :root[data-density="compact"][data-user-align="right"] .message-group.is-self .group-body > header,
@@ -2693,9 +2700,9 @@
   .group-body
   > header {
   margin-left: -18px;
-  margin-right: -42px;
+  margin-right: -55px;
   padding-left: 18px;
-  padding-right: 42px;
+  padding-right: 55px;
 }
 
 :root[data-density="compact"] .group-body > header strong,
@@ -2708,16 +2715,16 @@
 }
 
 :root[data-density="compact"] .message-row {
-  margin-left: -42px;
-  padding-left: 42px;
+  margin-left: -55px;
+  padding-left: 55px;
 }
 
 :root[data-density="compact"][data-user-align="right"] .message-group.is-self .message-row,
 :root[data-density="compact"][data-other-align="right"] .message-group:not(.is-self) .message-row {
   margin-left: -18px;
-  margin-right: -42px;
+  margin-right: -55px;
   padding-left: 18px;
-  padding-right: 42px;
+  padding-right: 55px;
 }
 
 :root[data-density="compact"] .markdown {

@@ -1,7 +1,12 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
   import { apiResourceURL } from "../../lib/api";
-  import { avatarHue, directConversationForUser, handleLabel } from "../../lib/chat/people";
+  import {
+    avatarHue,
+    directConversationForUser,
+    handleLabel,
+    type ChannelProfileShortcut,
+  } from "../../lib/chat/people";
   import type { Channel, DirectConversation, User } from "../../lib/types";
   import ChannelList from "./ChannelList.svelte";
   import DirectMessageList from "./DirectMessageList.svelte";
@@ -16,6 +21,7 @@
     channels: Channel[];
     directConversations: DirectConversation[];
     recentPeople: User[];
+    profileShortcuts: ChannelProfileShortcut[];
     currentUser: User | null;
     selectedChannelID: string;
     selectedDirectID: string;
@@ -25,6 +31,7 @@
     hrefForDirect: (conversationID: string) => string;
     onSelectChannel: (channelID: string) => void;
     onCreateChannel: () => void;
+    onAssignChannelProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
     onSelectDirect: (conversationID: string) => void;
     onCreateDirect: () => void;
     onHideDirect: (conversationID: string) => void;
@@ -45,6 +52,7 @@
     channels,
     directConversations,
     recentPeople,
+    profileShortcuts,
     currentUser,
     selectedChannelID,
     selectedDirectID,
@@ -54,6 +62,7 @@
     hrefForDirect,
     onSelectChannel,
     onCreateChannel,
+    onAssignChannelProfile,
     onSelectDirect,
     onCreateDirect,
     onHideDirect,
@@ -166,6 +175,7 @@
     });
     return [...saved, ...byID.values()];
   });
+  let standardChannels = $derived(orderedChannels);
 
   $effect(() => {
     channelOrder = loadChannelOrder(workspaceID, currentUser?.id || "");
@@ -230,7 +240,8 @@
     <ChannelList
       {workspaceID}
       expanded={sections.channels}
-      channels={orderedChannels}
+      channels={standardChannels}
+      profiles={profileShortcuts}
       {selectedChannelID}
       {selectedDirectID}
       {hrefForChannel}
@@ -238,14 +249,19 @@
       {onCreateChannel}
       onToggle={() => toggleSection("channels")}
       onReorder={saveChannelOrder}
+      onAssignProfile={onAssignChannelProfile}
     />
 
     <DirectMessageList
       expanded={sections.directMessages}
       conversations={directConversations}
+      profiles={[]}
       currentUserID={currentUser?.id}
+      {selectedChannelID}
       {selectedDirectID}
+      {hrefForChannel}
       {hrefForDirect}
+      {onSelectChannel}
       {onSelectDirect}
       {onCreateDirect}
       {onHideDirect}

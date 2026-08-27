@@ -50,6 +50,7 @@
   let replies = $state<Message[]>([]);
   let threadState = $state<ThreadState | null>(null);
   let directConversation = $state<DirectConversation | null>(null);
+  let parentChannel = $state<Channel | null>(null);
   let parentLabel = $state("Thread");
   let replyBody = $state("");
   let replyTarget = $state<Message | null>(null);
@@ -140,6 +141,7 @@
     replies = [];
     threadState = null;
     directConversation = null;
+    parentChannel = null;
     replyTarget = null;
   }
 
@@ -176,6 +178,7 @@
         conversation = hidden.conversation;
       }
       directConversation = conversation;
+      parentChannel = null;
       parentLabel = dmTitle(conversation, currentUser.id) || "Direct message";
       return;
     }
@@ -185,6 +188,7 @@
     const channel = data.channels.find((item) => item.id === target.parent_id);
     if (!channel) throw new APIError(404, "Thread channel not found");
     directConversation = null;
+    parentChannel = channel;
     parentLabel = `#${channelDisplayTitle(channel)}`;
   }
 
@@ -416,6 +420,7 @@
       <ThreadPanel
         {root}
         {replies}
+        channel={parentChannel || undefined}
         {threadState}
         {replyBody}
         {replyTarget}

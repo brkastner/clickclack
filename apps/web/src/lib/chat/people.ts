@@ -1,4 +1,15 @@
-import type { DirectConversation, Message, User } from "../types";
+import type { Channel, DirectConversation, Message, User } from "../types";
+
+export type ChannelProfileShortcut = {
+  id: string;
+  channel_id: string;
+  channel_name: string;
+  bot_user_id: string;
+  display_name: string;
+  avatar_url: string;
+  handle: string;
+  unread_count: number;
+};
 
 export function workspaceInitial(name: string): string {
   const trimmed = name.trim();
@@ -29,6 +40,31 @@ export function isDeletedBot(user?: User | null): boolean {
 export function userDisplayLabel(user?: User | null, fallback = "Local User"): string {
   const name = user?.display_name || fallback;
   return isDeletedBot(user) ? `${name} (deleted bot)` : name;
+}
+
+export function presentChannelUser(user: User | undefined, channel?: Channel): User | undefined {
+  if (!user || user.kind !== "bot" || user.deleted_at) return user;
+  const presentation = channel?.bot_presentations?.find(
+    (candidate) => candidate.bot_user_id === user.id,
+  );
+  if (!presentation) return user;
+  return {
+    ...user,
+    display_name: presentation.display_name,
+    avatar_url: presentation.avatar_url || user.avatar_url,
+  };
+}
+
+export function presentChannelMessage(message: Message, channel?: Channel): Message {
+  if (!channel || message.channel_id !== channel.id) return message;
+  const author = presentChannelUser(message.author, channel);
+  const quotedAuthor = presentChannelUser(message.quoted_author, channel);
+  if (author === message.author && quotedAuthor === message.quoted_author) return message;
+  return { ...message, author, quoted_author: quotedAuthor };
+}
+
+export function presentChannelMessages(messages: Message[], channel?: Channel): Message[] {
+  return messages.map((message) => presentChannelMessage(message, channel));
 }
 
 export function avatarHue(seed: string): number {
@@ -69,6 +105,39 @@ export function collectRecentPeople(
     }
   }
   return [...people.values()].slice(0, 12);
+}
+
+export function collectChannelProfileShortcuts(
+  channels: Channel[],
+  people: User[],
+): ChannelProfileShortcut[] {
+  const peopleByID = new Map(people.map((person) => [person.id, person]));
+  return channels.flatMap((channel) => {
+    const profileSource = channel.sidebar_section?.startsWith("profile:")
+      ? channel.sidebar_section.slice("profile:".length)
+      : "";
+    // A copied presentation belongs to an assigned channel, not the profile
+    // catalog. Only self-referential profile sections define draggable profiles.
+    if (profileSource && profileSource !== channel.id) return [];
+    return (channel.bot_presentations || []).flatMap((presentation) => {
+      const bot = peopleByID.get(presentation.bot_user_id);
+      if (!bot || bot.deleted_at) return [];
+      const handle = userHandle(bot);
+      if (!handle) return [];
+      return [
+        {
+          id: `${channel.id}:${presentation.bot_user_id}`,
+          channel_id: channel.id,
+          channel_name: channel.name,
+          bot_user_id: presentation.bot_user_id,
+          display_name: presentation.display_name,
+          avatar_url: presentation.avatar_url || bot.avatar_url,
+          handle,
+          unread_count: channel.unread_count || 0,
+        },
+      ];
+    });
+  });
 }
 
 export function collectMentionPeople(

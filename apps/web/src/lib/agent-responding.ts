@@ -24,6 +24,7 @@ export function respondingAgentNames(
   turns: RespondingAgentTurn[],
   botCommands: WorkspaceBotCommand[],
   lookupUser: (userId: string) => User | undefined,
+  presentName?: (userId: string, fallback: string) => string,
 ): string[] {
   const seenUserIDs = new Set<string>();
   const names: string[] = [];
@@ -33,7 +34,8 @@ export function respondingAgentNames(
     // agent, and distinct unresolved turns must not suppress each other.
     if (turn.userId && seenUserIDs.has(turn.userId)) continue;
     if (turn.userId) seenUserIDs.add(turn.userId);
-    const name = agentNameFor(turn.userId, botCommands, lookupUser);
+    const baseName = agentNameFor(turn.userId, botCommands, lookupUser);
+    const name = presentName?.(turn.userId, baseName) || baseName;
     if (name) names.push(name);
   }
   return names;

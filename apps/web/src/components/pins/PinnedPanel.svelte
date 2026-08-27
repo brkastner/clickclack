@@ -1,14 +1,16 @@
 <script lang="ts">
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
+  import { presentChannelMessage } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
-  import type { Message, Topic, Upload, User } from "../../lib/types";
+  import type { Channel, Message, Topic, Upload, User } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
   import TopicBadge from "../messages/TopicBadge.svelte";
 
   type Props = {
     messages: Message[];
+    channel?: Channel;
     loading?: boolean;
     error?: string;
     topics?: Topic[];
@@ -25,6 +27,7 @@
 
   let {
     messages,
+    channel,
     loading = false,
     error = "",
     topics = [],
@@ -96,10 +99,11 @@
       {:else}
         <div class="pinned-panel__list">
         {#each messages as message (message.id)}
+          {@const presentedMessage = presentChannelMessage(message, channel)}
           {@const topic = topics.find((candidate) => candidate.id === message.topic_id)}
           <div class="pinned-panel__item" data-message-id={message.id}>
             <div class="pinned-item__meta">
-              <span class="pinned-item__author">{message.author?.display_name || "Unknown"}</span>
+              <span class="pinned-item__author">{presentedMessage.author?.display_name || "Unknown"}</span>
               <time class="pinned-item__time">{time(message.created_at)}</time>
             </div>
             <TopicBadge {topic} onSelect={onSelectTopic} />

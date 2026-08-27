@@ -15,7 +15,13 @@
     trimMessageWindow as trimMessageWindowMessages,
     type MessageWindowDirection,
   } from "./lib/chat/messageWindow";
-  import { collectMentionPeople, collectRecentPeople, dmTitle } from "./lib/chat/people";
+  import {
+    collectChannelProfileShortcuts,
+    collectMentionPeople,
+    collectRecentPeople,
+    dmTitle,
+    type ChannelProfileShortcut,
+  } from "./lib/chat/people";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
   import { channelDisplayTitle } from "./lib/chat/channels";
   import { redirectTypingToComposer, rememberTypeToFocusPointer } from "./lib/chat/typeToFocus";
@@ -54,7 +60,7 @@
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
   import { listWorkspaceMembersPage } from "./lib/workspace-members";
-  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { Channel, ChannelBotPresentation, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
@@ -113,6 +119,7 @@
   // stream.
   let composerNotice: { kind: "ephemeral" | "error"; text: string } | null = null;
   let mentionPeople: User[] = [];
+  let profileShortcuts: ChannelProfileShortcut[] = [];
   let mentionAttentionUserID = "";
   let selectedImage: { url: string; title: string } | null = null;
   let selectedArtifact: Upload | null = null;
@@ -326,7 +333,14 @@
     turn.lines.some((line) => !line.finalized),
   );
   $: pinnedMessageIDs = new Set(pinnedMessages.map((message) => message.id));
-  $: activeRespondingAgentNames = respondingAgentNames(agentProgressTurns, botCommands, lookupUser);
+  $: activeRespondingAgentNames = respondingAgentNames(
+    agentProgressTurns,
+    botCommands,
+    lookupUser,
+    (userID, fallback) =>
+      selectedChannel?.bot_presentations?.find((presentation) => presentation.bot_user_id === userID)
+        ?.display_name || fallback,
+  );
   $: sidePanelOpen = pinnedPanelOpen || selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
   $: searchPaneVisible = searchSession !== null && !searchThreadDetour;
@@ -341,6 +355,7 @@
   );
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, workspaceMemberUsers, selectedDirect);
+  $: profileShortcuts = collectChannelProfileShortcuts(channels, mentionPeople);
   $: mentionAttentionUserID =
     user?.id &&
     (selectedDirectID ||
@@ -522,6 +537,65 @@
     if (!canManageSelectedChannel) return;
     channelSettingsError = "";
     channelSettingsOpen = true;
+  }
+
+  async function assignChannelProfile(
+    channelID: string,
+    profile: ChannelProfileShortcut | null,
+  ) {
+    const current = channels.find((channel) => channel.id === channelID);
+    if (!current) return;
+    const currentProfileSource = current.sidebar_section?.startsWith("profile:")
+      ? current.sidebar_section.slice("profile:".length)
+      : "";
+    const currentProfile = profileShortcuts.find(
+      (candidate) => candidate.channel_id === currentProfileSource,
+    );
+    try {
+      const data = await api<{ channel: Channel }>(`/api/channels/${channelID}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          sidebar_section: profile ? `profile:${profile.channel_id}` : "",
+        }),
+      });
+      let updated = data.channel;
+      if (profile) {
+        const presentation = await api<{ presentation: ChannelBotPresentation }>(
+          `/api/channels/${channelID}/bot-presentations/${profile.bot_user_id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({
+              display_name: profile.display_name,
+              avatar_url: profile.avatar_url,
+            }),
+          },
+        );
+        updated = {
+          ...updated,
+          bot_presentations: [
+            ...(updated.bot_presentations || []).filter(
+              (candidate) => candidate.bot_user_id !== profile.bot_user_id,
+            ),
+            presentation.presentation,
+          ],
+        };
+      } else if (currentProfile) {
+        await api(
+          `/api/channels/${channelID}/bot-presentations/${currentProfile.bot_user_id}`,
+          { method: "DELETE" },
+        );
+        updated = {
+          ...updated,
+          bot_presentations: (updated.bot_presentations || []).filter(
+            (candidate) => candidate.bot_user_id !== currentProfile.bot_user_id,
+          ),
+        };
+      }
+      channels = channels.map((channel) => (channel.id === channelID ? updated : channel));
+    } catch (error) {
+      status = readableAPIError(error, "Could not assign channel profile");
+      await loadChannels();
+    }
   }
 
   async function setSelectedChannelArchived(archived: boolean) {
@@ -4191,6 +4265,7 @@
     {channels}
     {directConversations}
     {recentPeople}
+    {profileShortcuts}
     currentUser={user}
     {selectedChannelID}
     {selectedDirectID}
@@ -4200,6 +4275,8 @@
     hrefForDirect={(conversationID) => appHref(selectedWorkspaceID, conversationID)}
     onSelectChannel={(channelID) => void selectChannel(channelID)}
     onCreateChannel={() => (showCreateChannel = true)}
+    onAssignChannelProfile={(channelID, profile) =>
+      void assignChannelProfile(channelID, profile)}
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
     onCreateDirect={() => (showCreateDirect = true)}
     onHideDirect={(conversationID) => void hideDirectConversation(conversationID)}
@@ -4359,6 +4436,7 @@
       slashCommands={selectedChannelID ? slashCommands : []}
       botCommands={composerBotCommands}
       {mentionPeople}
+      mentionProfiles={profileShortcuts}
       onValue={(value) => {
         const previous = messageBody;
         messageBody = value;
@@ -4397,6 +4475,7 @@
   {#if searchPaneVisible && searchSession}
     <SearchResults
       session={searchSession}
+      {channels}
       covered={selectedArtifact !== null}
       inert={mobileNavOpen || selectedArtifact !== null}
       contextFor={searchResultContext}
@@ -4416,6 +4495,7 @@
     {#if pinnedPanelOpen}
       <PinnedPanel
         messages={pinnedMessages}
+        channel={selectedChannel}
         loading={pinnedMessagesLoading}
         error={pinnedMessagesError}
         {topics}
@@ -4435,10 +4515,12 @@
       <ThreadPanel
         root={selectedThread}
         {replies}
+        channel={selectedChannel}
         threadState={selectedThreadState}
         {replyBody}
         replyTarget={replyTarget && replyContext === "thread" ? replyTarget : null}
         {mentionPeople}
+        mentionProfiles={profileShortcuts}
         {mentionAttentionUserID}
         {agentResponding}
         respondingAgentNames={activeRespondingAgentNames}

@@ -1,5 +1,5 @@
-import type { Message } from "../types";
-import { isDeletedBot, userDisplayLabel, userHandle } from "./people";
+import type { Channel, Message } from "../types";
+import { isDeletedBot, presentChannelMessage, userDisplayLabel, userHandle } from "./people";
 
 export type MessageGroup = {
   key: string;
@@ -75,12 +75,13 @@ export function dayLabel(value: string): string {
   }).format(date);
 }
 
-export function groupMessages(list: Message[]): MessageGroup[] {
+export function groupMessages(list: Message[], channel?: Channel): MessageGroup[] {
   const groups: MessageGroup[] = [];
   let lastDay = "";
   let lastAuthor = "";
   let lastTime = 0;
-  for (const message of list) {
+  for (const originalMessage of list) {
+    const message = presentChannelMessage(originalMessage, channel);
     const created = new Date(message.created_at);
     const dayKey = created.toDateString();
     const authorID = message.author?.id || message.author_id || "local";

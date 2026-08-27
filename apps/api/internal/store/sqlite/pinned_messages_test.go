@@ -19,6 +19,10 @@ func TestPinnedMessagesMigrationUpgradesExistingDatabase(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	applySQLiteMigrationsBefore(t, ctx, st, "0040_pinned_messages.sql")
+	applySQLiteMigrations(t, ctx, st, "0042_channel_bot_presentations.sql")
+	if _, err := st.db.ExecContext(ctx, `INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, "0042_channel_bot_presentations.sql", now()); err != nil {
+		t.Fatal(err)
+	}
 	owner, err := st.EnsureBootstrap(ctx, "Pin Upgrade", "pin-upgrade@example.com")
 	if err != nil {
 		t.Fatal(err)

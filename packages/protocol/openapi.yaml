@@ -1078,6 +1078,41 @@ paths:
       responses:
         "200":
           description: Updated channel
+  /api/channels/{channel_id}/bot-presentations/{bot_user_id}:
+    put:
+      operationId: upsertChannelBotPresentation
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertChannelBotPresentationRequest"
+      responses:
+        "200":
+          description: Updated channel-scoped bot presentation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelBotPresentationResponse"
+    delete:
+      operationId: deleteChannelBotPresentation
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Removed channel-scoped bot presentation
   /api/channels/{channel_id}/messages:
     get:
       operationId: listMessages
@@ -2983,6 +3018,11 @@ components:
         sidebar_section:
           type: string
           description: Optional client sidebar grouping label.
+        bot_presentations:
+          type: array
+          description: Manager-controlled visual aliases for bot authors in this channel. Authentication and handles remain unchanged.
+          items:
+            $ref: "#/components/schemas/ChannelBotPresentation"
         last_seq:
           type: integer
           format: int64
@@ -2992,6 +3032,45 @@ components:
         unread_count:
           type: integer
           format: int64
+    ChannelBotPresentation:
+      type: object
+      required: [channel_id, bot_user_id, display_name, avatar_url, updated_by, updated_at]
+      properties:
+        channel_id:
+          type: string
+        bot_user_id:
+          type: string
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        avatar_url:
+          type: string
+          maxLength: 500
+        updated_by:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    UpsertChannelBotPresentationRequest:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        avatar_url:
+          type: string
+          maxLength: 500
+    ChannelBotPresentationResponse:
+      type: object
+      required: [presentation, event]
+      properties:
+        presentation:
+          $ref: "#/components/schemas/ChannelBotPresentation"
+        event:
+          $ref: "#/components/schemas/Event"
     DirectConversation:
       type: object
       required: [id, route_id, workspace_id, created_at, members, can_send]

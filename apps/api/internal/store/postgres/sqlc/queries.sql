@@ -557,6 +557,43 @@ FROM channels c
 WHERE c.workspace_id = sqlc.arg(workspace_id)
 ORDER BY c.name;
 
+-- name: ListChannelBotPresentationsByWorkspace :many
+SELECT p.channel_id, p.bot_user_id, p.display_name, p.avatar_url, p.updated_by, p.updated_at
+FROM channel_bot_presentations p
+JOIN channels c ON c.id = p.channel_id
+WHERE c.workspace_id = sqlc.arg(workspace_id)
+ORDER BY p.channel_id, p.bot_user_id;
+
+-- name: ListChannelBotPresentationsByChannel :many
+SELECT channel_id, bot_user_id, display_name, avatar_url, updated_by, updated_at
+FROM channel_bot_presentations
+WHERE channel_id = sqlc.arg(channel_id)
+ORDER BY bot_user_id;
+
+-- name: GetChannelBotPresentationTarget :one
+SELECT c.workspace_id, u.kind,
+       EXISTS (
+         SELECT 1 FROM workspace_members wm
+         WHERE wm.workspace_id = c.workspace_id AND wm.user_id = u.id
+       ) AS is_workspace_member
+FROM channels c
+JOIN users u ON u.id = sqlc.arg(bot_user_id)
+WHERE c.id = sqlc.arg(channel_id);
+
+-- name: UpsertChannelBotPresentation :one
+INSERT INTO channel_bot_presentations (channel_id, bot_user_id, display_name, avatar_url, updated_by, updated_at)
+VALUES (sqlc.arg(channel_id), sqlc.arg(bot_user_id), sqlc.arg(display_name), sqlc.arg(avatar_url), sqlc.arg(updated_by), sqlc.arg(updated_at))
+ON CONFLICT(channel_id, bot_user_id) DO UPDATE SET
+  display_name = excluded.display_name,
+  avatar_url = excluded.avatar_url,
+  updated_by = excluded.updated_by,
+  updated_at = excluded.updated_at
+RETURNING channel_id, bot_user_id, display_name, avatar_url, updated_by, updated_at;
+
+-- name: DeleteChannelBotPresentation :execrows
+DELETE FROM channel_bot_presentations
+WHERE channel_id = sqlc.arg(channel_id) AND bot_user_id = sqlc.arg(bot_user_id);
+
 -- name: RequireMembership :one
 SELECT 1
 FROM workspace_members wm

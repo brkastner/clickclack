@@ -151,6 +151,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/auth/openclaw/start": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["startOpenClawIDOAuth"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/openclaw/callback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["finishOpenClawIDOAuth"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/me": {
     parameters: {
       query?: never;
@@ -714,6 +746,22 @@ export interface paths {
     options?: never;
     head?: never;
     patch: operations["updateChannel"];
+    trace?: never;
+  };
+  "/api/channels/{channel_id}/bot-presentations/{bot_user_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations["upsertChannelBotPresentation"];
+    post?: never;
+    delete: operations["deleteChannelBotPresentation"];
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/api/channels/{channel_id}/messages": {
@@ -1808,12 +1856,31 @@ export interface components {
       external_url?: string;
       /** @description Optional client sidebar grouping label. */
       sidebar_section?: string;
+      /** @description Manager-controlled visual aliases for bot authors in this channel. Authentication and handles remain unchanged. */
+      bot_presentations?: components["schemas"]["ChannelBotPresentation"][];
       /** Format: int64 */
       last_seq?: number;
       /** Format: int64 */
       last_read_seq?: number;
       /** Format: int64 */
       unread_count?: number;
+    };
+    ChannelBotPresentation: {
+      channel_id: string;
+      bot_user_id: string;
+      display_name: string;
+      avatar_url: string;
+      updated_by: string;
+      /** Format: date-time */
+      updated_at: string;
+    };
+    UpsertChannelBotPresentationRequest: {
+      display_name: string;
+      avatar_url?: string;
+    };
+    ChannelBotPresentationResponse: {
+      presentation: components["schemas"]["ChannelBotPresentation"];
+      event: components["schemas"]["Event"];
     };
     DirectConversation: {
       id: string;
@@ -2423,6 +2490,115 @@ export interface operations {
         content?: never;
       };
       /** @description Desktop grant capacity exhausted or canonical callback origin unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  startOpenClawIDOAuth: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to OpenClaw ID OIDC authorization */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Ambiguous OAuth browser-binding cookies */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Deployment edge rate limit exceeded, when configured */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OAuth browser binding, state, PKCE generation, or persistence failed */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OpenClaw ID sign-in not configured */
+      501: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OAuth transaction capacity exhausted or canonical callback origin unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  finishOpenClawIDOAuth: {
+    parameters: {
+      query?: {
+        code?: string;
+        state?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Browser session created and redirected to the web app */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid OAuth callback */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OpenClaw ID token invalid or account email not verified */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity, workspace, or session persistence failed */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description OpenClaw ID provider request failed */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Canonical callback origin unavailable */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3786,6 +3962,54 @@ export interface operations {
     };
     responses: {
       /** @description Updated channel */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  upsertChannelBotPresentation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+        bot_user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpsertChannelBotPresentationRequest"];
+      };
+    };
+    responses: {
+      /** @description Updated channel-scoped bot presentation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChannelBotPresentationResponse"];
+        };
+      };
+    };
+  };
+  deleteChannelBotPresentation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+        bot_user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Removed channel-scoped bot presentation */
       200: {
         headers: {
           [name: string]: unknown;

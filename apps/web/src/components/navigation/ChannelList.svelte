@@ -1,12 +1,15 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { channelDisplayTitle } from "../../lib/chat/channels";
+  import type { ChannelProfileShortcut } from "../../lib/chat/people";
   import type { Channel } from "../../lib/types";
+  import Avatar from "../avatar/Avatar.svelte";
 
   type Props = {
     workspaceID: string;
     expanded: boolean;
     channels: Channel[];
+    profiles: ChannelProfileShortcut[];
     selectedChannelID: string;
     selectedDirectID: string;
     hrefForChannel: (channelID: string) => string;
@@ -14,18 +17,21 @@
     onCreateChannel: () => void;
     onToggle: () => void;
     onReorder: (channelIDs: string[]) => void;
+    onAssignProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
   };
 
   type ChannelGroup = {
     key: string;
     label: string;
     channels: Channel[];
+    profile?: ChannelProfileShortcut;
   };
 
   let {
     workspaceID,
     expanded,
     channels,
+    profiles,
     selectedChannelID,
     selectedDirectID,
     hrefForChannel,
@@ -33,6 +39,7 @@
     onCreateChannel,
     onToggle,
     onReorder,
+    onAssignProfile,
   }: Props = $props();
 
   const GROUP_STORAGE_PREFIX = "clickclack:sidebar-channel-groups:v1:";
@@ -43,6 +50,7 @@
   let draggedChannelID = $state("");
   let draggedGroupKey = $state("");
   let dropTargetID = $state("");
+  let dropGroupKey = $state("");
   let dropBefore = $state(true);
   let dragGestureActive = $state(false);
   let moveMenuChannelID = $state("");
@@ -59,19 +67,33 @@
   const sectionGroups = $derived.by(() => {
     const grouped = new Map<string, Channel[]>();
     for (const channel of activeChannels) {
-      const label = channel.sidebar_section?.trim();
-      if (!label) continue;
-      const group = grouped.get(label) ?? [];
+      const section = channel.sidebar_section?.trim();
+      if (!section) continue;
+      const group = grouped.get(section) ?? [];
       group.push(channel);
-      grouped.set(label, group);
+      grouped.set(section, group);
     }
-    return [...grouped.entries()]
-      .map(([label, groupedChannels]): ChannelGroup => ({
-        key: `section:${label}`,
-        label,
+    const profileGroups = profiles.map(
+      (profile): ChannelGroup => {
+        const key = `profile:${profile.channel_id}`;
+        const profileChannels = grouped.get(key) ?? [];
+        grouped.delete(key);
+        return {
+          key,
+          label: profile.display_name,
+          channels: profileChannels,
+          profile,
+        };
+      },
+    );
+    const ordinaryGroups = [...grouped.entries()]
+      .map(([section, groupedChannels]): ChannelGroup => ({
+        key: `section:${section}`,
+        label: section,
         channels: groupedChannels,
       }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+    return [...profileGroups, ...ordinaryGroups];
   });
   const priorityChannels = $derived(
     channels.filter(
@@ -209,15 +231,36 @@
     }
     event.preventDefault();
     const row = event.currentTarget as HTMLElement;
+    dropGroupKey = "";
     dropTargetID = channelID;
     dropBefore = event.clientY < row.getBoundingClientRect().top + row.offsetHeight / 2;
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleProfileDragOver(event: DragEvent, group: ChannelGroup) {
+    if (!draggedChannelID || !group.profile || draggedGroupKey === group.key) return;
+    event.preventDefault();
+    dropTargetID = "";
+    dropGroupKey = group.key;
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  }
+
+  function assignProfile(channelID: string, profile: ChannelProfileShortcut | null) {
+    const channel = channels.find((candidate) => candidate.id === channelID);
+    if (!channel || profiles.some((candidate) => candidate.channel_id === channelID)) return;
+    onAssignProfile(channelID, profile);
+    announceMove(
+      profile
+        ? `Moved #${channelDisplayTitle(channel)} under ${profile.display_name}`
+        : `Removed profile from #${channelDisplayTitle(channel)}`,
+    );
   }
 
   function clearDrag() {
     draggedChannelID = "";
     draggedGroupKey = "";
     dropTargetID = "";
+    dropGroupKey = "";
   }
 
   function finishDrag() {
@@ -251,6 +294,11 @@
     void closeMoveMenu(true);
   }
 
+  function assignFromMenu(channelID: string, profile: ChannelProfileShortcut | null) {
+    assignProfile(channelID, profile);
+    void closeMoveMenu(true);
+  }
+
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
     return (
       event.button === 0 &&
@@ -279,6 +327,7 @@
 {#snippet channelRow(channel: Channel, scopeChannels: Channel[], groupKey: string, subdued: boolean, reorderable: boolean)}
   {@const unread = channel.unread_count || 0}
   {@const channelIndex = scopeChannels.findIndex((candidate) => candidate.id === channel.id)}
+  {@const isProfileSource = profiles.some((profile) => profile.channel_id === channel.id)}
   <div
     class="channel-row"
     class:reorderable
@@ -358,6 +407,23 @@
             disabled={channelIndex < 0 || channelIndex >= scopeChannels.length - 1}
             onclick={() => moveFromMenu(channel.id, 1, scopeChannels)}
           >Move down</button>
+          {#if !isProfileSource}
+            {#each profiles as profile (profile.id)}
+              <button
+                type="button"
+                role="menuitem"
+                disabled={channel.sidebar_section === `profile:${profile.channel_id}`}
+                onclick={() => assignFromMenu(channel.id, profile)}
+              >Move under {profile.display_name}</button>
+            {/each}
+            {#if channel.sidebar_section?.startsWith("profile:")}
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => assignFromMenu(channel.id, null)}
+              >Remove profile</button>
+            {/if}
+          {/if}
         </div>
       {/if}
     {/if}
@@ -391,7 +457,19 @@
 {#snippet channelSubgroup(group: ChannelGroup, domID: string, subdued: boolean)}
   {@const groupIsExpanded = groupExpanded(group.key)}
   {@const visibleChannels = visibleGroupChannels(group)}
-  <section class="channel-subgroup" class:archived-channel-group={subdued}>
+  <section
+    class="channel-subgroup"
+    class:archived-channel-group={subdued}
+    class:profile-channel-group={Boolean(group.profile)}
+    class:profile-drop-target={dropGroupKey === group.key}
+    ondragover={(event) => handleProfileDragOver(event, group)}
+    ondrop={(event) => {
+      if (!group.profile || !draggedChannelID || draggedGroupKey === group.key) return;
+      event.preventDefault();
+      assignProfile(draggedChannelID, group.profile);
+      finishDrag();
+    }}
+  >
     <button
       type="button"
       class="channel-subgroup-toggle"
@@ -400,6 +478,17 @@
       onclick={() => toggleGroup(group.key)}
     >
       <span class="caret" aria-hidden="true">▾</span>
+      {#if group.profile}
+        <Avatar
+          class="channel-profile-avatar"
+          id={group.profile.id}
+          name={group.profile.display_name}
+          src={group.profile.avatar_url}
+          size={22}
+          loading="eager"
+          fetchPriority="auto"
+        />
+      {/if}
       <span>{group.label}</span>
       <span class="channel-subgroup-count">{group.channels.length}</span>
     </button>
@@ -417,7 +506,22 @@
 {/snippet}
 
 <section class="nav-section" class:collapsed={!expanded}>
-  <div class="section-title">
+  <div
+    class="section-title"
+    class:profile-drop-target={dropGroupKey === "unsectioned"}
+    ondragover={(event) => {
+      if (!draggedChannelID || !draggedGroupKey.startsWith("profile:")) return;
+      event.preventDefault();
+      dropTargetID = "";
+      dropGroupKey = "unsectioned";
+    }}
+    ondrop={(event) => {
+      if (!draggedChannelID || !draggedGroupKey.startsWith("profile:")) return;
+      event.preventDefault();
+      assignProfile(draggedChannelID, null);
+      finishDrag();
+    }}
+  >
     <button type="button" class="section-toggle" aria-expanded={expanded} aria-controls="sidebar-channels-list" onclick={onToggle}>
       <span class="caret" aria-hidden="true">▾</span>
       <span class="label">Channels</span>

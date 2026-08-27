@@ -1,14 +1,23 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import { dmAvatarUser, dmTitle, isDeletedBot } from "../../lib/chat/people";
+  import {
+    dmAvatarUser,
+    dmTitle,
+    isDeletedBot,
+    type ChannelProfileShortcut,
+  } from "../../lib/chat/people";
   import type { DirectConversation } from "../../lib/types";
 
   type Props = {
     expanded: boolean;
     conversations: DirectConversation[];
+    profiles?: ChannelProfileShortcut[];
     currentUserID?: string;
+    selectedChannelID: string;
     selectedDirectID: string;
+    hrefForChannel: (channelID: string) => string;
     hrefForDirect: (conversationID: string) => string;
+    onSelectChannel: (channelID: string) => void;
     onSelectDirect: (conversationID: string) => void;
     onCreateDirect: () => void;
     onHideDirect: (conversationID: string) => void;
@@ -20,9 +29,13 @@
   let {
     expanded,
     conversations,
+    profiles = [],
     currentUserID,
+    selectedChannelID,
     selectedDirectID,
+    hrefForChannel,
     hrefForDirect,
+    onSelectChannel,
     onSelectDirect,
     onCreateDirect,
     onHideDirect,
@@ -38,6 +51,14 @@
       : conversations.filter(
           (conversation) =>
             conversation.id === selectedDirectID || (conversation.unread_count || 0) > 0,
+        ),
+  );
+  let visibleProfiles = $derived(
+    expanded
+      ? profiles
+      : profiles.filter(
+          (profile) =>
+            profile.channel_id === selectedChannelID || profile.unread_count > 0,
         ),
   );
 
@@ -71,8 +92,40 @@
   <div
     class="nav-list"
     id="sidebar-direct-messages-list"
-    hidden={!expanded && visibleConversations.length === 0}
+    hidden={!expanded && visibleProfiles.length === 0 && visibleConversations.length === 0}
   >
+    {#each visibleProfiles as profile (profile.id)}
+      {@const unread = profile.unread_count}
+      {@const isActive = profile.channel_id === selectedChannelID}
+      <div class="dm-row profile-dm-row" class:active={isActive}>
+        <a
+          href={hrefForChannel(profile.channel_id)}
+          class="nav-item dm"
+          class:active={isActive}
+          class:has-unread={unread > 0 && !isActive}
+          title={`${profile.display_name} · @${profile.handle} · #${profile.channel_name}`}
+          onclick={(event) => {
+            if (!shouldHandleClientNavigation(event)) return;
+            event.preventDefault();
+            onSelectChannel(profile.channel_id);
+          }}
+        >
+          <Avatar
+            class="dm-avatar"
+            id={profile.id}
+            name={profile.display_name}
+            src={profile.avatar_url}
+            size={22}
+          />
+          <span class="nav-label">{profile.display_name}</span>
+          {#if unread > 0 && !isActive}
+            <span class="unread-badge" aria-label={`${unread} unread`}>{unread > 99 ? "99+" : unread}</span>
+          {:else}
+            <span class="profile-handle">@{profile.handle}</span>
+          {/if}
+        </a>
+      </div>
+    {/each}
     {#each visibleConversations as conversation (conversation.id)}
       {@const dmUser = dmAvatarUser(conversation, currentUserID)}
       {@const unread = conversation.unread_count || 0}
@@ -136,7 +189,7 @@
         {/if}
       </div>
     {/each}
-    {#if expanded && conversations.length === 0}
+    {#if expanded && profiles.length === 0 && conversations.length === 0}
       <p class="nav-empty">No direct messages yet</p>
     {/if}
     {#if expanded && hiddenDirectTitle}

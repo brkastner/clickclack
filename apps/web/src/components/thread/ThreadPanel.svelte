@@ -7,13 +7,16 @@
   import {
     handleLabel,
     isDeletedBot,
+    presentChannelMessage,
+    presentChannelUser,
     userHandle,
+    type ChannelProfileShortcut,
   } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
   import type { ReactionController } from "../../lib/reactions.svelte";
-  import type { Message, ThreadState, Upload, User } from "../../lib/types";
+  import type { Channel, Message, ThreadState, Upload, User } from "../../lib/types";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import MediaAttachment from "../MediaAttachment.svelte";
   import MessageEditor from "../messages/MessageEditor.svelte";
@@ -27,6 +30,7 @@
   type Props = {
     root: Message;
     replies: Message[];
+    channel?: Channel;
     threadState: ThreadState | null;
     replyBody: string;
     replyTarget: Message | null;
@@ -34,6 +38,7 @@
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
     mentionPeople?: User[];
+    mentionProfiles?: ChannelProfileShortcut[];
     mentionAttentionUserID?: string;
     agentResponding?: boolean;
     respondingAgentNames?: string[];
@@ -70,6 +75,7 @@
   let {
     root,
     replies,
+    channel,
     threadState,
     replyBody,
     replyTarget,
@@ -77,6 +83,7 @@
     reactionController,
     reactionsDisabled = false,
     mentionPeople = [],
+    mentionProfiles = [],
     mentionAttentionUserID,
     agentResponding = false,
     respondingAgentNames = [],
@@ -112,6 +119,7 @@
 
   let threadScroll = $state<HTMLDivElement>();
   let editSession = $derived(editController?.session(editScope));
+  let rootAuthor = $derived(presentChannelUser(root.author, channel));
   const editReturnFocus = new Map<string, HTMLElement>();
   const canDelete = (message: Message) =>
     canDeleteAnyMessage ||
@@ -357,7 +365,7 @@
   function sheetDelete() {
     const message = actionMessage;
     closeActionSheet();
-    if (message) onDeleteMessage?.(message);
+    if (message) onDeleteMessage?.(presentChannelMessage(message, channel));
   }
 
   async function togglePin(message: Message) {
@@ -440,18 +448,18 @@
   >
     <Avatar
       class="avatar"
-      id={root.author?.id || root.author_id}
-      name={root.author?.display_name}
-      src={isDeletedBot(root.author) ? undefined : root.author?.avatar_url}
+      id={rootAuthor?.id || root.author_id}
+      name={rootAuthor?.display_name}
+      src={isDeletedBot(rootAuthor) ? undefined : rootAuthor?.avatar_url}
       size={38}
     />
     <div class="group-body">
       <header>
-        <strong>{root.author?.display_name || "Local User"}</strong>
-        {#if isDeletedBot(root.author)}
+        <strong>{rootAuthor?.display_name || "Local User"}</strong>
+        {#if isDeletedBot(rootAuthor)}
           <span class="bot-chip bot-chip--deleted">deleted bot</span>
         {/if}
-        {#if userHandle(root.author)}<span>{handleLabel(userHandle(root.author))}</span>{/if}
+        {#if userHandle(rootAuthor)}<span>{handleLabel(userHandle(rootAuthor))}</span>{/if}
         <time>{time(root.created_at)}</time>
         {#if !root.deleted_at && !isEditing(root)}
           <AddReactionButton
@@ -520,7 +528,7 @@
               aria-label="Delete message"
               data-tooltip="Delete message"
               disabled={deletingMessageIDs.has(root.id)}
-              onclick={() => onDeleteMessage?.(root)}
+              onclick={() => onDeleteMessage?.(presentChannelMessage(root, channel))}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
@@ -590,6 +598,7 @@
   <div class="thread-divider"><span>{replies.length} {replies.length === 1 ? "reply" : "replies"}</span></div>
   <div class="reply-list">
     {#each replies as reply (reply.id)}
+      {@const replyAuthor = presentChannelUser(reply.author, channel)}
       <!-- svelte-ignore a11y_no_static_element_interactions (Long-press supplements the focusable More actions button.) -->
       <article
         class="reply"
@@ -599,18 +608,18 @@
       >
         <Avatar
           class="avatar small"
-          id={reply.author?.id || reply.author_id}
-          name={reply.author?.display_name}
-          src={isDeletedBot(reply.author) ? undefined : reply.author?.avatar_url}
+          id={replyAuthor?.id || reply.author_id}
+          name={replyAuthor?.display_name}
+          src={isDeletedBot(replyAuthor) ? undefined : replyAuthor?.avatar_url}
           size={30}
         />
         <div class="group-body">
           <header>
-            <strong>{reply.author?.display_name || "Local User"}</strong>
-            {#if isDeletedBot(reply.author)}
+            <strong>{replyAuthor?.display_name || "Local User"}</strong>
+            {#if isDeletedBot(replyAuthor)}
               <span class="bot-chip bot-chip--deleted">deleted bot</span>
             {/if}
-            {#if userHandle(reply.author)}<span>{handleLabel(userHandle(reply.author))}</span>{/if}
+            {#if userHandle(replyAuthor)}<span>{handleLabel(userHandle(replyAuthor))}</span>{/if}
             <time>{time(reply.created_at)}</time>
             {#if !reply.deleted_at && !isEditing(reply)}
               <AddReactionButton
@@ -666,7 +675,7 @@
                   aria-label="Delete message"
                   data-tooltip="Delete message"
                   disabled={deletingMessageIDs.has(reply.id)}
-                  onclick={() => onDeleteMessage?.(reply)}
+                  onclick={() => onDeleteMessage?.(presentChannelMessage(reply, channel))}
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                     <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
@@ -703,7 +712,7 @@
               onSave={() => saveEdit(reply)}
             />
           {:else}
-            <QuoteBlock message={reply} onJump={onJumpToQuote} />
+            <QuoteBlock message={presentChannelMessage(reply, channel)} onJump={onJumpToQuote} />
             <div
               class="markdown"
               use:enhanceMarkdown
@@ -785,6 +794,7 @@
   disabled={replyDisabled}
   replyTarget={replyTarget}
   {mentionPeople}
+  {mentionProfiles}
   onValue={onReplyBody}
   onSubmit={onSubmitReply}
   onKeydown={onReplyKeydown}

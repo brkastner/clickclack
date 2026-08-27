@@ -308,7 +308,7 @@ func TestSearchWorkspaceFTSMigrationPreservesAndScopesRows(t *testing.T) {
 	// Current channel queries include later channel columns. Apply those
 	// independent additions early while leaving the FTS migration under test
 	// unapplied, and record them so Migrate does not run them twice below.
-	for _, name := range []string{"0037_managed_channels.sql", "0039_channel_display_title.sql"} {
+	for _, name := range []string{"0037_managed_channels.sql", "0039_channel_display_title.sql", "0042_channel_bot_presentations.sql"} {
 		applySQLiteMigrations(t, ctx, st, name)
 		if _, err := st.db.ExecContext(ctx, `INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, name, now()); err != nil {
 			t.Fatal(err)

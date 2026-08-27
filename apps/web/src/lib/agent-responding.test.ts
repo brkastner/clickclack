@@ -63,6 +63,19 @@ test("deduplicates active responders by user ID, not display name", () => {
   );
 });
 
+test("uses a channel presentation name without changing responder identity", () => {
+  const turns = [{ turnId: "a", userId: "bot-a", lines: [{ finalized: false }] }];
+  assert.deepEqual(
+    respondingAgentNames(
+      turns,
+      [command("bot-a", "кай")],
+      () => undefined,
+      (userID, fallback) => (userID === "bot-a" ? "лиза" : fallback),
+    ),
+    ["лиза"],
+  );
+});
+
 test("does not name unresolved senders", () => {
   const turns = [{ turnId: "unknown", userId: "", lines: [{ finalized: false }] }];
   assert.deepEqual(

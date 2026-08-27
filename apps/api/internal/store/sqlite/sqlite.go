@@ -542,7 +542,7 @@ func (s *Store) ListChannels(ctx context.Context, workspaceID, userID string) ([
 			out = append(out, channel)
 		}
 	}
-	return out, nil
+	return s.hydrateChannelBotPresentations(ctx, out, workspaceID)
 }
 
 func (s *Store) GetChannel(ctx context.Context, channelID, userID string) (store.Channel, error) {
@@ -557,7 +557,7 @@ func (s *Store) GetChannel(ctx context.Context, channelID, userID string) (store
 	if err := s.requireGuestChannelAccess(ctx, channel.WorkspaceID, channel.ID, userID); err != nil {
 		return store.Channel{}, err
 	}
-	return channel, nil
+	return s.hydrateChannelBotPresentationsForChannel(ctx, channel)
 }
 
 func (s *Store) CreateChannel(ctx context.Context, input store.CreateChannelInput) (store.Channel, store.Event, error) {

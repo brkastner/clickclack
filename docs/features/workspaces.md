@@ -85,6 +85,23 @@ placement. Section and Archived disclosure state is browser-local and persisted
 per workspace. `external_managed` adds a small row marker, while a safe HTTP(S)
 `external_url` adds an external-open action to the channel header.
 
+Managers can give a bot a channel-scoped visual identity with
+`PUT /api/channels/{channel_id}/bot-presentations/{bot_user_id}` and remove it
+with `DELETE` on the same path. The request accepts `{display_name, avatar_url?}`.
+Channel responses expose these entries as `bot_presentations`. They only change
+how that bot's messages are presented in the channel: the authenticated user ID,
+`@handle`, bot badge, profile, mentions, commands, and permissions stay attached
+to the underlying bot. Bot tokens cannot mutate presentations.
+
+A presentation channel can also act as a sidebar profile. Its section key is
+`profile:{source_channel_id}`. The web client renders that opaque key as the
+profile's avatar and display name, nests assigned channels beneath it, and lets
+managers move ordinary channels between profiles by dragging them onto a profile
+header. Assignment copies the source bot presentation to the target channel;
+removing the profile removes that copied presentation. Self-referential source
+channels remain the canonical profile catalog and are not duplicated as
+shortcuts when their presentation is copied elsewhere.
+
 Guest workspace members are waiting-room users. They can only see `#guest`, can
 post three messages per day, and cannot create rooms or DMs. Moderators and
 owners can promote them to `member`, time them out, or block them. See

@@ -50,6 +50,9 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 		SidebarSection:  body.SidebarSection,
 	})
 	if err == nil {
+		if hydrated, hydrateErr := s.store.GetChannel(r.Context(), channel.ID, act.user.ID); hydrateErr == nil {
+			channel = hydrated
+		}
 		s.publishEvent(r.Context(), event)
 	}
 	writeResult(w, map[string]any{"channel": channel, "event": event}, err)

@@ -235,7 +235,7 @@
       if (m.author?.id === currentUserID || m.author_id === currentUserID) return false;
       return dividerUnreadCount > 0 && (m.channel_seq || 0) > unreadBoundarySeq;
     };
-    for (const group of groupMessages(messages)) {
+    for (const group of groupMessages(messages, selectedChannel)) {
       let splitIdx = -1;
       if (!inserted) {
         for (let i = 0; i < group.messages.length; i++) {

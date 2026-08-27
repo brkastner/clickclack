@@ -1,7 +1,11 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { autoGrow } from "../../lib/actions/autogrow";
-  import { avatarInitial, handleLabel } from "../../lib/chat/people";
+  import {
+    avatarInitial,
+    handleLabel,
+    type ChannelProfileShortcut,
+  } from "../../lib/chat/people";
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, Upload, User, WorkspaceBotCommand } from "../../lib/types";
@@ -44,6 +48,7 @@
     slashCommands?: SlashCommand[];
     botCommands?: WorkspaceBotCommand[];
     mentionPeople?: User[];
+    mentionProfiles?: ChannelProfileShortcut[];
     disabled?: boolean;
     onValue: (value: string) => void;
     onSubmit: () => void;
@@ -76,6 +81,7 @@
     slashCommands = [],
     botCommands = [],
     mentionPeople = [],
+    mentionProfiles = [],
     disabled = false,
     onValue,
     onSubmit,
@@ -193,8 +199,16 @@
 
   function mentionSuggestions(token: ActiveToken): ComposerSuggestion[] {
     const query = token.query;
+    const profileSuggestions = mentionProfiles.map((profile) => ({
+      id: profile.id,
+      kind: "mention" as const,
+      label: `@${profile.display_name}`,
+      detail: `profile · inserts @${profile.handle}`,
+      insertText: `@${profile.handle} `,
+      sortText: `${profile.display_name} ${profile.channel_name} ${profile.handle}`.toLowerCase(),
+    }));
     const seen = new Set<string>();
-    return mentionPeople
+    const peopleSuggestions = mentionPeople
       .filter((person) => {
         if (!person.id || !person.handle?.trim() || seen.has(person.id)) return false;
         seen.add(person.id);
@@ -211,7 +225,8 @@
           insertText: `${label} `,
           sortText: searchable,
         };
-      })
+      });
+    return [...profileSuggestions, ...peopleSuggestions]
       .filter((suggestion) => !query || suggestion.sortText.includes(query))
       .sort((a, b) => Number(!a.sortText.startsWith(query)) - Number(!b.sortText.startsWith(query)) || a.sortText.localeCompare(b.sortText))
       .slice(0, 6);

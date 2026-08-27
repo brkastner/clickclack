@@ -1,10 +1,11 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import { handleLabel, isDeletedBot, userHandle } from "../../lib/chat/people";
-  import type { SearchHighlight, SearchResult, SearchSession } from "../../lib/types";
+  import { handleLabel, isDeletedBot, presentChannelUser, userHandle } from "../../lib/chat/people";
+  import type { Channel, SearchHighlight, SearchResult, SearchSession } from "../../lib/types";
 
   type Props = {
     session: SearchSession;
+    channels?: Channel[];
     covered?: boolean;
     inert?: boolean;
     contextFor: (result: SearchResult) => string;
@@ -13,7 +14,7 @@
     onLoadMore: () => void;
   };
 
-  let { session, covered = false, inert = false, contextFor, onClose, onOpenResult, onLoadMore }: Props = $props();
+  let { session, channels = [], covered = false, inert = false, contextFor, onClose, onOpenResult, onLoadMore }: Props = $props();
   const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
   const dayFormatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
   const yearFormatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -95,6 +96,7 @@
       <ul class="search-result-list">
         {#each session.results as result (result.id)}
           {@const context = contextFor(result)}
+          {@const author = presentChannelUser(result.author, channels.find((channel) => channel.id === result.channel_id)) || result.author}
           <li>
             <button
               type="button"
@@ -105,18 +107,18 @@
             >
               <Avatar
                 class="dm-avatar"
-                id={result.author.id}
-                name={result.author.display_name}
-                src={isDeletedBot(result.author) ? undefined : result.author.avatar_url}
+                id={author.id}
+                name={author.display_name}
+                src={isDeletedBot(author) ? undefined : author.avatar_url}
                 size={30}
               />
               <div class="search-result-body">
                 <div class="search-result-meta">
-                  <strong>{result.author.display_name || "Local User"}</strong>
-                  {#if isDeletedBot(result.author)}
+                  <strong>{author.display_name || "Local User"}</strong>
+                  {#if isDeletedBot(author)}
                     <span class="bot-chip bot-chip--deleted">deleted bot</span>
-                  {:else if userHandle(result.author)}
-                    <span class="search-result-handle">{handleLabel(userHandle(result.author))}</span>
+                  {:else if userHandle(author)}
+                    <span class="search-result-handle">{handleLabel(userHandle(author))}</span>
                   {/if}
                   <time datetime={result.created_at}>{resultTimestamp(result.created_at)}</time>
                 </div>
