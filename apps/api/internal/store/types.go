@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -172,10 +174,24 @@ const (
 	GuestChannelName             = "guest"
 	GuestPostLimit               = 3
 	MaxDirectConversationMembers = 32
-
-	UploadQuotaBytesPerUserWorkspace int64 = 512 << 20
-	UploadQuotaCountPerUserWorkspace int64 = 64
 )
+
+var (
+	UploadQuotaBytesPerUserWorkspace = positiveInt64Env("CLICKCLACK_UPLOAD_QUOTA_BYTES", 512<<20)
+	UploadQuotaCountPerUserWorkspace = positiveInt64Env("CLICKCLACK_UPLOAD_QUOTA_COUNT", 64)
+)
+
+func positiveInt64Env(name string, fallback int64) int64 {
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
 
 type User struct {
 	ID                   string                `json:"id"`
