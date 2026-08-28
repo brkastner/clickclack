@@ -11,10 +11,8 @@ overrides:
   'tar@7': 7.5.21
   'undici@6': 6.28.0
 allowBuilds:
-  '@google/genai': true
   electron-winstaller: true
   esbuild: true
-  protobufjs: true
   sharp: true
   workerd: true
 minimumReleaseAge: 2880
