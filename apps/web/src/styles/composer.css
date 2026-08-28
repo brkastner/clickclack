@@ -1256,8 +1256,26 @@
   width: 100%;
   height: 100%;
   border-radius: 12px;
-  background:
-    linear-gradient(90deg, transparent 0 4%, currentColor 4% 6%, transparent 6% 12%, currentColor 12% 15%, transparent 15% 23%, currentColor 23% 26%, transparent 26% 35%, currentColor 35% 38%, transparent 38% 48%, currentColor 48% 51%, transparent 51% 60%, currentColor 60% 64%, transparent 64% 73%, currentColor 73% 76%, transparent 76% 85%, currentColor 85% 88%, transparent 88% 100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0 4%,
+    currentColor 4% 6%,
+    transparent 6% 12%,
+    currentColor 12% 15%,
+    transparent 15% 23%,
+    currentColor 23% 26%,
+    transparent 26% 35%,
+    currentColor 35% 38%,
+    transparent 38% 48%,
+    currentColor 48% 51%,
+    transparent 51% 60%,
+    currentColor 60% 64%,
+    transparent 64% 73%,
+    currentColor 73% 76%,
+    transparent 76% 85%,
+    currentColor 85% 88%,
+    transparent 88% 100%
+  );
   opacity: 0.42;
   animation: live-voice-wave 920ms ease-in-out infinite alternate;
 }
@@ -1365,6 +1383,16 @@
   color: var(--warning);
 }
 
+.composer-live-voice__control--auto-send {
+  min-width: 86px;
+}
+
+.composer-live-voice__control--auto-send.is-manual {
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--line));
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+}
+
 .composer-live-voice__control--end {
   border-color: color-mix(in srgb, var(--danger) 28%, var(--line));
   background: color-mix(in srgb, var(--danger) 8%, transparent);
@@ -1453,6 +1481,7 @@
   }
 
   .composer-live-voice__control--mic,
+  .composer-live-voice__control--auto-send,
   .composer-live-voice__control--end {
     flex: 1;
   }

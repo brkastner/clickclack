@@ -142,4 +142,71 @@ test("keeps live transcription visible while response audio plays", async ({ con
     "Response playing",
   );
   await expect(preview).toContainText("during playback");
+
+  const sentMessages = () =>
+    page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __voiceTestChannel?: { sent: string[] };
+      };
+      return (testWindow.__voiceTestChannel?.sent || []).map((message) => JSON.parse(message));
+    });
+
+  await page.keyboard.press("Space");
+  expect((await sentMessages()).at(-1)).toEqual({
+    label: "kassette",
+    type: "input.pause",
+    data: {},
+  });
+  await emit("input.state_changed", {
+    session_id: "voice-test",
+    paused: true,
+    sequence: 5,
+  });
+  await expect(page.getByRole("button", { name: "Resume microphone" })).toBeVisible();
+
+  await page.keyboard.press("Space");
+  expect((await sentMessages()).at(-1)).toEqual({
+    label: "kassette",
+    type: "input.resume",
+    data: {},
+  });
+  await emit("input.state_changed", {
+    session_id: "voice-test",
+    paused: false,
+    sequence: 6,
+  });
+
+  const sentBeforeEditableSpace = (await sentMessages()).length;
+  await page.evaluate(() => {
+    const textarea = document.createElement("textarea");
+    textarea.id = "voice-shortcut-editable";
+    document.body.append(textarea);
+    textarea.focus();
+  });
+  await page.keyboard.press("Space");
+  await expect(page.locator("#voice-shortcut-editable")).toHaveValue(" ");
+  expect(await sentMessages()).toHaveLength(sentBeforeEditableSpace);
+  await page.locator("#voice-shortcut-editable").evaluate((element) => element.remove());
+
+  await page.keyboard.press("Shift+Space");
+  await expect(page.getByRole("button", { name: "Enable VAD auto-send" })).toBeVisible();
+  await emit("transcript.final", {
+    session_id: "voice-test",
+    turn_id: "voice-test:1",
+    text: "held for manual send",
+    final: true,
+    sequence: 7,
+  });
+  await expect(preview).toContainText("held for manual send");
+  const beforeManualSend = (await page.request
+    .get(`/api/channels/${channel.id}/messages`)
+    .then((response) => response.json())) as { messages: Array<{ body: string }> };
+  expect(
+    beforeManualSend.messages.some((message) => message.body.includes("held for manual send")),
+  ).toBe(false);
+
+  await page.getByRole("button", { name: "Send dictated message" }).click();
+  await expect(
+    page.locator(".message-row:not(.is-voice)", { hasText: "held for manual send" }),
+  ).toBeVisible();
 });

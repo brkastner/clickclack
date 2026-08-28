@@ -7,6 +7,7 @@ import {
   prepareTextForSpeech,
   voiceDestinationForFocus,
   voiceFocusChanged,
+  voiceKeyboardShortcut,
   voiceResponsePlaybackEnabled,
   VoiceDraftAccumulator,
   type VoiceState,
@@ -209,6 +210,28 @@ test("speaks responses only while the focused conversation is awaiting one", () 
   assert.equal(voiceResponsePlaybackEnabled("idle", 1), false);
   assert.equal(voiceResponsePlaybackEnabled("listening", 1), true);
   assert.equal(voiceResponsePlaybackEnabled("speaking", 1), true);
+});
+
+test("maps live voice space shortcuts without stealing editable input", () => {
+  const base = {
+    status: "listening" as const,
+    code: "Space",
+    key: " ",
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    repeat: false,
+    isComposing: false,
+    editable: false,
+  };
+
+  assert.equal(voiceKeyboardShortcut(base), "toggle-input");
+  assert.equal(voiceKeyboardShortcut({ ...base, shiftKey: true }), "toggle-auto-send");
+  assert.equal(voiceKeyboardShortcut({ ...base, status: "idle" }), null);
+  assert.equal(voiceKeyboardShortcut({ ...base, editable: true }), null);
+  assert.equal(voiceKeyboardShortcut({ ...base, repeat: true }), null);
+  assert.equal(voiceKeyboardShortcut({ ...base, ctrlKey: true }), null);
 });
 
 test("preserves and combines transcript segments across microphone pauses", () => {

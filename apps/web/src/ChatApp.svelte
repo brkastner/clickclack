@@ -79,6 +79,7 @@
     collectVoiceResponseCandidates,
     voiceDestinationForFocus,
     voiceFocusChanged,
+    voiceKeyboardShortcut,
     voiceResponsePlaybackEnabled,
     VoiceDraftAccumulator,
     type VoiceState,
@@ -161,6 +162,7 @@
   let activeVoiceTranscript: VoiceTranscript | null = null;
   let activeVoiceResponseText = "";
   let voiceOutputMuted = false;
+  let voiceAutoSend = true;
   let voiceDestination: OutgoingDraft | null = null;
   let voiceStartedAt = 0;
   let awaitingVoiceResponses = 0;
@@ -546,6 +548,7 @@
       activeVoiceTranscript = null;
       activeVoiceResponseText = "";
       voiceOutputMuted = false;
+      voiceAutoSend = true;
       voiceDestination = null;
       awaitingVoiceResponses = 0;
       voiceThinking = false;
@@ -559,7 +562,7 @@
     const draft = voiceDraft.snapshot();
     if (!draft) return;
     activeVoiceTranscript = { ...transcript, text: draft.text, final: false };
-    if (transcript.final) {
+    if (transcript.final && voiceAutoSend) {
       void commitVoiceDraft();
       return;
     }
@@ -684,6 +687,7 @@
     activeVoiceTranscript = null;
     activeVoiceResponseText = "";
     voiceOutputMuted = false;
+    voiceAutoSend = true;
     voiceSession.setOutputMuted(false);
     awaitingVoiceResponses = 0;
     voiceThinking = false;
@@ -700,6 +704,10 @@
     if (!voiceSession) return;
     voiceOutputMuted = !voiceOutputMuted;
     voiceSession.setOutputMuted(voiceOutputMuted);
+  }
+
+  function toggleVoiceAutoSend() {
+    voiceAutoSend = !voiceAutoSend;
   }
 
   function sendVoiceDraft() {
@@ -4482,9 +4490,44 @@
     }
   }
 
+  function isEditableVoiceShortcutTarget(target: EventTarget | null): boolean {
+    const element = target instanceof HTMLElement ? target : document.activeElement;
+    return (
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLTextAreaElement ||
+      (element instanceof HTMLElement && element.isContentEditable)
+    );
+  }
+
+  function handleVoiceKeyboardShortcut(event: KeyboardEvent): boolean {
+    if (isModalOpen() || mobileNavOpen || selectedArtifact) return false;
+    const shortcut = voiceKeyboardShortcut({
+      status: voiceState.status,
+      code: event.code,
+      key: event.key,
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      repeat: event.repeat,
+      isComposing: event.isComposing,
+      editable: isEditableVoiceShortcutTarget(event.target),
+    });
+    if (!shortcut) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    if (shortcut === "toggle-input") {
+      voiceSession?.toggleInput();
+    } else {
+      toggleVoiceAutoSend();
+    }
+    return true;
+  }
+
   function handleWindowKeydown(event: KeyboardEvent) {
     containArtifactModalFocus(event);
     if (event.defaultPrevented) return;
+    if (handleVoiceKeyboardShortcut(event)) return;
     if (event.key === "Escape") {
       if (
         event.target instanceof Element &&
@@ -4881,9 +4924,11 @@
       voiceTranscript={activeVoiceTranscript?.text || ""}
       voiceResponseText={activeVoiceResponseText}
       {voiceOutputMuted}
+      {voiceAutoSend}
       voiceStream={voiceState.status === "speaking" ? remoteVoiceStream : voiceInputStream}
       onToggleVoice={toggleVoiceSession}
       onToggleVoiceOutput={toggleVoiceOutput}
+      onToggleVoiceAutoSend={toggleVoiceAutoSend}
       onSendVoice={sendVoiceDraft}
       onEndVoice={endVoiceSession}
       showGifPicker={showGifPicker}

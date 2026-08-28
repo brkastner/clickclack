@@ -111,6 +111,7 @@
     voiceTranscript?: string;
     voiceResponseText?: string;
     voiceOutputMuted?: boolean;
+    voiceAutoSend?: boolean;
     voiceStream?: MediaStream | null;
     showGifPicker?: boolean;
     gifQuery?: string;
@@ -136,6 +137,7 @@
     onToggleGif?: () => void;
     onToggleVoice?: () => void;
     onToggleVoiceOutput?: () => void;
+    onToggleVoiceAutoSend?: () => void;
     onEndVoice?: () => void;
     onSendVoice?: () => void;
     onGifQuery?: (value: string) => void;
@@ -161,6 +163,7 @@
     voiceTranscript = "",
     voiceResponseText = "",
     voiceOutputMuted = false,
+    voiceAutoSend = true,
     voiceStream = null,
     showGifPicker = false,
     gifQuery = "",
@@ -186,6 +189,7 @@
     onToggleGif = () => {},
     onToggleVoice = () => {},
     onToggleVoiceOutput = () => {},
+    onToggleVoiceAutoSend = () => {},
     onEndVoice = () => {},
     onSendVoice = () => {},
     onGifQuery = () => {},
@@ -990,7 +994,9 @@
             type="button"
             class="composer-live-voice__control composer-live-voice__control--mic"
             class:is-paused={voicePaused}
+            title={`${voicePaused ? "Resume" : "Pause"} microphone (Space)`}
             aria-label={voicePaused ? "Resume microphone" : "Pause microphone"}
+            aria-keyshortcuts="Space"
             aria-pressed={voicePaused}
             disabled={voiceStatus === "connecting" || voiceInputStatus === "pausing" || voiceInputStatus === "resuming"}
             onclick={onToggleVoice}
@@ -1001,6 +1007,17 @@
             </svg>
             <span>{voicePaused ? "Resume mic" : "Pause mic"}</span>
           </button>
+          <button
+            type="button"
+            class="composer-live-voice__control composer-live-voice__control--auto-send"
+            class:is-manual={!voiceAutoSend}
+            title={`${voiceAutoSend ? "Disable" : "Enable"} VAD auto-send (Shift+Space)`}
+            aria-label={`${voiceAutoSend ? "Disable" : "Enable"} VAD auto-send`}
+            aria-keyshortcuts="Shift+Space"
+            aria-pressed={voiceAutoSend}
+            disabled={voiceStatus === "connecting"}
+            onclick={onToggleVoiceAutoSend}
+          >{voiceAutoSend ? "Auto send" : "Manual send"}</button>
           {#if voiceDraftAvailable}
             <button
               type="button"

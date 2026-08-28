@@ -42,6 +42,37 @@ export function voiceResponsePlaybackEnabled(
   return awaitingResponses > 0 && (status === "listening" || status === "speaking");
 }
 
+export type VoiceKeyboardShortcut = "toggle-input" | "toggle-auto-send";
+
+export type VoiceKeyboardInput = {
+  status: VoiceStatus;
+  code: string;
+  key: string;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  repeat: boolean;
+  isComposing: boolean;
+  editable: boolean;
+};
+
+export function voiceKeyboardShortcut(input: VoiceKeyboardInput): VoiceKeyboardShortcut | null {
+  if (
+    (input.status !== "listening" && input.status !== "speaking") ||
+    (input.code !== "Space" && input.key !== " ") ||
+    input.ctrlKey ||
+    input.metaKey ||
+    input.altKey ||
+    input.repeat ||
+    input.isComposing ||
+    input.editable
+  ) {
+    return null;
+  }
+  return input.shiftKey ? "toggle-auto-send" : "toggle-input";
+}
+
 type VoiceResponseCandidate = {
   id: string;
   body: string;
