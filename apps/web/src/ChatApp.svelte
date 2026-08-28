@@ -146,6 +146,7 @@
   let replyBody = "";
   let voiceSession: BrowserVoiceSession | null = null;
   let voiceState: VoiceState = { status: "idle" };
+  let remoteVoiceStream: MediaStream | null = null;
   let workspaceName = "";
   let channelName = "";
   let directMemberID = "";
@@ -396,6 +397,7 @@
     voiceSession = new BrowserVoiceSession({
       baseURL: voiceBaseURL(),
       onState: (state) => (voiceState = state),
+      onRemoteAudio: (stream) => (remoteVoiceStream = stream),
     });
     loadActivityPrefs();
     activityClockSweeper = window.setInterval(() => {
@@ -518,6 +520,7 @@
   onDestroy(() => {
     voiceSession?.disconnect();
     voiceSession = null;
+    remoteVoiceStream = null;
     socket?.close();
     socket = null;
     connected = false;
@@ -4588,6 +4591,7 @@
       showVoice
       voiceStatus={voiceState.status}
       voiceError={voiceState.error}
+      voiceStream={remoteVoiceStream}
       onToggleVoice={toggleVoiceSession}
       showGifPicker={showGifPicker}
       gifQuery={gifQuery}
