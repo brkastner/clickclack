@@ -3171,6 +3171,25 @@
   box-shadow: none;
 }
 
+/* The custom preamble surface above sets a 900px reading width for the default
+   layout. Outlined mode uses one shared 96% card width for the preamble and its
+   delivered answer, so preserve that geometry after the custom override. */
+:root[data-message-layout="outlined"]
+  .message-group.is-agent
+  .message-row.is-preamble
+  .message-content {
+  width: 96%;
+  max-width: 1100px;
+}
+
+:root[data-message-layout="outlined"]
+  .message-group.is-agent
+  .message-row.after-preamble
+  .message-content {
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
 .message-group.is-agent .message-row.after-preamble .row-stamp {
   right: 0;
   left: auto;
