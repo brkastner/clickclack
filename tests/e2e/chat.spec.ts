@@ -602,6 +602,9 @@ test("coalesces durable agent activity and applies activity preferences", async 
       kind: "agent_commentary",
       turn_id: turnId,
     },
+    { body: "🛠️ Exec", kind: "agent_tool", turn_id: turnId },
+    { body: "🛠️ Exec", kind: "agent_tool", turn_id: turnId },
+    { body: "🛠️ Exec", kind: "agent_tool", turn_id: turnId },
     { body: "**bash inspect**\n\nvalidated local target", kind: "agent_tool", turn_id: turnId },
     {
       body: "Commentary after the first tool remains in sequence.",
@@ -656,15 +659,18 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expect(preamble.locator("mark[data-clickclack-mention='true']")).toHaveText(
     `@${activityBotHandle}`,
   );
-  await expect(preamble.getByText("bash")).toBeVisible();
-  await preamble.getByRole("button", { name: /bash/ }).click();
+  const compactExec = preamble.getByRole("button", { name: /Ran shell command.*×3/ });
+  await expect(compactExec).toBeDisabled();
+  await preamble.getByRole("button", { name: /Ran shell command.*inspect/ }).click();
   await expect(preamble.getByText("validated local target")).toBeVisible();
   const preambleItems = preamble.locator(".preamble-flow > *");
-  await expect(preambleItems).toHaveCount(4);
+  await expect(preambleItems).toHaveCount(5);
   await expect(preambleItems.nth(0)).toContainText("Checking the deployment boundary for");
-  await expect(preambleItems.nth(1)).toContainText("bash");
-  await expect(preambleItems.nth(2)).toContainText("Commentary after the first tool");
-  await expect(preambleItems.nth(3)).toContainText("read");
+  await expect(preambleItems.nth(1)).toContainText("Ran shell command");
+  await expect(preambleItems.nth(1)).toContainText("×3");
+  await expect(preambleItems.nth(2)).toContainText("Ran shell command");
+  await expect(preambleItems.nth(3)).toContainText("Commentary after the first tool");
+  await expect(preambleItems.nth(4)).toContainText("Read file");
 
   await page.evaluate(() => {
     localStorage.setItem("clickclack:message-layout:v1", "outlined");
@@ -1094,7 +1100,7 @@ test("aligns self and other messages independently", async ({ page }) => {
   const preamble = page.getByLabel("Agent preamble");
   await preamble.getByRole("button", { name: "Show preamble" }).click();
   await expect(preamble.getByText("Checking aligned agent activity.")).toBeVisible();
-  await preamble.getByRole("button", { name: /bash inspect alignment/ }).click();
+  await preamble.getByRole("button", { name: /Ran shell command.*inspect alignment/ }).click();
   await expect(preamble.getByText("verified nested content bounds")).toBeVisible();
   await expect
     .poll(() =>

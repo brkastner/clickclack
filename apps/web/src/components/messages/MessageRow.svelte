@@ -6,6 +6,7 @@
   import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { time, markdown } from "../../lib/format";
+  import { writeClipboardText } from "../../lib/clipboard";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import {
     hasCachedMessageAudio,
@@ -341,8 +342,7 @@
 
   async function writeMessageToClipboard(): Promise<boolean> {
     try {
-      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(message.body ?? "");
+      await writeClipboardText(message.body ?? "");
       setCopyStatus("copied");
       return true;
     } catch {
@@ -378,8 +378,7 @@
       return { copied: false };
     }
     try {
-      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(url);
+      await writeClipboardText(url);
       copyLinkStatus = "";
       setCopyStatus("copied");
       return { copied: true };

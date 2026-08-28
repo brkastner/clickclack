@@ -253,6 +253,7 @@
             const inputEvent = event as InputEvent;
             if (
               inputEvent.inputType !== "insertText" ||
+              inputEvent.isComposing ||
               !inputEvent.data ||
               inputEvent.data.length <= 1
             ) {
@@ -261,11 +262,7 @@
             const editor = editorInstance;
             if (!editor) return false;
             event.preventDefault();
-            if (editor.isEmpty) {
-              editor.commands.setContent(inputEvent.data, { contentType: "markdown" });
-            } else {
-              editor.commands.insertContent(inputEvent.data, { contentType: "markdown" });
-            }
+            editor.view.dispatch(editor.state.tr.insertText(inputEvent.data));
             return true;
           },
           focus: () => {

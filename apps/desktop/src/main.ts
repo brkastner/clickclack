@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -379,6 +380,11 @@ function registerIPC() {
   ipcMain.handle("desktop:sign-in-with-github", async (event) => {
     if (!isMainSender(event)) return false;
     await beginDesktopOAuth();
+    return true;
+  });
+  ipcMain.handle("desktop:write-clipboard-text", (event, input) => {
+    if (!isMainSender(event) || typeof input !== "string") return false;
+    clipboard.writeText(input);
     return true;
   });
 

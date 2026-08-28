@@ -80,44 +80,75 @@ function turnKey(message: Message): string {
 // to avoid surfacing the full chain (which reads as noise), we take the first
 // token of the head as the tool name and fold the remainder into the detail,
 // which renders as a single ellipsis-truncated line.
-function parseToolBody(body: string): { name: string; detail?: string } {
+type ParsedToolBody = {
+  name: string;
+  detail?: string;
+  expandable: boolean;
+};
+
+const TOOL_RECEIPT_PREFIXES: Array<{
+  prefix: string;
+  name: string;
+  label: RegExp;
+}> = [
+  { prefix: "🛠️", name: "exec", label: /^(?:exec|bash|shell|command)\b\s*:?\s*/i },
+  { prefix: "🛠", name: "exec", label: /^(?:exec|bash|shell|command)\b\s*:?\s*/i },
+  { prefix: "🩹", name: "apply_patch", label: /^apply\s+patch\b\s*:?\s*/i },
+  { prefix: "📖", name: "read", label: /^read\b\s*:?\s*/i },
+  { prefix: "🧰", name: "process", label: /^process\b\s*:?\s*/i },
+];
+
+function parseToolBody(body: string): ParsedToolBody {
   const trimmed = body.trim();
   let head = "";
   let text = "";
+  let expandable = false;
   const withText = trimmed.match(/^\*\*([^*]+)\*\*\s*\n+([\s\S]+)$/);
   const headOnly = trimmed.match(/^\*\*([^*]+)\*\*$/);
   if (withText) {
     head = withText[1].trim();
     text = collapseWhitespace(withText[2]);
+    expandable = true;
   } else if (headOnly) {
     head = headOnly[1].trim();
   } else {
-    // No well-formed bold head (e.g. an unclosed "**exec ..." from older
-    // bridge data). Strip stray bold markers and still split a leading verb.
-    const cleaned = trimmed.replace(/\*\*/g, "").trim();
-    return splitHead(cleaned, "");
+    const [firstLine = "", ...bodyLines] = trimmed.replace(/\*\*/g, "").split("\n");
+    head = firstLine.trim();
+    text = collapseWhitespace(bodyLines.join("\n"));
+    expandable = text.length > 0;
   }
-  return splitHead(head, text);
+  const receipt = TOOL_RECEIPT_PREFIXES.find(({ prefix }) => head.startsWith(prefix));
+  if (receipt) {
+    const label = head.slice(receipt.prefix.length).trim();
+    const headDetail = label.replace(receipt.label, "").trim();
+    return joinToolDetail(receipt.name, headDetail, text, expandable);
+  }
+  return splitHead(head, text, expandable);
 }
 
 // Split a head into a leading tool-name token and a folded detail. The first
 // whitespace-delimited word is treated as the tool verb (command, exec, read,
 // message); the rest of the head, plus any body text, becomes the detail.
-function splitHead(head: string, text: string): { name: string; detail?: string } {
+function splitHead(head: string, text: string, expandable: boolean): ParsedToolBody {
   const collapsedHead = collapseWhitespace(head);
   const spaceIdx = collapsedHead.indexOf(" ");
-  let name: string;
-  let rest: string;
-  if (spaceIdx === -1) {
-    name = collapsedHead;
-    rest = "";
-  } else {
-    name = collapsedHead.slice(0, spaceIdx);
-    rest = collapsedHead.slice(spaceIdx + 1).trim();
-  }
-  const detailParts = [rest, text].filter((p) => p.length > 0);
-  const detail = detailParts.join(" · ");
-  return { name, detail: detail || undefined };
+  if (spaceIdx === -1) return joinToolDetail(collapsedHead, "", text, expandable);
+  return joinToolDetail(
+    collapsedHead.slice(0, spaceIdx),
+    collapsedHead.slice(spaceIdx + 1).trim(),
+    text,
+    expandable,
+  );
+}
+
+function joinToolDetail(
+  name: string,
+  headDetail: string,
+  text: string,
+  expandable: boolean,
+): ParsedToolBody {
+  const detail = [headDetail, text].filter((part) => part.length > 0).join(" · ");
+  return { name, detail: detail || undefined, expandable };
 }
 
 function collapseWhitespace(value: string): string {
@@ -137,12 +168,26 @@ function buildBlock(
     if (row.kind === "agent_tool") {
       if (flags.hideToolCalls) continue;
       const parsed = parseToolBody(row.body);
+      const prior = items.at(-1);
+      if (
+        prior?.type === "tool" &&
+        !prior.detail &&
+        !parsed.detail &&
+        prior.name === parsed.name &&
+        !prior.expandable &&
+        !parsed.expandable
+      ) {
+        prior.count += 1;
+        continue;
+      }
       items.push({
         type: "tool",
         id: row.id,
         name: parsed.name,
-        detail: parsed.detail,
+        ...(parsed.detail ? { detail: parsed.detail } : {}),
         full: row.body.trim(),
+        count: 1,
+        expandable: parsed.expandable,
       });
     } else {
       // agent_commentary

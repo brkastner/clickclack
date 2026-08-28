@@ -95,6 +95,8 @@ export type PreambleToolItem = {
   name: string;
   detail?: string;
   full: string;
+  count: number;
+  expandable: boolean;
 };
 
 export type PreambleItem = PreambleCommentaryItem | PreambleToolItem;

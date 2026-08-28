@@ -66,6 +66,41 @@ test("offers rich formatting controls and a functional voice control", async ({ 
   expect(payload.body).toContain("**polished composer**");
 });
 
+test("keeps multi-character mobile input in one stable draft", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, stamp);
+  const channel = await createChannel(page, workspace.id);
+  await openChannel(page, workspace.route_id);
+
+  const editor = page.getByLabel("Message body");
+  await editor.focus();
+  const chunks = ["update ", "script ", "and ", "rescue ", "sheet ", "with ", "Gboard"];
+  for (const chunk of chunks) {
+    await editor.evaluate((node, data) => {
+      node.dispatchEvent(
+        new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          data,
+          inputType: "insertText",
+        }),
+      );
+    }, chunk);
+  }
+
+  const body = chunks.join("");
+  await expect(editor).toHaveText(body);
+  await expect(editor.locator("p")).toHaveCount(1);
+
+  const created = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().endsWith(`/api/channels/${channel.id}/messages`),
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+  const payload = (await created).postDataJSON() as { body: string };
+  expect(payload.body).toBe(body);
+});
+
 test("keeps quotes compact and converts language-tagged code fences", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, stamp);

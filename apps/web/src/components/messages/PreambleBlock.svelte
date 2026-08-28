@@ -84,19 +84,26 @@
             {@html markdown(entry.item.body)}
           </div>
         {:else if entry.tool}
-          {@const open = expandedTools[entry.item.id] === true}
+          {@const open = entry.item.expandable && expandedTools[entry.item.id] === true}
           <div class="preamble-tool" class:expanded={open}>
             <button
               type="button"
               class="preamble-tool-summary"
-              aria-expanded={open}
-              onclick={() => toggleTool(entry.item.id)}
+              class:is-static={!entry.item.expandable}
+              aria-expanded={entry.item.expandable ? open : undefined}
+              disabled={!entry.item.expandable}
+              onclick={() => entry.item.expandable && toggleTool(entry.item.id)}
             >
-              <span class="tool-line-chevron" class:open={open} aria-hidden="true">▸</span>
+              {#if entry.item.expandable}
+                <span class="tool-line-chevron" class:open={open} aria-hidden="true">▸</span>
+              {/if}
               <span class="tool-line-glyph" aria-hidden="true">{entry.tool.glyph}</span>
               <span class="tool-line-action">{entry.tool.action}</span>
-              {#if entry.tool.name && entry.tool.name !== "tool"}
+              {#if entry.tool.action === "Used tool" && entry.tool.name !== "tool"}
                 <span class="tool-line-name">{entry.tool.name}</span>
+              {/if}
+              {#if entry.item.count > 1}
+                <span class="tool-line-count">×{entry.item.count}</span>
               {/if}
               {#if !open && entry.tool.detail}
                 <span class="tool-line-detail" title={entry.tool.detail}>{entry.tool.detail}</span>
