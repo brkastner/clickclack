@@ -18,7 +18,7 @@
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
-  import type { VoiceStatus } from "../../lib/voice";
+  import type { VoiceInputStatus, VoiceStatus } from "../../lib/voice";
   import VoiceVisualizer from "../VoiceVisualizer.svelte";
   import ComposerToolbar from "./ComposerToolbar.svelte";
   import GifPicker from "./GifPicker.svelte";
@@ -104,7 +104,10 @@
     showToolbar?: boolean;
     showVoice?: boolean;
     voiceStatus?: VoiceStatus;
+    voiceInputStatus?: VoiceInputStatus;
     voiceError?: string;
+    voiceWaiting?: boolean;
+    voiceDraftAvailable?: boolean;
     voiceStream?: MediaStream | null;
     showGifPicker?: boolean;
     gifQuery?: string;
@@ -129,6 +132,8 @@
     onAppendToComposer?: (snippet: string) => void;
     onToggleGif?: () => void;
     onToggleVoice?: () => void;
+    onEndVoice?: () => void;
+    onSendVoice?: () => void;
     onGifQuery?: (value: string) => void;
     onPickGif?: (url: string, title: string) => void;
   };
@@ -145,7 +150,10 @@
     showToolbar = false,
     showVoice = false,
     voiceStatus = "idle",
+    voiceInputStatus = "live",
     voiceError = "",
+    voiceWaiting = false,
+    voiceDraftAvailable = false,
     voiceStream = null,
     showGifPicker = false,
     gifQuery = "",
@@ -170,6 +178,8 @@
     onAppendToComposer = () => {},
     onToggleGif = () => {},
     onToggleVoice = () => {},
+    onEndVoice = () => {},
+    onSendVoice = () => {},
     onGifQuery = () => {},
     onPickGif = () => {},
   }: Props = $props();
@@ -763,23 +773,54 @@
       {/if}
       <div class="composer-editor" use:mountEditor={{ value, disabled, placeholder }}></div>
       {#if showVoice}
-        <button
-          type="button"
-          class="composer-voice"
-          class:is-active={voiceStatus === "listening"}
-          class:is-connecting={voiceStatus === "connecting"}
-          class:is-failed={voiceStatus === "failed"}
-          title={voiceStatus === "listening" ? "End voice conversation" : voiceStatus === "connecting" ? "Cancel voice connection" : "Start voice conversation"}
-          aria-label={voiceStatus === "listening" ? "End voice conversation" : voiceStatus === "connecting" ? "Cancel voice connection" : voiceStatus === "failed" ? "Retry voice conversation" : "Start voice conversation"}
-          aria-pressed={voiceStatus === "listening"}
-          onclick={onToggleVoice}
-        >
-          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-            <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6"/>
-          </svg>
-          <span class="composer-voice__dot" aria-hidden="true"></span>
-        </button>
+        <div class="composer-voice-controls">
+          <button
+            type="button"
+            class="composer-voice"
+            class:is-active={voiceStatus === "listening" || voiceStatus === "speaking"}
+            class:is-paused={voiceInputStatus === "paused" || voiceInputStatus === "pausing"}
+            class:is-connecting={voiceStatus === "connecting" || voiceInputStatus === "resuming"}
+            class:is-failed={voiceStatus === "failed"}
+            title={voiceStatus === "connecting" ? "Cancel voice connection" : voiceStatus !== "listening" && voiceStatus !== "speaking" ? "Start voice conversation" : voiceInputStatus === "paused" ? "Resume microphone" : voiceInputStatus === "pausing" ? "Pausing microphone…" : voiceInputStatus === "resuming" ? "Resuming microphone…" : "Pause microphone"}
+            aria-label={voiceStatus === "failed" ? "Retry voice conversation" : voiceStatus === "connecting" ? "Cancel voice connection" : voiceStatus !== "listening" && voiceStatus !== "speaking" ? "Start voice conversation" : voiceInputStatus === "paused" ? "Resume microphone" : "Pause microphone"}
+            aria-pressed={voiceInputStatus === "paused" || voiceInputStatus === "pausing"}
+            onclick={onToggleVoice}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6"/>
+              {#if voiceInputStatus === "paused" || voiceInputStatus === "pausing"}
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 4l16 16"/>
+              {/if}
+            </svg>
+            <span class="composer-voice__dot" aria-hidden="true"></span>
+          </button>
+          {#if voiceStatus === "listening" || voiceStatus === "speaking"}
+            <button
+              type="button"
+              class="composer-voice-send"
+              title="Send dictated message"
+              aria-label="Send dictated message"
+              disabled={!voiceDraftAvailable}
+              onclick={onSendVoice}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <path fill="currentColor" d="M3 3.5 21 12 3 20.5l3.6-7.5L15 12 6.6 11l-3.6-7.5Z"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="composer-voice-end"
+              title="End voice conversation"
+              aria-label="End voice conversation"
+              onclick={onEndVoice}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="currentColor" d="M7 7h10v10H7z"/>
+              </svg>
+            </button>
+          {/if}
+        </div>
       {/if}
       <button type="submit" class="send" aria-label={submitLabel} disabled={disabled || submitDisabled || !value.trim()}>
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -792,9 +833,17 @@
         <span class="composer-voice-status__text">
           {voiceStatus === "connecting"
             ? "Connecting to local voice service…"
-            : voiceStatus === "listening"
-              ? "Voice connected · click the microphone to disconnect"
-              : voiceError || "Voice connection failed"}
+            : voiceInputStatus === "paused" || voiceInputStatus === "pausing"
+              ? "Microphone paused · responses can still play"
+              : voiceInputStatus === "resuming"
+                ? "Resuming microphone…"
+                : voiceStatus === "listening" && voiceWaiting
+                  ? "OpenClaw is thinking…"
+                  : voiceStatus === "listening"
+                    ? "Listening · click the microphone to pause"
+                    : voiceStatus === "speaking"
+                      ? "OpenClaw is speaking · click the microphone to pause"
+                      : voiceError || "Voice connection failed"}
         </span>
         <span class="composer-voice-visualizer-slot" aria-hidden="true">
           {#if voiceStream}

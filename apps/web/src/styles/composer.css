@@ -426,15 +426,21 @@
   color: var(--text-strong);
 }
 
-.composer-voice {
-  position: relative;
+.composer-voice-controls {
   align-self: start;
-  width: var(--composer-control-size);
-  height: var(--composer-control-size);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   margin-top: calc(
     var(--composer-text-padding-block) +
       (var(--composer-line-height) - var(--composer-control-size)) / 2
   );
+}
+
+.composer-voice {
+  position: relative;
+  width: var(--composer-control-size);
+  height: var(--composer-control-size);
   display: grid;
   place-items: center;
   border: 0;
@@ -459,8 +465,58 @@
 }
 
 .composer-voice.is-active {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.composer-voice.is-paused {
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
+}
+
+.composer-voice-send,
+.composer-voice-end {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    transform 80ms ease;
+}
+
+.composer-voice-send {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.composer-voice-send:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.composer-voice-send:disabled {
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.45;
+}
+
+.composer-voice-end {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
+}
+
+.composer-voice-end:hover {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.composer-voice-send:active:not(:disabled),
+.composer-voice-end:active {
+  transform: translateY(1px);
 }
 
 .composer-voice.is-connecting {

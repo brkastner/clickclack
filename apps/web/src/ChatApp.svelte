@@ -74,7 +74,13 @@
   import type { Channel, ChannelBotPresentation, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
   import { findUniqueBotCommand } from "./lib/bot-command-routing";
-  import { BrowserVoiceSession, type VoiceState } from "./lib/voice";
+  import {
+    BrowserVoiceSession,
+    collectVoiceResponseCandidates,
+    VoiceDraftAccumulator,
+    type VoiceState,
+    type VoiceTranscript,
+  } from "./lib/voice";
 
   const LIVE_EDGE_TOLERANCE_PX = 96;
   const LAST_CHANNEL_STORAGE_PREFIX = "clickclack:last-channel:v1:";
@@ -147,6 +153,17 @@
   let voiceSession: BrowserVoiceSession | null = null;
   let voiceState: VoiceState = { status: "idle" };
   let remoteVoiceStream: MediaStream | null = null;
+  let voiceInputStream: MediaStream | null = null;
+  const voiceDraft = new VoiceDraftAccumulator();
+  let activeVoiceTranscript: VoiceTranscript | null = null;
+  let voiceDestination: OutgoingDraft | null = null;
+  let voiceStartedAt = 0;
+  let awaitingVoiceResponses = 0;
+  let voiceThinking = false;
+  let voiceFillerTimer: ReturnType<typeof setTimeout> | undefined;
+  let voiceFillerIndex = 0;
+  let committedVoiceTurnIDs = new Set<string>();
+  let spokenVoiceMessageIDs = new Set<string>();
   let workspaceName = "";
   let channelName = "";
   let directMemberID = "";
@@ -317,6 +334,83 @@
     { hideCommentary, hideToolCalls },
     activityClock,
   );
+  $: voicePreviewMessage = buildVoicePreviewMessage(
+    voiceState.status,
+    voiceDestination,
+    activeVoiceTranscript,
+    voiceInputStream,
+    user,
+    currentConversationKey(),
+  );
+  $: renderedMessages = voicePreviewMessage
+    ? [...visibleMessages, voicePreviewMessage]
+    : visibleMessages;
+  $: maybeSpeakVoiceResponses(visibleMessages, voiceState.status);
+
+  function buildVoicePreviewMessage(
+    currentVoiceStatus: VoiceState["status"],
+    destination: OutgoingDraft | null,
+    transcript: VoiceTranscript | null,
+    inputStream: MediaStream | null,
+    currentUser: User | null,
+    conversationKey: string,
+  ): Message | null {
+    if (
+      currentVoiceStatus !== "listening" ||
+      !destination ||
+      destination.viewKey !== conversationKey ||
+      !currentUser
+    ) {
+      return null;
+    }
+    const id = `voice_${transcript?.turnID || "listening"}`;
+    return {
+      id,
+      workspace_id: destination.workspaceID,
+      channel_id: destination.channelID,
+      direct_conversation_id: destination.directConversationID,
+      topic_id: destination.topicID,
+      author_id: currentUser.id,
+      thread_root_id: id,
+      body: transcript?.text || "",
+      body_format: "markdown",
+      created_at: new Date().toISOString(),
+      author: currentUser,
+      voice: {
+        state: transcript ? "transcribing" : "listening",
+        stream: inputStream || undefined,
+      },
+    };
+  }
+
+  function maybeSpeakVoiceResponses(
+    source: Message[],
+    currentVoiceStatus: VoiceState["status"],
+  ) {
+    if (
+      !voiceSession ||
+      (currentVoiceStatus !== "listening" && currentVoiceStatus !== "speaking")
+    ) {
+      return;
+    }
+    const candidates = collectVoiceResponseCandidates(
+      source,
+      voiceStartedAt,
+      spokenVoiceMessageIDs,
+    );
+    if (candidates.length === 0) return;
+    let spoke = false;
+    for (const candidate of candidates) {
+      if (!voiceSession.speak(candidate.body)) continue;
+      spokenVoiceMessageIDs.add(candidate.id);
+      spoke = true;
+    }
+    if (!spoke) return;
+    cancelVoiceFiller();
+    voiceThinking = false;
+    spokenVoiceMessageIDs = new Set(spokenVoiceMessageIDs);
+    awaitingVoiceResponses = Math.max(0, awaitingVoiceResponses - 1);
+  }
 
   function resetTopicStateForConversation(conversationKey: string) {
     if (conversationKey === topicConversationKey) return;
@@ -396,7 +490,9 @@
   onMount(() => {
     voiceSession = new BrowserVoiceSession({
       baseURL: voiceBaseURL(),
-      onState: (state) => (voiceState = state),
+      onState: handleVoiceState,
+      onTranscript: handleVoiceTranscript,
+      onInputStream: (stream) => (voiceInputStream = stream),
       onRemoteAudio: (stream) => (remoteVoiceStream = stream),
     });
     loadActivityPrefs();
@@ -423,13 +519,114 @@
     };
   });
 
+  function handleVoiceState(state: VoiceState) {
+    voiceState = state;
+    if (state.status === "idle" || state.status === "failed") {
+      cancelVoiceFiller();
+      voiceDraft.clear();
+      activeVoiceTranscript = null;
+      voiceDestination = null;
+      awaitingVoiceResponses = 0;
+      voiceThinking = false;
+    }
+  }
+
+  function handleVoiceTranscript(transcript: VoiceTranscript) {
+    if (committedVoiceTurnIDs.has(transcript.turnID)) return;
+    if (!voiceDraft.update(transcript)) return;
+    const draft = voiceDraft.snapshot();
+    if (!draft) return;
+    activeVoiceTranscript = { ...transcript, text: draft.text, final: false };
+    if (transcript.final) {
+      void commitVoiceDraft();
+      return;
+    }
+    void tick().then(() => scrollMessagesToBottom());
+  }
+
+  async function commitVoiceDraft() {
+    if (!voiceDestination) return;
+    const accumulated = voiceDraft.consume();
+    if (!accumulated) return;
+    for (const turnID of accumulated.turnIDs) committedVoiceTurnIDs.add(turnID);
+    committedVoiceTurnIDs = new Set(committedVoiceTurnIDs);
+    activeVoiceTranscript = null;
+    const nonceKey = accumulated.turnIDs.join("").replace(/[^a-zA-Z0-9]/g, "");
+    const draft: OutgoingDraft = {
+      ...voiceDestination,
+      body: accumulated.text,
+      uploads: [],
+      nonce: `voice${nonceKey}`.slice(0, 96),
+    };
+    awaitingVoiceResponses += 1;
+    voiceThinking = true;
+    scheduleVoiceFiller();
+    await dispatchDraft(draft);
+  }
+
+  function scheduleVoiceFiller() {
+    cancelVoiceFiller();
+    voiceFillerTimer = window.setTimeout(() => {
+      voiceFillerTimer = undefined;
+      if (!voiceSession || !voiceThinking || awaitingVoiceResponses <= 0) return;
+      const fillers = ["One moment.", "Let me think.", "I'm checking."];
+      const filler = fillers[voiceFillerIndex % fillers.length];
+      voiceFillerIndex += 1;
+      voiceSession.speak(filler);
+    }, 300);
+  }
+
+  function cancelVoiceFiller() {
+    if (voiceFillerTimer === undefined) return;
+    window.clearTimeout(voiceFillerTimer);
+    voiceFillerTimer = undefined;
+  }
+
   function toggleVoiceSession() {
     if (!voiceSession) return;
-    if (voiceState.status === "connecting" || voiceState.status === "listening") {
+    if (voiceState.status === "connecting") {
       voiceSession.disconnect();
       return;
     }
+    if (voiceState.status === "listening" || voiceState.status === "speaking") {
+      voiceSession.toggleInput();
+      return;
+    }
+    if (!selectedChannelID && !selectedDirectID) {
+      status = "pick or create a channel";
+      return;
+    }
+    if (selectedDirect && !selectedDirectWritable) {
+      status = "This conversation has no active recipient";
+      return;
+    }
+    voiceDestination = {
+      body: "",
+      uploads: [],
+      workspaceID: selectedWorkspaceID,
+      channelID: selectedChannelID || undefined,
+      directConversationID: selectedDirectID || undefined,
+      topicID: selectedChannelID ? selectedComposerTopicID || undefined : undefined,
+      topicFilterID: activeTopicFilterID,
+      topicFilterGeneration,
+      viewKey: currentConversationKey(),
+    };
+    voiceStartedAt = Date.now();
+    voiceDraft.clear();
+    activeVoiceTranscript = null;
+    awaitingVoiceResponses = 0;
+    voiceThinking = false;
+    committedVoiceTurnIDs = new Set();
+    spokenVoiceMessageIDs = new Set();
     void voiceSession.connect();
+  }
+
+  function endVoiceSession() {
+    voiceSession?.disconnect();
+  }
+
+  function sendVoiceDraft() {
+    void commitVoiceDraft();
   }
 
   function focusActiveComposer() {
@@ -518,8 +715,10 @@
   }
 
   onDestroy(() => {
+    cancelVoiceFiller();
     voiceSession?.disconnect();
     voiceSession = null;
+    voiceInputStream = null;
     remoteVoiceStream = null;
     socket?.close();
     socket = null;
@@ -1461,6 +1660,7 @@
       ) {
         return;
       }
+      if (topicID) markActiveViewRead({ all: true });
     } catch (error) {
       if (
         currentConversationKey() !== conversationKey ||
@@ -1954,7 +2154,13 @@
     if (!options.all && Date.now() < suppressAutoReadUntil) return;
     const key = currentConversationKey() || viewKey;
     if (!key) return;
-    if (activeTopicFilterID && channels.some((channel) => channel.id === key)) return;
+    if (
+      !options.all &&
+      activeTopicFilterID &&
+      channels.some((channel) => channel.id === key)
+    ) {
+      return;
+    }
     if (!options.all && !options.seq) {
       const boundarySeq = unreadBoundarySeqForKey(key);
       if (boundarySeq >= 0 && !unreadBoundaryLoadedForKey(key, boundarySeq)) return;
@@ -2391,6 +2597,7 @@
     topicFilterID: string;
     topicFilterGeneration: number;
     viewKey: string;
+    nonce?: string;
   };
 
   let pendingDrafts = new Map<string, OutgoingDraft>();
@@ -2631,7 +2838,7 @@
   }
 
   async function dispatchDraft(draft: OutgoingDraft, existingNonce?: string, existingMessageID?: string) {
-    const nonce = existingNonce ?? newNonce();
+    const nonce = existingNonce ?? draft.nonce ?? newNonce();
     const tmpID = `tmp_${nonce}`;
     const localID = existingMessageID ?? tmpID;
     const matchesTopicFilter = !activeTopicFilterID || draft.topicID === activeTopicFilterID;
@@ -4481,7 +4688,7 @@
       {pinnedMessageIDs}
       onTogglePin={toggleMessagePin}
       onCopyLink={ensureMessageLink}
-      messages={visibleMessages}
+      messages={renderedMessages}
       {selectedDirect}
       {selectedChannel}
       {mentionPeople}
@@ -4590,9 +4797,14 @@
       showToolbar
       showVoice
       voiceStatus={voiceState.status}
+      voiceInputStatus={voiceState.inputStatus}
       voiceError={voiceState.error}
-      voiceStream={remoteVoiceStream}
+      voiceWaiting={voiceThinking}
+      voiceDraftAvailable={Boolean(activeVoiceTranscript?.text.trim())}
+      voiceStream={remoteVoiceStream ?? voiceInputStream}
       onToggleVoice={toggleVoiceSession}
+      onSendVoice={sendVoiceDraft}
+      onEndVoice={endVoiceSession}
       showGifPicker={showGifPicker}
       gifQuery={gifQuery}
       filteredGifs={filteredGifs}

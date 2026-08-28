@@ -19,6 +19,7 @@
   import QuoteBlock from "./QuoteBlock.svelte";
   import PreambleBlock from "./PreambleBlock.svelte";
   import TopicBadge from "./TopicBadge.svelte";
+  import VoicePulse from "./VoicePulse.svelte";
 
   type Props = {
     message: Message;
@@ -118,6 +119,7 @@
 
   let isPending = $derived(message.status === "pending");
   let isFailed = $derived(message.status === "failed");
+  let isVoice = $derived(Boolean(message.voice));
   let isDeleted = $derived(Boolean(message.deleted_at));
   let canDeleteMessage = $derived(
     canDeleteAnyMessage ||
@@ -148,7 +150,11 @@
   let threadTime = $derived(threadActivityTime(message));
   let isThreadOpen = $derived(selectedThreadID === message.id);
   let canOpenThread = $derived(
-    !preambleBlock && !isPending && !isFailed && (!isDeleted || hasThreadReplies || isThreadOpen),
+    !preambleBlock &&
+      !isVoice &&
+      !isPending &&
+      !isFailed &&
+      (!isDeleted || hasThreadReplies || isThreadOpen),
   );
   let topic = $derived(topics.find((candidate) => candidate.id === message.topic_id));
 
@@ -218,7 +224,7 @@
   let reactPickerId = $derived(`toolbar-reaction-picker-${message.id}`);
   let reactionPending = $derived(reactionController.pending(message.id));
   let cannotReact = $derived(
-    reactionsDisabled || !currentUserID || isPending || isFailed || reactionPending,
+    reactionsDisabled || !currentUserID || isVoice || isPending || isFailed || reactionPending,
   );
 
   function quickReact(emoji: string) {
@@ -606,6 +612,7 @@
   class:is-pending={isPending}
   class:is-failed={isFailed}
   class:is-deleted={isDeleted}
+  class:is-voice={isVoice}
   class:is-preamble={Boolean(preambleBlock)}
   class:is-preamble-collapsed={preambleBlock?.final === true}
   class:is-preamble-live={preambleBlock?.final === false}
@@ -652,6 +659,19 @@
           onSave={handleEditSave}
         />
       {/if}
+    {:else if message.voice}
+      <div class="voice-transcript" aria-live="polite">
+        <VoicePulse stream={message.voice.stream} />
+        {#if message.body}
+          <div
+            class="markdown voice-transcript__text"
+            use:enhanceMarkdown
+            use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+          >{@html markdown(message.body)}</div>
+        {:else}
+          <span class="voice-transcript__listening">Listening…</span>
+        {/if}
+      </div>
     {:else}
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />

@@ -143,7 +143,8 @@
   left: 50%;
   top: 10px;
   transform: translate(-50%, 0);
-  z-index: 5;
+  z-index: 20;
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -781,6 +782,43 @@
 
 .message-row.can-open-thread {
   cursor: pointer;
+}
+
+.message-row.is-voice {
+  cursor: default;
+}
+
+.message-row.is-voice .message-content {
+  width: min(620px, calc(100% - 12px));
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+  box-shadow:
+    0 2px 0 color-mix(in srgb, var(--accent) 12%, transparent),
+    0 10px 28px color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.message-row.is-voice .message-actions,
+.message-row.is-voice .message-row__actions {
+  display: none;
+}
+
+.voice-transcript {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.voice-transcript__text {
+  min-width: 0;
+  color: var(--text);
+}
+
+.voice-transcript__listening {
+  color: var(--muted);
+  font-style: italic;
 }
 
 .row-stamp {

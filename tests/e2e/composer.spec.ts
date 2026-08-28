@@ -31,7 +31,7 @@ async function openChannel(page: Page, routeID: string) {
   await expect(page.getByRole("heading", { name: "#editor" })).toBeVisible();
 }
 
-test("offers rich formatting controls and a safe voice placeholder", async ({ page }) => {
+test("offers rich formatting controls and a functional voice control", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, stamp);
   const channel = await createChannel(page, workspace.id);
@@ -51,9 +51,9 @@ test("offers rich formatting controls and a safe voice placeholder", async ({ pa
   await heading.click();
   await expect(editor.locator("h2")).toContainText("polished composer");
 
-  const voice = page.getByRole("button", { name: "Voice message (coming soon)" });
+  const voice = page.getByRole("button", { name: "Start voice conversation" });
   await expect(voice).toBeVisible();
-  await expect(voice).toHaveAttribute("aria-disabled", "true");
+  await expect(voice).toHaveAttribute("aria-pressed", "false");
   await expect(editor).toContainText("polished composer");
 
   const created = page.waitForRequest(
@@ -112,6 +112,6 @@ test("keeps quotes compact and converts language-tagged code fences", async ({ p
     );
   });
   await expect(editor.locator("blockquote")).toContainText("pasted quote");
-  await expect(editor.locator("pre code")).toContainText("printf pasted");
+  await expect(editor.locator("pre code").filter({ hasText: "printf pasted" })).toBeVisible();
   await expect(editor).not.toContainText("```sh");
 });

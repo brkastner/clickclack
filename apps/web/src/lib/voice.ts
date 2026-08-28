@@ -1,7 +1,60 @@
-export type VoiceStatus = "idle" | "connecting" | "listening" | "failed";
+export type VoiceStatus = "idle" | "connecting" | "listening" | "speaking" | "failed";
+export type VoiceInputStatus = "live" | "pausing" | "paused" | "resuming";
+
+type VoiceResponseCandidate = {
+  id: string;
+  body: string;
+  created_at: string;
+  kind?: string;
+  author?: { kind?: string } | null;
+};
+
+export function collectVoiceResponseCandidates<T extends VoiceResponseCandidate>(
+  messages: T[],
+  voiceStartedAt: number,
+  spokenMessageIDs: ReadonlySet<string>,
+): T[] {
+  return messages.filter(
+    (message) =>
+      message.author?.kind === "bot" &&
+      (!message.kind || message.kind === "message") &&
+      Date.parse(message.created_at) >= voiceStartedAt - 2_000 &&
+      !spokenMessageIDs.has(message.id) &&
+      Boolean(message.body.trim()),
+  );
+}
+
+export function prepareTextForSpeech(markdown: string): string {
+  let text = markdown.normalize("NFKC");
+  text = text.replace(
+    /```[\s\S]*?```/gu,
+    " I put the code example in the chat instead of reading it aloud. ",
+  );
+  text = text.replace(/!\[([^\]]*)\]\([^)]*\)/gu, (_match, alt: string) =>
+    alt.trim() ? ` ${alt.trim()}. ` : " I put an image in the chat. ",
+  );
+  text = text.replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1");
+  text = text.replace(/<https?:\/\/[^>]+>/giu, "the link in chat");
+  text = text.replace(/https?:\/\/\S+/giu, "the link in chat");
+  text = text.replace(/^\s{0,3}#{1,6}\s+/gmu, "");
+  text = text.replace(/^\s{0,3}>\s?/gmu, "");
+  text = text.replace(/^\s*[-+*]\s+/gmu, "");
+  text = text.replace(/^\s*\d+[.)]\s+/gmu, "");
+  text = text.replace(/(\*\*|__)(.*?)\1/gu, "$2");
+  text = text.replace(/~~(.*?)~~/gu, "$1");
+  text = text.replace(/`([^`\n]+)`/gu, "$1");
+  text = text.replace(/(^|\s)[*_]([^*_\n]+)[*_](?=\s|[.,!?;:]|$)/gu, "$1$2");
+  text = text.replace(/\\([\\`*_[\]{}()#+\-.!>])/gu, "$1");
+  text = text.replace(/^\s*[-*_]{3,}\s*$/gmu, " ");
+  text = text.replace(/\s*\|\s*/gu, "; ");
+  text = text.replace(/\s*\n+\s*/gu, ". ");
+  text = text.replace(/([.!?])\s*\.\s*/gu, "$1 ");
+  return text.replace(/\s+/gu, " ").trim();
+}
 
 export type VoiceState = {
   status: VoiceStatus;
+  inputStatus?: VoiceInputStatus;
   error?: string;
 };
 
@@ -12,9 +65,60 @@ type VoiceSessionDependencies = {
   createAudio?: () => HTMLAudioElement;
 };
 
+export type VoiceTranscript = {
+  sessionID: string;
+  turnID: string;
+  text: string;
+  final: boolean;
+  sequence: number;
+};
+
+export type VoiceDraft = {
+  text: string;
+  turnIDs: string[];
+};
+
+export class VoiceDraftAccumulator {
+  private readonly segments = new Map<string, VoiceTranscript>();
+  private readonly turnIDs: string[] = [];
+
+  update(transcript: VoiceTranscript): boolean {
+    const prior = this.segments.get(transcript.turnID);
+    if (prior && prior.sequence >= transcript.sequence) return false;
+    const text = transcript.text.trim();
+    if (!text) return false;
+    if (!prior) this.turnIDs.push(transcript.turnID);
+    this.segments.set(transcript.turnID, { ...transcript, text });
+    return true;
+  }
+
+  snapshot(): VoiceDraft | null {
+    const turnIDs = this.turnIDs.filter((turnID) => this.segments.has(turnID));
+    const text = turnIDs
+      .map((turnID) => this.segments.get(turnID)?.text.trim() ?? "")
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return text ? { text, turnIDs } : null;
+  }
+
+  consume(): VoiceDraft | null {
+    const draft = this.snapshot();
+    this.clear();
+    return draft;
+  }
+
+  clear(): void {
+    this.segments.clear();
+    this.turnIDs.length = 0;
+  }
+}
+
 type VoiceSessionOptions = {
   baseURL: string;
   onState: (state: VoiceState) => void;
+  onTranscript?: (transcript: VoiceTranscript) => void;
+  onInputStream?: (stream: MediaStream | null) => void;
   onRemoteAudio?: (stream: MediaStream | null) => void;
   dependencies?: VoiceSessionDependencies;
 };
@@ -28,6 +132,8 @@ type SmallWebRTCAnswer = {
 export class BrowserVoiceSession {
   private readonly baseURL: string;
   private readonly onState: (state: VoiceState) => void;
+  private readonly onTranscript: (transcript: VoiceTranscript) => void;
+  private readonly onInputStream: (stream: MediaStream | null) => void;
   private readonly onRemoteAudio: (stream: MediaStream | null) => void;
   private readonly createPeerConnection: () => RTCPeerConnection;
   private readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
@@ -45,6 +151,8 @@ export class BrowserVoiceSession {
   constructor(options: VoiceSessionOptions) {
     this.baseURL = options.baseURL.replace(/\/+$/u, "");
     this.onState = options.onState;
+    this.onTranscript = options.onTranscript ?? (() => undefined);
+    this.onInputStream = options.onInputStream ?? (() => undefined);
     this.onRemoteAudio = options.onRemoteAudio ?? (() => undefined);
     this.createPeerConnection =
       options.dependencies?.createPeerConnection ?? (() => new RTCPeerConnection());
@@ -72,10 +180,12 @@ export class BrowserVoiceSession {
         return;
       }
       this.input = input;
+      this.onInputStream(input);
 
       const peer = this.createPeerConnection();
       this.peer = peer;
       this.dataChannel = peer.createDataChannel("chat", { ordered: true });
+      this.dataChannel.onmessage = (event) => this.handleServerMessage(event.data);
       peer.ontrack = (event) => {
         if (
           peer !== this.peer ||
@@ -90,9 +200,7 @@ export class BrowserVoiceSession {
       };
       peer.onconnectionstatechange = () => {
         if (peer !== this.peer) return;
-        if (peer.connectionState === "connected") {
-          this.publish({ status: "listening" });
-        } else if (peer.connectionState === "failed" || peer.connectionState === "disconnected") {
+        if (peer.connectionState === "failed" || peer.connectionState === "disconnected") {
           this.fail("Voice connection was lost");
         }
       };
@@ -116,11 +224,45 @@ export class BrowserVoiceSession {
       const answer = parseAnswer(await response.json());
       if (attempt !== this.attempt || peer !== this.peer) return;
       await peer.setRemoteDescription({ sdp: answer.sdp, type: answer.type });
-      if (peer.connectionState === "connected") this.publish({ status: "listening" });
     } catch (error) {
       if (attempt !== this.attempt) return;
       this.fail(error instanceof Error ? error.message : "Voice connection failed");
     }
+  }
+
+  toggleInput(): boolean {
+    if (
+      (this.state.status !== "listening" && this.state.status !== "speaking") ||
+      this.dataChannel?.readyState !== "open"
+    ) {
+      return false;
+    }
+    const inputStatus = this.state.inputStatus ?? "live";
+    if (inputStatus === "live") {
+      this.setInputTracksEnabled(false);
+      this.dataChannel.send(JSON.stringify({ label: "kassette", type: "input.pause", data: {} }));
+      this.publish({ ...this.state, inputStatus: "pausing" });
+      return true;
+    }
+    if (inputStatus === "paused") {
+      this.dataChannel.send(JSON.stringify({ label: "kassette", type: "input.resume", data: {} }));
+      this.publish({ ...this.state, inputStatus: "resuming" });
+      return true;
+    }
+    return false;
+  }
+
+  speak(text: string): boolean {
+    const speech = prepareTextForSpeech(text);
+    if (!speech || this.dataChannel?.readyState !== "open") return false;
+    this.dataChannel.send(
+      JSON.stringify({
+        label: "kassette",
+        type: "tts.speak",
+        data: { text: speech },
+      }),
+    );
+    return true;
   }
 
   disconnect(): void {
@@ -147,13 +289,13 @@ export class BrowserVoiceSession {
     }
     stopStream(this.input);
     this.input = null;
+    this.onInputStream(null);
     this.clearRemoteAudio();
   }
 
   private replaceRemoteAudio(track: MediaStreamTrack, stream: MediaStream): void {
     if (track === this.remoteTrack && stream === this.remoteStream) return;
     this.clearRemoteAudio();
-
     const handleEnded = () => {
       if (track === this.remoteTrack) this.clearRemoteAudio();
     };
@@ -179,11 +321,90 @@ export class BrowserVoiceSession {
     if (hadRemoteAudio) this.onRemoteAudio(null);
   }
 
+  private setInputTracksEnabled(enabled: boolean): void {
+    for (const track of this.input?.getAudioTracks() ?? []) track.enabled = enabled;
+  }
+
+  private handleServerMessage(value: unknown): void {
+    const message = parseServerMessage(value);
+    if (!message) return;
+    if (message.type === "session.state_changed") {
+      const state = message.data.state;
+      if (state === "listening" || state === "speaking") {
+        this.publish({
+          status: state,
+          inputStatus: this.state.inputStatus ?? "live",
+        });
+      }
+      return;
+    }
+    if (message.type === "input.state_changed") {
+      const paused = message.data.paused;
+      if (typeof paused !== "boolean") return;
+      this.setInputTracksEnabled(!paused);
+      this.publish({
+        ...this.state,
+        inputStatus: paused ? "paused" : "live",
+      });
+      return;
+    }
+    if (message.type === "session.error") {
+      this.fail(
+        typeof message.data.message === "string" ? message.data.message : "Voice service failed",
+      );
+      return;
+    }
+    if (message.type !== "transcript.delta" && message.type !== "transcript.final") return;
+    const { session_id, turn_id, text, sequence } = message.data;
+    if (
+      typeof session_id !== "string" ||
+      typeof turn_id !== "string" ||
+      typeof text !== "string" ||
+      typeof sequence !== "number"
+    ) {
+      return;
+    }
+    this.onTranscript({
+      sessionID: session_id,
+      turnID: turn_id,
+      text,
+      final: message.type === "transcript.final",
+      sequence,
+    });
+  }
+
   private publish(state: VoiceState): void {
-    if (this.state.status === state.status && this.state.error === state.error) return;
+    if (
+      this.state.status === state.status &&
+      this.state.inputStatus === state.inputStatus &&
+      this.state.error === state.error
+    ) {
+      return;
+    }
     this.state = state;
     this.onState(state);
   }
+}
+
+type KassetteServerMessage = {
+  type: string;
+  data: Record<string, unknown>;
+};
+
+function parseServerMessage(value: unknown): KassetteServerMessage | null {
+  let parsed = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const record = parsed as Record<string, unknown>;
+  if (record.label !== "kassette" || typeof record.type !== "string") return null;
+  if (!record.data || typeof record.data !== "object") return null;
+  return { type: record.type, data: record.data as Record<string, unknown> };
 }
 
 function parseAnswer(value: unknown): SmallWebRTCAnswer {
