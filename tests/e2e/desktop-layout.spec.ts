@@ -92,20 +92,28 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     const dmAvatar = probe.querySelector<HTMLElement>(".dm-avatar");
     if (!profileAvatar || !dmAvatar) throw new Error("alignment probes did not render");
 
-    const railFooter = getComputedStyle(rail, "::after");
+    const railRect = rail.getBoundingClientRect();
+    const sidebarRect = document.querySelector<HTMLElement>(".sidebar")?.getBoundingClientRect();
+    if (!sidebarRect) throw new Error("desktop sidebar did not render");
+    const userCardRect = userCard.getBoundingClientRect();
+    const userAvatarRect = userAvatar.getBoundingClientRect();
     const result = {
       topGap: firstSection.getBoundingClientRect().top - sidebarScroll.getBoundingClientRect().top,
       avatarX: {
-        user: userAvatar.getBoundingClientRect().x,
         profile: profileAvatar.getBoundingClientRect().x,
         dm: dmAvatar.getBoundingClientRect().x,
       },
       workspaceTruncated: workspaceLabel.scrollWidth > workspaceLabel.clientWidth,
       channelTruncated: channelLabel.scrollWidth > channelLabel.clientWidth,
       searchWidth: search.getBoundingClientRect().width,
-      railFooterContent: railFooter.content,
-      railFooterHeight: Number.parseFloat(railFooter.height),
-      userCardHeight: userCard.getBoundingClientRect().height,
+      footer: {
+        x: userCardRect.x,
+        width: userCardRect.width,
+        railX: railRect.x,
+        combinedNavigationWidth: railRect.width + sidebarRect.width,
+        avatarCenterX: userAvatarRect.x + userAvatarRect.width / 2,
+        railCenterX: railRect.x + railRect.width / 2,
+      },
     };
     probe.remove();
     return result;
@@ -116,8 +124,53 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   expect(geometry.channelTruncated).toBe(false);
   expect(geometry.searchWidth).toBeGreaterThan(0);
   expect(geometry.searchWidth).toBeLessThanOrEqual(520);
-  expect(geometry.avatarX.profile).toBeCloseTo(geometry.avatarX.user, 0);
-  expect(geometry.avatarX.dm).toBeCloseTo(geometry.avatarX.user, 0);
-  expect(geometry.railFooterContent).toBe('""');
-  expect(geometry.railFooterHeight).toBeCloseTo(geometry.userCardHeight, 0);
+  expect(geometry.avatarX.profile).toBeCloseTo(geometry.avatarX.dm, 0);
+  expect(geometry.footer.x).toBeCloseTo(geometry.footer.railX, 0);
+  expect(geometry.footer.width).toBeCloseTo(geometry.footer.combinedNavigationWidth, 0);
+  expect(geometry.footer.avatarCenterX).toBeCloseTo(geometry.footer.railCenterX, 0);
+});
+
+test("opens threads from the message surface without hijacking copy or selection", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await installDesktopBridge(page);
+  const workspace = await createWorkspace(page, Date.now());
+  const channel = await createChannel(page, workspace.id);
+  const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: "The entire message surface opens this thread safely." },
+  });
+  expect(response.ok()).toBe(true);
+  const { message } = (await response.json()) as { message: { id: string } };
+
+  await page.goto(`/app/${workspace.route_id}/${channel.id}`);
+  await waitForAppReady(page);
+  const row = page.locator(`.message-row[data-message-id="${message.id}"]`);
+  const closeThread = page.getByRole("button", { name: "Close thread" });
+
+  await row.locator(".message-content").click({ position: { x: 24, y: 12 } });
+  await expect(closeThread).toBeVisible();
+  await closeThread.click();
+  await expect(closeThread).toBeHidden();
+
+  await row.hover();
+  await row.getByRole("button", { name: "Copy message" }).click();
+  await expect(row.getByRole("status")).toHaveText("Copied");
+  await expect(closeThread).toBeHidden();
+
+  const selectedText = await row.evaluate((element) => {
+    const messageBody = element.querySelector(".markdown");
+    if (!messageBody) throw new Error("message body did not render");
+    const range = document.createRange();
+    range.selectNodeContents(messageBody);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    const text = selection?.toString() || "";
+    element.click();
+    return text;
+  });
+  expect(selectedText).toContain("entire message surface");
+  await expect(closeThread).toBeHidden();
 });

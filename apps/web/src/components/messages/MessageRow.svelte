@@ -194,19 +194,11 @@
       return;
     }
     if (!canOpenThread) return;
-    if (window.getSelection()?.toString()) return;
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed && selection.toString()) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest(MESSAGE_INTERACTIVE_TARGETS)) return;
     onOpenThread(message);
-  }
-
-  function openThreadOnClick(node: HTMLElement) {
-    node.addEventListener("click", openThreadFromRow);
-    return {
-      destroy() {
-        node.removeEventListener("click", openThreadFromRow);
-      },
-    };
   }
 
   // ---- Hover toolbar: quick reacts + full picker + ⋮ overflow menu ----
@@ -715,7 +707,7 @@
   class:menu-open={showMenu || showReactPicker}
   class:actions-flip={actionsFlipped}
   data-message-id={message.id}
-  use:openThreadOnClick
+  onclick={openThreadFromRow}
   onpointerdown={handleRowPointerDown}
   oncontextmenu={handleRowContextMenu}
   onmouseenter={() => {

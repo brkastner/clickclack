@@ -214,23 +214,25 @@
   border-right: 0;
 }
 
-/* Reserve the rail's bottom edge for the account footer, then continue the
-   sidebar footer surface through that column instead of leaving a dead strip. */
+/* The account card is one real interactive surface across both navigation
+   columns. Reserve its rail space, let it escape the sidebar grid cell, and
+   center the avatar on the same axis as the workspace keys. */
 @media (min-width: 821px) {
   .desktop-shell > .guild-rail {
     padding-bottom: var(--desktop-account-footer-height);
   }
 
-  .desktop-shell > .guild-rail::after {
-    content: "";
-    position: absolute;
-    z-index: 2;
-    right: 0;
-    bottom: 0;
-    left: 0;
+  .desktop-shell > .sidebar {
+    overflow: visible;
+  }
+
+  .desktop-shell > .sidebar .user-card {
+    position: relative;
+    z-index: 3;
+    width: calc(100% + 72px);
     height: var(--desktop-account-footer-height);
-    border-top: 1px solid var(--line);
-    background: var(--panel-2);
+    margin-left: -72px;
+    padding-left: 22px;
   }
 }
 
