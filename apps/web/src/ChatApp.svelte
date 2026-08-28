@@ -369,8 +369,12 @@
     currentUser: User | null,
     conversationKey: string,
   ): Message | null {
+    const hasTranscript = Boolean(transcript?.text.trim());
+    const showLiveInput =
+      currentVoiceStatus === "listening" ||
+      (currentVoiceStatus === "speaking" && hasTranscript);
     if (
-      currentVoiceStatus !== "listening" ||
+      !showLiveInput ||
       !destination ||
       destination.viewKey !== conversationKey ||
       !currentUser
