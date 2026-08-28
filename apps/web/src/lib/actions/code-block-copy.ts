@@ -43,11 +43,11 @@ export function enhanceCodeBlockCopy(node: HTMLElement, enabled: boolean) {
   };
 
   const releaseAll = () => {
-    for (const pre of [...decorated.keys()]) release(pre);
+    for (const pre of decorated.keys()) release(pre);
   };
 
   const decorate = () => {
-    for (const pre of [...decorated.keys()]) {
+    for (const pre of decorated.keys()) {
       if (!node.contains(pre) || !copyEnabled) release(pre);
     }
     if (!copyEnabled) return;
