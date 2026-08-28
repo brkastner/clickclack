@@ -23,6 +23,47 @@
   outline: none;
 }
 
+.messages-scroll.is-middle-autoscrolling,
+.messages-scroll.is-middle-autoscrolling * {
+  cursor: all-scroll !important;
+  user-select: none;
+}
+
+.middle-autoscroll-anchor {
+  position: absolute;
+  z-index: 22;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 40px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--accent);
+  box-shadow:
+    0 8px 22px -12px rgba(0, 0, 0, 0.65),
+    0 0 0 4px color-mix(in srgb, var(--accent) 9%, transparent);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: middle-autoscroll-in 120ms ease-out;
+}
+
+@keyframes middle-autoscroll-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.86);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .middle-autoscroll-anchor {
+    animation: none;
+  }
+}
+
 .messages.is-revealing .messages-scroll {
   opacity: 0;
   pointer-events: none;

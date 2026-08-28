@@ -27,6 +27,7 @@
   import { groupMessages, type MessageGroup as Group } from "../../lib/chat/messages";
   import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
+  import { middleAutoscrollVelocity, pageScrollDelta } from "../../lib/chat/scrolling";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { messageAudioPlayback } from "../../lib/messageAudioPlayback";
   import type { ReactionController } from "../../lib/reactions.svelte";
@@ -152,12 +153,23 @@
   const OLDER_LOAD_THRESHOLD_PX = 160;
   const NEWER_LOAD_THRESHOLD_PX = 260;
   const UNREAD_EXIT_MS = 180;
+  const MIDDLE_MOUSE_BUTTON = 1;
+  const MIDDLE_SCROLL_INTERACTIVE_TARGETS =
+    "a, button, input, textarea, select, [contenteditable='true'], .attachment-grid, .media-tile";
 
   let virtualizer: VirtualizerHandle | undefined = $state();
   let scrollEl: HTMLDivElement | undefined = $state();
   let historyLoaderEl: HTMLDivElement | undefined = $state();
   let historyLoaderHeight = $state(0);
   let viewportHeight = $state(0);
+  let middleAutoscrolling = $state(false);
+  let middleAutoscrollAnchorX = $state(0);
+  let middleAutoscrollAnchorY = $state(0);
+  let middleAutoscrollCurrentY = 0;
+  let middleAutoscrollPointerID: number | null = null;
+  let middleAutoscrollFrame: number | undefined;
+  let middleAutoscrollTimestamp = 0;
+  let middleAutoscrollViewKey = $state("");
   let replyContext = $derived(selectedDirect ? "dm" : "channel");
   let dismissedUnreadViewKey = $state("");
   let dismissedUnreadBoundarySeq = $state(-1);
@@ -440,6 +452,77 @@
     emitHistorySettled();
   }
 
+  function stopMiddleAutoscroll() {
+    const pointerID = middleAutoscrollPointerID;
+    middleAutoscrollPointerID = null;
+    middleAutoscrolling = false;
+    middleAutoscrollTimestamp = 0;
+    if (middleAutoscrollFrame !== undefined) {
+      window.cancelAnimationFrame(middleAutoscrollFrame);
+      middleAutoscrollFrame = undefined;
+    }
+    if (scrollEl && pointerID !== null && scrollEl.hasPointerCapture(pointerID)) {
+      scrollEl.releasePointerCapture(pointerID);
+    }
+  }
+
+  function animateMiddleAutoscroll(timestamp: number) {
+    if (!middleAutoscrolling || !virtualizer) return;
+    const elapsed = middleAutoscrollTimestamp
+      ? Math.min(50, timestamp - middleAutoscrollTimestamp)
+      : 1000 / 60;
+    middleAutoscrollTimestamp = timestamp;
+    const velocity = middleAutoscrollVelocity(
+      middleAutoscrollCurrentY - middleAutoscrollAnchorY,
+    );
+    if (velocity) virtualizer.scrollBy((velocity * elapsed) / 1000);
+    middleAutoscrollFrame = window.requestAnimationFrame(animateMiddleAutoscroll);
+  }
+
+  function handleMiddlePointerDown(event: PointerEvent) {
+    if (event.button !== MIDDLE_MOUSE_BUTTON || !scrollEl || !virtualizer) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(MIDDLE_SCROLL_INTERACTIVE_TARGETS)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    stopMiddleAutoscroll();
+    const hostBounds = scrollEl.parentElement?.getBoundingClientRect() ?? scrollEl.getBoundingClientRect();
+    middleAutoscrollPointerID = event.pointerId;
+    middleAutoscrollAnchorX = event.clientX - hostBounds.left;
+    middleAutoscrollAnchorY = event.clientY - hostBounds.top;
+    middleAutoscrollCurrentY = event.clientY - hostBounds.top;
+    middleAutoscrolling = true;
+    scrollEl.setPointerCapture(event.pointerId);
+    middleAutoscrollFrame = window.requestAnimationFrame(animateMiddleAutoscroll);
+  }
+
+  function handleMiddlePointerMove(event: PointerEvent) {
+    if (!middleAutoscrolling || event.pointerId !== middleAutoscrollPointerID || !scrollEl) return;
+    event.preventDefault();
+    const hostBounds = scrollEl.parentElement?.getBoundingClientRect() ?? scrollEl.getBoundingClientRect();
+    middleAutoscrollCurrentY = event.clientY - hostBounds.top;
+  }
+
+  function handleMiddlePointerEnd(event: PointerEvent) {
+    if (event.pointerId !== middleAutoscrollPointerID) return;
+    event.preventDefault();
+    event.stopPropagation();
+    stopMiddleAutoscroll();
+  }
+
+  function handleMiddleAuxClick(event: MouseEvent) {
+    if (event.button !== MIDDLE_MOUSE_BUTTON) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(MIDDLE_SCROLL_INTERACTIVE_TARGETS)) return;
+    event.preventDefault();
+  }
+
+  $effect(() => {
+    if (middleAutoscrollViewKey === viewKey) return;
+    stopMiddleAutoscroll();
+    middleAutoscrollViewKey = viewKey;
+  });
+
   $effect(() => {
     if (!scrollEl) return;
     const el = scrollEl;
@@ -449,10 +532,53 @@
         onLoadNewer?.("wheel");
       }
     };
+    const onWindowBlur = () => stopMiddleAutoscroll();
     el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("pointerdown", handleMiddlePointerDown);
+    el.addEventListener("pointermove", handleMiddlePointerMove);
+    el.addEventListener("pointerup", handleMiddlePointerEnd);
+    el.addEventListener("pointercancel", handleMiddlePointerEnd);
+    el.addEventListener("lostpointercapture", handleMiddlePointerEnd);
+    el.addEventListener("auxclick", handleMiddleAuxClick);
+    window.addEventListener("blur", onWindowBlur);
     return () => {
+      stopMiddleAutoscroll();
       el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("pointerdown", handleMiddlePointerDown);
+      el.removeEventListener("pointermove", handleMiddlePointerMove);
+      el.removeEventListener("pointerup", handleMiddlePointerEnd);
+      el.removeEventListener("pointercancel", handleMiddlePointerEnd);
+      el.removeEventListener("lostpointercapture", handleMiddlePointerEnd);
+      el.removeEventListener("auxclick", handleMiddleAuxClick);
+      window.removeEventListener("blur", onWindowBlur);
     };
+  });
+
+  $effect(() => {
+    if (!scrollEl) return;
+    const handlePageKey = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== "PageUp" && event.key !== "PageDown") ||
+        !scrollEl ||
+        !virtualizer
+      ) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('[role="dialog"]')) return;
+      const editable = target?.closest("input, textarea, select, [contenteditable='true']");
+      if (editable && !target?.closest(".composer-editor__content")) return;
+      event.preventDefault();
+      const direction = event.key === "PageUp" ? -1 : 1;
+      virtualizer.scrollBy(pageScrollDelta(scrollEl.clientHeight, direction));
+    };
+    window.addEventListener("keydown", handlePageKey);
+    return () => window.removeEventListener("keydown", handlePageKey);
   });
 
   function findMessageIndex(messageID: string): number {
@@ -862,7 +988,12 @@
       <span>Send a message in Markdown — code fences, lists, links all work. Threads open from any message.</span>
     </div>
   {:else if messages.length > 0}
-    <div class="messages-scroll" bind:this={scrollEl} tabindex="-1">
+    <div
+      class="messages-scroll"
+      class:is-middle-autoscrolling={middleAutoscrolling}
+      bind:this={scrollEl}
+      tabindex="-1"
+    >
       <div class="messages-spacer"></div>
       {#if skeletonRows > 0}
         <div
@@ -931,6 +1062,18 @@
           {/if}
         {/snippet}
       </Virtualizer>
+    </div>
+  {/if}
+  {#if middleAutoscrolling}
+    <div
+      class="middle-autoscroll-anchor"
+      style={`left: ${middleAutoscrollAnchorX}px; top: ${middleAutoscrollAnchorY}px;`}
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 28 36" width="18" height="24">
+        <path fill="currentColor" d="m14 1 5 6h-3v7h-4V7H9l5-6Zm0 34-5-6h3v-7h4v7h3l-5 6Z"/>
+        <circle cx="14" cy="18" r="3" fill="currentColor"/>
+      </svg>
     </div>
   {/if}
   {#if messageAudioOverlayVisible}
