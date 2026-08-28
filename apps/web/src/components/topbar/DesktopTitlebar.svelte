@@ -113,7 +113,9 @@
       </button>
       {#if channelTitle}
         <span class="topbar-divider desktop-titlebar-divider" aria-hidden="true"></span>
-        <h1 class="desktop-titlebar-channel with-glyph" title={channelTitle}>{channelTitle}</h1>
+        <h1 class="desktop-titlebar-channel" title={channelTitle}>
+          <span class="title-glyph">{channelTitle.slice(0, 1)}</span>{channelTitle.slice(1)}
+        </h1>
         {#if externalHref}
           <a class="desktop-external-link" href={externalHref} target="_blank" rel="noopener" title="Open external channel" aria-label="Open external channel">
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">

@@ -95,6 +95,8 @@ export type PreambleToolItem = {
   name: string;
   detail?: string;
   full: string;
+  count: number;
+  expandable: boolean;
 };
 
 export type PreambleItem = PreambleCommentaryItem | PreambleToolItem;
@@ -152,6 +154,11 @@ export type Message = {
   // pending placeholder with the real message on response/WS event.
   nonce?: string;
   reactions?: ReactionSummary[];
+  // Client-only provisional voice row. Never sent to the server.
+  voice?: {
+    state: "listening" | "transcribing";
+    stream?: MediaStream;
+  };
   // Client-only status. Absent for sent messages.
   status?: "pending" | "failed";
   // Client-only failure phase. Attachment failures mean the base message is

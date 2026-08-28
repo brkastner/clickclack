@@ -31,7 +31,7 @@ async function openChannel(page: Page, routeID: string) {
   await expect(page.getByRole("heading", { name: "#editor" })).toBeVisible();
 }
 
-test("offers rich formatting controls and a safe voice placeholder", async ({ page }) => {
+test("offers rich formatting controls and a functional voice control", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, stamp);
   const channel = await createChannel(page, workspace.id);
@@ -41,6 +41,7 @@ test("offers rich formatting controls and a safe voice placeholder", async ({ pa
   await editor.fill("polished composer");
   await editor.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
 
+  await page.getByRole("button", { name: "Toggle formatting tools" }).click();
   const bold = page.getByRole("button", { name: "Bold" });
   await bold.click();
   await expect(bold).toHaveAttribute("aria-pressed", "true");
@@ -51,9 +52,8 @@ test("offers rich formatting controls and a safe voice placeholder", async ({ pa
   await heading.click();
   await expect(editor.locator("h2")).toContainText("polished composer");
 
-  const voice = page.getByRole("button", { name: "Voice message (coming soon)" });
+  const voice = page.getByRole("button", { name: "Start live voice conversation" });
   await expect(voice).toBeVisible();
-  await expect(voice).toHaveAttribute("aria-disabled", "true");
   await expect(editor).toContainText("polished composer");
 
   const created = page.waitForRequest(
@@ -66,6 +66,41 @@ test("offers rich formatting controls and a safe voice placeholder", async ({ pa
   expect(payload.body).toContain("**polished composer**");
 });
 
+test("keeps multi-character mobile input in one stable draft", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, stamp);
+  const channel = await createChannel(page, workspace.id);
+  await openChannel(page, workspace.route_id);
+
+  const editor = page.getByLabel("Message body");
+  await editor.focus();
+  const chunks = ["update ", "script ", "and ", "rescue ", "sheet ", "with ", "Gboard"];
+  for (const chunk of chunks) {
+    await editor.evaluate((node, data) => {
+      node.dispatchEvent(
+        new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          data,
+          inputType: "insertText",
+        }),
+      );
+    }, chunk);
+  }
+
+  const body = chunks.join("");
+  await expect(editor).toHaveText(body);
+  await expect(editor.locator("p")).toHaveCount(1);
+
+  const created = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().endsWith(`/api/channels/${channel.id}/messages`),
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+  const payload = (await created).postDataJSON() as { body: string };
+  expect(payload.body).toBe(body);
+});
+
 test("keeps quotes compact and converts language-tagged code fences", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, stamp);
@@ -73,7 +108,7 @@ test("keeps quotes compact and converts language-tagged code fences", async ({ p
   await openChannel(page, workspace.route_id);
 
   const editor = page.getByLabel("Message body");
-  await page.getByRole("button", { name: "Quote" }).click();
+  await page.getByRole("button", { name: "Blockquote" }).click();
   await editor.pressSequentially("this is a test");
 
   const quote = editor.locator("blockquote");
@@ -112,6 +147,6 @@ test("keeps quotes compact and converts language-tagged code fences", async ({ p
     );
   });
   await expect(editor.locator("blockquote")).toContainText("pasted quote");
-  await expect(editor.locator("pre code")).toContainText("printf pasted");
+  await expect(editor.locator("pre code").filter({ hasText: "printf pasted" })).toBeVisible();
   await expect(editor).not.toContainText("```sh");
 });

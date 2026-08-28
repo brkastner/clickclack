@@ -487,7 +487,6 @@
   display: grid;
   place-items: center;
   flex: 0 0 22px;
-  margin-left: -2px;
   overflow: hidden;
   border-radius: 50%;
 }
@@ -508,8 +507,16 @@
 }
 
 .profile-channel-group .channel-subgroup-toggle {
-  /* Profile headers are parents: align their avatar before child channel hashes. */
-  padding-left: 8px;
+  /* Profile headers are parents: keep the disclosure in the outer gutter so
+     the avatar shares the account/DM alignment line and child hashes remain
+     visibly nested one level deeper. */
+  position: relative;
+  padding-left: 4px;
+}
+
+.profile-channel-group .channel-subgroup-toggle > .caret {
+  position: absolute;
+  left: -6px;
 }
 
 .profile-drop-target {
@@ -716,6 +723,11 @@
 .nav-item:hover {
   background: var(--hover);
   color: var(--text);
+}
+
+/* Avatar-bearing rows share the same 12px sidebar inset as the account card. */
+.nav-item.dm {
+  padding-left: 4px;
 }
 
 .nav-item:focus {

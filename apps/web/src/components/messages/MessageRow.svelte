@@ -1,11 +1,19 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
   import { readableAPIError } from "../../lib/api";
-  import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
+  import { enhanceCodeBlockCopy } from "../../lib/actions/code-block-copy";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
+  import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { time, markdown } from "../../lib/format";
+  import { writeClipboardText } from "../../lib/clipboard";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import {
+    hasCachedMessageAudio,
+    messageAudioKey,
+    type MessageAudioState,
+  } from "../../lib/messageAudio";
+  import { messageAudioPlayback } from "../../lib/messageAudioPlayback";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
@@ -19,6 +27,7 @@
   import QuoteBlock from "./QuoteBlock.svelte";
   import PreambleBlock from "./PreambleBlock.svelte";
   import TopicBadge from "./TopicBadge.svelte";
+  import VoicePulse from "./VoicePulse.svelte";
 
   type Props = {
     message: Message;
@@ -118,6 +127,7 @@
 
   let isPending = $derived(message.status === "pending");
   let isFailed = $derived(message.status === "failed");
+  let isVoice = $derived(Boolean(message.voice));
   let isDeleted = $derived(Boolean(message.deleted_at));
   let canDeleteMessage = $derived(
     canDeleteAnyMessage ||
@@ -148,38 +158,55 @@
   let threadTime = $derived(threadActivityTime(message));
   let isThreadOpen = $derived(selectedThreadID === message.id);
   let canOpenThread = $derived(
-    !preambleBlock && !isPending && !isFailed && (!isDeleted || hasThreadReplies || isThreadOpen),
+    !preambleBlock &&
+      !isVoice &&
+      !isPending &&
+      !isFailed &&
+      (!isDeleted || hasThreadReplies || isThreadOpen),
   );
   let topic = $derived(topics.find((candidate) => candidate.id === message.topic_id));
-
-  function openThreadFromRow(event: MouseEvent) {
-    if (suppressRowClick || showActionSheet) {
-      // A long-press just opened the action sheet; swallow the synthetic click.
-      suppressRowClick = false;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
+  let canPlayAloud = $derived(
+    message.author?.kind === "bot" &&
+      !preambleBlock &&
+      !isVoice &&
+      !isDeleted &&
+      !isPending &&
+      !isFailed &&
+      Boolean(message.body.trim()),
+  );
+  let currentMessageAudioKey = $derived(messageAudioKey(message.id, message.body));
+  let messageAudioState = $derived.by((): MessageAudioState => {
+    if ($messageAudioPlayback.key === currentMessageAudioKey) {
+      if ($messageAudioPlayback.status === "generating") return "generating";
+      if ($messageAudioPlayback.status === "playing") return "playing";
+      if ($messageAudioPlayback.status === "paused") return "ready";
+      if ($messageAudioPlayback.status === "error") return "error";
     }
-    if (!canOpenThread) return;
-    if (window.getSelection()?.toString()) return;
-    const target = event.target as HTMLElement | null;
-    if (target?.closest(MESSAGE_INTERACTIVE_TARGETS)) return;
-    onOpenThread(message);
-  }
-
-  function openThreadOnClick(node: HTMLElement) {
-    node.addEventListener("click", openThreadFromRow);
-    return {
-      destroy() {
-        node.removeEventListener("click", openThreadFromRow);
-      },
-    };
-  }
+    return hasCachedMessageAudio(message.id, message.body) ? "ready" : "idle";
+  });
+  let messageAudioError = $derived(
+    $messageAudioPlayback.key === currentMessageAudioKey ? $messageAudioPlayback.error : "",
+  );
+  let messageAudioLabel = $derived(
+    messageAudioState === "generating"
+      ? "Generating speech"
+      : messageAudioState === "playing"
+        ? "Pause playback"
+        : messageAudioState === "ready"
+          ? $messageAudioPlayback.key === currentMessageAudioKey &&
+            $messageAudioPlayback.status === "paused"
+            ? "Resume playback"
+            : "Play again"
+          : messageAudioState === "error"
+            ? "Retry Play aloud"
+            : "Play aloud",
+  );
 
   // ---- Hover toolbar: quick reacts + full picker + ⋮ overflow menu ----
 
   let showReactPicker = $state(false);
   let showMenu = $state(false);
+  let activeMessageAudioKey = $state("");
   let copyStatus = $state<"copied" | "failed" | "">("");
   let copyLinkStatus = $state<"pending" | "failed" | "">("");
   let copyLinkFallback = $state("");
@@ -218,7 +245,7 @@
   let reactPickerId = $derived(`toolbar-reaction-picker-${message.id}`);
   let reactionPending = $derived(reactionController.pending(message.id));
   let cannotReact = $derived(
-    reactionsDisabled || !currentUserID || isPending || isFailed || reactionPending,
+    reactionsDisabled || !currentUserID || isVoice || isPending || isFailed || reactionPending,
   );
 
   function quickReact(emoji: string) {
@@ -315,8 +342,7 @@
 
   async function writeMessageToClipboard(): Promise<boolean> {
     try {
-      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(message.body ?? "");
+      await writeClipboardText(message.body ?? "");
       setCopyStatus("copied");
       return true;
     } catch {
@@ -324,6 +350,22 @@
       return false;
     }
   }
+
+  async function toggleMessageAudio() {
+    if (!canPlayAloud || messageAudioState === "generating") return;
+    await messageAudioPlayback.toggle(message.id, message.body);
+  }
+
+  $effect(() => {
+    const nextKey = messageAudioKey(message.id, message.body);
+    if (!activeMessageAudioKey) {
+      activeMessageAudioKey = nextKey;
+      return;
+    }
+    if (nextKey === activeMessageAudioKey) return;
+    if ($messageAudioPlayback.key === activeMessageAudioKey) messageAudioPlayback.stop();
+    activeMessageAudioKey = nextKey;
+  });
 
   async function writeMessageLink(): Promise<{ copied: boolean; fallback?: string }> {
     if (!onCopyLink || copyLinkStatus === "pending") return { copied: false };
@@ -336,8 +378,7 @@
       return { copied: false };
     }
     try {
-      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(url);
+      await writeClipboardText(url);
       copyLinkStatus = "";
       setCopyStatus("copied");
       return { copied: true };
@@ -382,7 +423,6 @@
   let longPressCleanup: (() => void) | undefined;
   let actionSheetGeneration = 0;
   let actionSheetReturnFocus = $state<HTMLElement>();
-  let suppressRowClick = false;
   let actionSheetId = $derived(`message-action-sheet-${message.id}`);
 
   $effect(() => {
@@ -441,7 +481,6 @@
     const startY = event.clientY;
     longPressTimer = window.setTimeout(() => {
       longPressTimer = undefined;
-      suppressRowClick = true;
       openActionSheet();
     }, LONG_PRESS_MS);
     const onMove = (moveEvent: PointerEvent) => {
@@ -481,9 +520,6 @@
     clearSheetCloseTimer();
     actionSheetGeneration += 1;
     showActionSheet = false;
-    // The sheet's scrim can swallow the long-press mouseup, so the suppressed
-    // click may never reach the row — clear the flag on close either way.
-    suppressRowClick = false;
   }
 
   function sheetReact(emoji: string) {
@@ -606,17 +642,16 @@
   class:is-pending={isPending}
   class:is-failed={isFailed}
   class:is-deleted={isDeleted}
+  class:is-voice={isVoice}
   class:is-preamble={Boolean(preambleBlock)}
   class:is-preamble-collapsed={preambleBlock?.final === true}
   class:is-preamble-live={preambleBlock?.final === false}
   class:before-final-message={precedesFinalMessage}
   class:after-preamble={followsPreamble}
-  class:can-open-thread={canOpenThread}
   class:editing={editing}
   class:menu-open={showMenu || showReactPicker}
   class:actions-flip={actionsFlipped}
   data-message-id={message.id}
-  use:openThreadOnClick
   onpointerdown={handleRowPointerDown}
   oncontextmenu={handleRowContextMenu}
   onmouseenter={() => {
@@ -652,12 +687,27 @@
           onSave={handleEditSave}
         />
       {/if}
+    {:else if message.voice}
+      <div class="voice-transcript" aria-live="polite">
+        <VoicePulse stream={message.voice.stream} />
+        {#if message.body}
+          <div
+            class="markdown voice-transcript__text"
+            use:enhanceMarkdown
+            use:enhanceCodeBlockCopy={true}
+            use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+          >{@html markdown(message.body)}</div>
+        {:else}
+          <span class="voice-transcript__listening">Listening…</span>
+        {/if}
+      </div>
     {:else}
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
     <div
       class="markdown"
       use:enhanceMarkdown
+      use:enhanceCodeBlockCopy={true}
       use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
     >{@html markdown(message.body)}</div>
     {#if message.edited_at}
@@ -729,6 +779,19 @@
         aria-live="polite"
       >{copyStatus === "copied" ? "Copied" : "Couldn't copy"}</span>
     {/if}
+    <button
+      type="button"
+      class="message-action-copy tooltip"
+      aria-label="Copy message"
+      data-tooltip="Copy message"
+      onclick={() => void writeMessageToClipboard()}
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+        </g>
+      </svg>
+    </button>
     {#each QUICK_REACTS as emoji}
       <button
         type="button"
@@ -768,6 +831,38 @@
         />
       {/if}
     </div>
+    {#if canPlayAloud}
+      <button
+        type="button"
+        class="message-play-aloud tooltip"
+        class:is-generating={messageAudioState === "generating"}
+        class:is-playing={messageAudioState === "playing"}
+        class:is-ready={messageAudioState === "ready"}
+        class:is-error={messageAudioState === "error"}
+        aria-label={messageAudioLabel}
+        aria-busy={messageAudioState === "generating"}
+        data-tooltip={messageAudioError || messageAudioLabel}
+        onclick={toggleMessageAudio}
+      >
+        {#if messageAudioState === "generating"}
+          <svg class="message-play-aloud__spinner" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M20 12a8 8 0 1 1-2.34-5.66"/>
+          </svg>
+        {:else if messageAudioState === "playing"}
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="currentColor" d="M7 5h4v14H7zm6 0h4v14h-4z"/>
+          </svg>
+        {:else if messageAudioState === "ready"}
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="currentColor" d="m8 5 11 7-11 7V5Z"/>
+          </svg>
+        {:else}
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 10v4h4l5 4V6L9 10H5Zm12-1a4 4 0 0 1 0 6m2-8.5a8 8 0 0 1 0 11"/>
+          </svg>
+        {/if}
+      </button>
+    {/if}
     <span class="action-sep" aria-hidden="true"></span>
     <button
       type="button"

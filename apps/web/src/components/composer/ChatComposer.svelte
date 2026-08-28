@@ -18,7 +18,7 @@
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
-  import type { VoiceStatus } from "../../lib/voice";
+  import type { VoiceInputStatus, VoiceStatus } from "../../lib/voice";
   import VoiceVisualizer from "../VoiceVisualizer.svelte";
   import ComposerToolbar from "./ComposerToolbar.svelte";
   import GifPicker from "./GifPicker.svelte";
@@ -104,7 +104,14 @@
     showToolbar?: boolean;
     showVoice?: boolean;
     voiceStatus?: VoiceStatus;
+    voiceInputStatus?: VoiceInputStatus;
     voiceError?: string;
+    voiceWaiting?: boolean;
+    voiceDraftAvailable?: boolean;
+    voiceTranscript?: string;
+    voiceResponseText?: string;
+    voiceOutputMuted?: boolean;
+    voiceAutoSend?: boolean;
     voiceStream?: MediaStream | null;
     showGifPicker?: boolean;
     gifQuery?: string;
@@ -129,6 +136,10 @@
     onAppendToComposer?: (snippet: string) => void;
     onToggleGif?: () => void;
     onToggleVoice?: () => void;
+    onToggleVoiceOutput?: () => void;
+    onToggleVoiceAutoSend?: () => void;
+    onEndVoice?: () => void;
+    onSendVoice?: () => void;
     onGifQuery?: (value: string) => void;
     onPickGif?: (url: string, title: string) => void;
   };
@@ -145,7 +156,14 @@
     showToolbar = false,
     showVoice = false,
     voiceStatus = "idle",
+    voiceInputStatus = "live",
     voiceError = "",
+    voiceWaiting = false,
+    voiceDraftAvailable = false,
+    voiceTranscript = "",
+    voiceResponseText = "",
+    voiceOutputMuted = false,
+    voiceAutoSend = true,
     voiceStream = null,
     showGifPicker = false,
     gifQuery = "",
@@ -170,6 +188,10 @@
     onAppendToComposer = () => {},
     onToggleGif = () => {},
     onToggleVoice = () => {},
+    onToggleVoiceOutput = () => {},
+    onToggleVoiceAutoSend = () => {},
+    onEndVoice = () => {},
+    onSendVoice = () => {},
     onGifQuery = () => {},
     onPickGif = () => {},
   }: Props = $props();
@@ -181,6 +203,15 @@
   let selectedSuggestionIndex = $state(0);
   let formatState = $state<FormatState>(emptyFormatState());
   let fileDragActive = $state(false);
+  let toolbarExpanded = $state(false);
+
+  const voiceMode = $derived(
+    showVoice &&
+      (voiceStatus === "connecting" || voiceStatus === "listening" || voiceStatus === "speaking"),
+  );
+  const voicePaused = $derived(
+    voiceInputStatus === "paused" || voiceInputStatus === "pausing",
+  );
 
   const activeSuggestions = $derived.by(() => {
     if (!activeToken || tokenKey(activeToken) === dismissedToken) return [];
@@ -222,6 +253,7 @@
             const inputEvent = event as InputEvent;
             if (
               inputEvent.inputType !== "insertText" ||
+              inputEvent.isComposing ||
               !inputEvent.data ||
               inputEvent.data.length <= 1
             ) {
@@ -230,11 +262,7 @@
             const editor = editorInstance;
             if (!editor) return false;
             event.preventDefault();
-            if (editor.isEmpty) {
-              editor.commands.setContent(inputEvent.data, { contentType: "markdown" });
-            } else {
-              editor.commands.insertContent(inputEvent.data, { contentType: "markdown" });
-            }
+            editor.view.dispatch(editor.state.tr.insertText(inputEvent.data));
             return true;
           },
           focus: () => {
@@ -703,6 +731,7 @@
         </span>
       </div>
     {/if}
+    <div class="composer-text-view" class:is-hidden={voiceMode} aria-hidden={voiceMode}>
     {#if pendingAttachments.length > 0}
       <div class="composer-attachments" aria-label="Pending attachments">
         <div class="composer-attachments__header">
@@ -752,65 +781,262 @@
     {#if replyTarget}
       <ReplyPreview target={replyTarget} onClear={onClearReply} />
     {/if}
-    <div class="composer-row" class:has-voice={showVoice}>
-      {#if showUpload}
-        <label class="composer-icon" title="Attach files">
-          <input type="file" aria-label="Upload file" {disabled} multiple onchange={onUploadFile} />
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21.44 11.05 12.5 20a6 6 0 0 1-8.49-8.49l8.49-8.48a4 4 0 0 1 5.66 5.66l-8.49 8.49a2 2 0 0 1-2.83-2.83L13.41 7.5"/>
-          </svg>
-        </label>
-      {/if}
-      <div class="composer-editor" use:mountEditor={{ value, disabled, placeholder }}></div>
-      {#if showVoice}
-        <button
-          type="button"
-          class="composer-voice"
-          class:is-active={voiceStatus === "listening"}
-          class:is-connecting={voiceStatus === "connecting"}
-          class:is-failed={voiceStatus === "failed"}
-          title={voiceStatus === "listening" ? "End voice conversation" : voiceStatus === "connecting" ? "Cancel voice connection" : "Start voice conversation"}
-          aria-label={voiceStatus === "listening" ? "End voice conversation" : voiceStatus === "connecting" ? "Cancel voice connection" : voiceStatus === "failed" ? "Retry voice conversation" : "Start voice conversation"}
-          aria-pressed={voiceStatus === "listening"}
-          onclick={onToggleVoice}
-        >
-          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-            <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6"/>
-          </svg>
-          <span class="composer-voice__dot" aria-hidden="true"></span>
-        </button>
-      {/if}
-      <button type="submit" class="send" aria-label={submitLabel} disabled={disabled || submitDisabled || !value.trim()}>
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <path fill="currentColor" d="M3 3.5 21 12 3 20.5l3.6-7.5L15 12 6.6 11l-3.6-7.5Z"/>
-        </svg>
-      </button>
+    <div class="composer-editor-shell">
+      <div
+        class="composer-editor"
+        use:mountEditor={{ value, disabled: disabled || voiceMode, placeholder }}
+      ></div>
     </div>
-    {#if showVoice && voiceStatus !== "idle"}
-      <div class:voice-error={voiceStatus === "failed"} class="composer-voice-status" role="status">
-        <span class="composer-voice-status__text">
-          {voiceStatus === "connecting"
-            ? "Connecting to local voice service…"
-            : voiceStatus === "listening"
-              ? "Voice connected · click the microphone to disconnect"
-              : voiceError || "Voice connection failed"}
-        </span>
-        <span class="composer-voice-visualizer-slot" aria-hidden="true">
-          {#if voiceStream}
-            <VoiceVisualizer stream={voiceStream} barCount={24} gap={1.5} maxHeight={18} />
-          {/if}
-        </span>
+    <div class="composer-controls">
+      <div class="composer-tools-primary">
+        {#if showUpload}
+          <label class="composer-tool" title="Attach files">
+            <input type="file" aria-label="Upload file" {disabled} multiple onchange={onUploadFile} />
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21.44 11.05 12.5 20a6 6 0 0 1-8.49-8.49l8.49-8.48a4 4 0 0 1 5.66 5.66l-8.49 8.49a2 2 0 0 1-2.83-2.83L13.41 7.5"/>
+            </svg>
+          </label>
+        {/if}
+        {#if showToolbar}
+          <button
+            type="button"
+            class="composer-tool composer-format-toggle"
+            class:is-active={toolbarExpanded}
+            title="Formatting"
+            aria-label="Toggle formatting tools"
+            aria-expanded={toolbarExpanded}
+            onclick={() => (toolbarExpanded = !toolbarExpanded)}
+          >Aa</button>
+          <span class="composer-quick-divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="composer-tool composer-quick-tool"
+            title="Blockquote"
+            aria-label="Blockquote"
+            aria-pressed={formatState.blockquote}
+            onclick={() => applyFormat("blockquote")}
+          >“</button>
+          <button
+            type="button"
+            class="composer-tool composer-quick-tool"
+            title="Code block"
+            aria-label="Code block"
+            aria-pressed={formatState.codeBlock}
+            onclick={() => applyFormat("code-block")}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.5 4 12l3.5 3.5M16.5 8.5 20 12l-3.5 3.5M14 5l-4 14"/>
+            </svg>
+          </button>
+          <span class="composer-quick-divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="composer-tool"
+            title="Emoji"
+            aria-label="Add emoji"
+            onclick={() => onAppendToComposer("🙂")}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
+              <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8.5 10h.01M15.5 10h.01M8.5 14.5c1.1 1.3 2.2 1.9 3.5 1.9s2.4-.6 3.5-1.9"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="composer-tool composer-gif-tool"
+            class:is-active={showGifPicker}
+            title="GIF"
+            aria-label="Add GIF"
+            onclick={onToggleGif}
+          >GIF</button>
+        {/if}
+      </div>
+      <div class="composer-actions">
+        {#if showVoice}
+          <button
+            type="button"
+            class="composer-voice-entry"
+            class:is-failed={voiceStatus === "failed"}
+            title={voiceStatus === "failed" ? "Retry voice conversation" : "Start live voice conversation"}
+            aria-label={voiceStatus === "failed" ? "Retry voice conversation" : "Start live voice conversation"}
+            onclick={onToggleVoice}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6"/>
+            </svg>
+            <span>Voice</span>
+          </button>
+        {/if}
+        <button type="submit" class="send" aria-label={submitLabel} disabled={disabled || submitDisabled || !value.trim()}>
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="m4 12 15-8-4.5 16-3.2-6.1L4 12Zm7.3 1.9 3.9-4.1"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    {#if showToolbar && toolbarExpanded}
+      <div class="composer-format-tray">
+        <ComposerToolbar
+          showGifPicker={showGifPicker}
+          {disabled}
+          state={formatState}
+          onFormat={applyFormat}
+          onToggleGif={onToggleGif}
+        />
       </div>
     {/if}
-    {#if showToolbar}
-      <ComposerToolbar
-        showGifPicker={showGifPicker}
-        {disabled}
-        state={formatState}
-        onFormat={applyFormat}
-        onToggleGif={onToggleGif}
-      />
+    {#if showVoice && voiceStatus === "failed"}
+      <div class="composer-voice-inline-error" role="status">{voiceError || "Voice connection failed"}</div>
+    {/if}
+    </div>
+
+    {#if showVoice}
+      <section
+        class="composer-live-voice"
+        class:is-visible={voiceMode}
+        aria-hidden={!voiceMode}
+        aria-label="Live voice conversation"
+      >
+        <header class="composer-live-voice__header">
+          <span class="composer-live-voice__identity">
+            <span class="composer-live-voice__dot" aria-hidden="true"></span>
+            <span>
+              <strong>Live with OpenClaw</strong>
+              <small>
+                {voiceStatus === "connecting"
+                  ? "Connecting…"
+                  : voicePaused
+                    ? "Mic paused"
+                    : voiceInputStatus === "resuming"
+                      ? "Resuming…"
+                      : voiceWaiting
+                        ? "Thinking"
+                        : voiceStatus === "speaking"
+                          ? "Speaking"
+                          : voiceTranscript.trim()
+                            ? "Transcribing"
+                            : "Listening"}
+              </small>
+            </span>
+          </span>
+          <span class="composer-live-voice__draft">
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 10V8a5 5 0 0 1 10 0v2M6 10h12v10H6z"/>
+            </svg>
+            {value.trim() ? "Typed draft preserved" : "Text input paused"}
+          </span>
+        </header>
+
+        <div
+          class="composer-live-voice__stage"
+          class:is-listening={voiceStatus === "listening" && !voiceWaiting && !voicePaused}
+          class:is-thinking={voiceWaiting}
+          class:is-speaking={voiceStatus === "speaking"}
+          class:is-paused={voicePaused}
+        >
+          <div class="composer-live-voice__visualizer" aria-hidden="true">
+            {#if voiceStream}
+              <VoiceVisualizer stream={voiceStream} barCount={20} gap={2} maxHeight={46} />
+            {:else}
+              <span class="composer-live-voice__fallback-wave"></span>
+            {/if}
+          </div>
+          <div class="composer-live-voice__copy" role="status" aria-live="polite">
+            {#if voiceStatus === "connecting"}
+              <span>Opening voice channel</span>
+              <strong>Connecting to OpenClaw…</strong>
+              <p>Your typed draft is safe while the live session opens.</p>
+            {:else if voicePaused}
+              <span>Input paused</span>
+              <strong>Take your time</strong>
+              <p>The session stays open, but no microphone audio is being sent.</p>
+            {:else if voiceStatus === "speaking"}
+              <span>OpenClaw is responding</span>
+              <strong>Response playing</strong>
+              <p>{voiceResponseText || "The answer is playing through your selected output."}</p>
+            {:else if voiceWaiting}
+              <span>Turn received</span>
+              <strong>OpenClaw is thinking</strong>
+              <p>Your transcript is already in the conversation. The response will play here.</p>
+            {:else if voiceTranscript.trim()}
+              <span>Live transcription</span>
+              <strong>I’m listening</strong>
+              <p class="composer-live-voice__transcript">“{voiceTranscript}”</p>
+            {:else}
+              <span>Mic is live</span>
+              <strong>I’m listening</strong>
+              <p>Start speaking whenever you’re ready.</p>
+            {/if}
+          </div>
+        </div>
+
+        <div class="composer-live-voice__controls">
+          <button
+            type="button"
+            class="composer-live-voice__control composer-live-voice__control--icon"
+            class:is-muted={voiceOutputMuted}
+            title={voiceOutputMuted ? "Unmute assistant audio" : "Mute assistant audio"}
+            aria-label={voiceOutputMuted ? "Unmute assistant audio" : "Mute assistant audio"}
+            aria-pressed={voiceOutputMuted}
+            disabled={voiceStatus === "connecting"}
+            onclick={onToggleVoiceOutput}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 10v4h4l5 4V6L9 10H5Zm12-1a4 4 0 0 1 0 6m2-8.5a8 8 0 0 1 0 11"/>
+              {#if voiceOutputMuted}<path fill="none" stroke="currentColor" stroke-width="2" d="M4 4l16 16"/>{/if}
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="composer-live-voice__control composer-live-voice__control--mic"
+            class:is-paused={voicePaused}
+            title={`${voicePaused ? "Resume" : "Pause"} microphone (Space)`}
+            aria-label={voicePaused ? "Resume microphone" : "Pause microphone"}
+            aria-keyshortcuts="Space"
+            aria-pressed={voicePaused}
+            disabled={voiceStatus === "connecting" || voiceInputStatus === "pausing" || voiceInputStatus === "resuming"}
+            onclick={onToggleVoice}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+              <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6"/>
+            </svg>
+            <span>{voicePaused ? "Resume mic" : "Pause mic"}</span>
+          </button>
+          <button
+            type="button"
+            class="composer-live-voice__control composer-live-voice__control--auto-send"
+            class:is-manual={!voiceAutoSend}
+            title={`${voiceAutoSend ? "Disable" : "Enable"} VAD auto-send (Shift+Space)`}
+            aria-label={`${voiceAutoSend ? "Disable" : "Enable"} VAD auto-send`}
+            aria-keyshortcuts="Shift+Space"
+            aria-pressed={voiceAutoSend}
+            disabled={voiceStatus === "connecting"}
+            onclick={onToggleVoiceAutoSend}
+          >{voiceAutoSend ? "Auto send" : "Manual send"}</button>
+          {#if voiceDraftAvailable}
+            <button
+              type="button"
+              class="composer-live-voice__control"
+              title="Send dictated message"
+              aria-label="Send dictated message"
+              onclick={onSendVoice}
+            >Send now</button>
+          {/if}
+          <button
+            type="button"
+            class="composer-live-voice__control composer-live-voice__control--end"
+            aria-label="End live conversation"
+            onclick={onEndVoice}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M5.5 16.5c4.3-3.2 8.7-3.2 13 0M7.5 14.9l-1.7-2.4M16.5 14.9l1.7-2.4"/>
+            </svg>
+            <span>End live</span>
+          </button>
+        </div>
+      </section>
     {/if}
   </div>
 </form>

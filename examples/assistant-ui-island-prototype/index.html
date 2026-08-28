@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PROTOTYPE — ClickClack assistant-ui thread</title>
+  </head>
+  <body>
+    <main class="prototype-window">
+      <div id="assistant-ui-island"></div>
+      <footer class="host-composer" aria-label="Existing composer boundary">
+        <form class="composer-surface" id="prototype-composer">
+          <div class="composer-text-view" id="prototype-text-view">
+            <div class="composer-editor-shell">
+              <div
+                id="prototype-composer-editor"
+                class="composer-editor"
+                contenteditable="true"
+                role="textbox"
+                aria-label="Message #friends-podcast"
+                aria-multiline="true"
+                data-placeholder="Message #friends-podcast"
+              ></div>
+            </div>
+
+            <div class="composer-format-tray" id="prototype-format-tray" hidden>
+              <div class="composer-format-group" aria-label="Text style">
+                <button type="button" class="composer-format-control" aria-label="Bold"><strong>B</strong></button>
+                <button type="button" class="composer-format-control" aria-label="Italic"><em>I</em></button>
+                <button type="button" class="composer-format-control" aria-label="Strikethrough"><s>S</s></button>
+                <button type="button" class="composer-format-control composer-code-control" aria-label="Inline code">&lt;/&gt;</button>
+              </div>
+              <span class="composer-control-divider" aria-hidden="true"></span>
+              <div class="composer-format-group" aria-label="Structure">
+                <button type="button" class="composer-format-control" aria-label="Heading one">H1</button>
+                <button type="button" class="composer-format-control" aria-label="Bulleted list">☷</button>
+                <button type="button" class="composer-format-control" aria-label="Blockquote">“</button>
+                <button type="button" class="composer-format-control composer-code-control" aria-label="Code block">▰</button>
+                <button type="button" class="composer-format-control" aria-label="Insert link">↗</button>
+              </div>
+            </div>
+
+            <div class="composer-controls">
+              <div class="composer-tools-primary">
+                <label class="composer-tool" title="Attach files">
+                  <input type="file" aria-label="Attach files" multiple />
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m20.5 11.5-8.2 8.2a6 6 0 0 1-8.5-8.5l9-9a4 4 0 0 1 5.7 5.7l-9 9a2 2 0 0 1-2.9-2.8l8.3-8.3" />
+                  </svg>
+                </label>
+                <button
+                  type="button"
+                  class="composer-tool composer-format-toggle"
+                  id="prototype-format-toggle"
+                  aria-label="Toggle formatting tools"
+                  aria-pressed="false"
+                  title="Formatting"
+                >
+                  Aa
+                </button>
+                <span class="composer-quick-divider" aria-hidden="true"></span>
+                <button type="button" class="composer-tool composer-quick-tool" aria-label="Blockquote" title="Blockquote">“</button>
+                <button
+                  type="button"
+                  class="composer-tool composer-quick-tool composer-code-block-tool"
+                  aria-label="Code block"
+                  title="Code block"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7.5 8.5 4 12l3.5 3.5M16.5 8.5 20 12l-3.5 3.5M14 5l-4 14" />
+                  </svg>
+                </button>
+                <span class="composer-quick-divider" aria-hidden="true"></span>
+                <button type="button" class="composer-tool" aria-label="Add emoji" title="Emoji">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M8.5 10h.01M15.5 10h.01M8.5 14.5c1.1 1.3 2.2 1.9 3.5 1.9s2.4-.6 3.5-1.9" />
+                  </svg>
+                </button>
+                <button type="button" class="composer-tool composer-gif-tool" aria-label="Add GIF" title="GIF">GIF</button>
+              </div>
+
+              <div class="composer-actions">
+                <button
+                  type="button"
+                  class="composer-voice-entry"
+                  id="prototype-voice-entry"
+                  aria-label="Start live voice conversation"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6" />
+                  </svg>
+                  <span>Voice</span>
+                </button>
+                <button
+                  type="submit"
+                  class="composer-send"
+                  id="prototype-composer-send"
+                  aria-label="Send message"
+                  disabled
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m4 12 15-8-4.5 16-3.2-6.1L4 12Z" />
+                    <path d="m11.3 13.9 3.9-4.1" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <section class="voice-composer-view" id="prototype-voice-view" aria-label="Live voice conversation" hidden>
+            <header class="voice-session-header">
+              <div class="voice-session-identity">
+                <span class="voice-live-dot" aria-hidden="true"></span>
+                <div>
+                  <strong>Live with Kai</strong>
+                  <span id="prototype-voice-state-label">Connecting…</span>
+                </div>
+              </div>
+              <div class="voice-draft-state">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 10V8a5 5 0 0 1 10 0v2M6 10h12v10H6z" />
+                </svg>
+                <span id="prototype-draft-state">Draft preserved</span>
+              </div>
+            </header>
+
+            <div class="voice-stage" id="prototype-voice-stage" data-voice-state="connecting">
+              <div class="voice-avatar-shell" aria-hidden="true">
+                <span class="voice-avatar-ring voice-avatar-ring--outer"></span>
+                <span class="voice-avatar-ring voice-avatar-ring--inner"></span>
+                <img src="/avatars/kai.webp" alt="" />
+              </div>
+              <div class="voice-live-copy">
+                <span class="voice-state-kicker" id="prototype-voice-kicker">Opening voice channel</span>
+                <strong id="prototype-voice-headline">Connecting to Kai…</strong>
+                <p id="prototype-voice-transcript" aria-live="polite">Your typed draft is safe while the live session is open.</p>
+              </div>
+              <div class="voice-wave" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+
+            <div class="voice-session-controls">
+              <button
+                type="button"
+                class="voice-control voice-control--icon"
+                id="prototype-speaker-toggle"
+                aria-label="Mute assistant audio"
+                aria-pressed="false"
+                title="Mute assistant audio"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 10v4h4l5 4V6L9 10H5Z" />
+                  <path class="speaker-waves" d="M17 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11" />
+                </svg>
+              </button>
+              <button type="button" class="voice-control voice-control--mic" id="prototype-mic-toggle">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="9" y="3" width="6" height="11" rx="3" />
+                  <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6" />
+                </svg>
+                <span>Pause mic</span>
+              </button>
+              <button type="button" class="voice-control voice-control--end" id="prototype-end-voice">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5.5 16.5c4.3-3.2 8.7-3.2 13 0M7.5 14.9l-1.7-2.4M16.5 14.9l1.7-2.4" />
+                </svg>
+                <span>End live</span>
+              </button>
+            </div>
+          </section>
+        </form>
+        <div class="composer-meta">
+          <span id="prototype-composer-status">Markdown and slash commands supported</span>
+          <span>Enter to send · Shift+Enter for a new line</span>
+        </div>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      const form = document.querySelector("#prototype-composer");
+      const composerSurface = document.querySelector(".composer-surface");
+      const textView = document.querySelector("#prototype-text-view");
+      const voiceView = document.querySelector("#prototype-voice-view");
+      const editor = document.querySelector("#prototype-composer-editor");
+      const send = document.querySelector("#prototype-composer-send");
+      const formatToggle = document.querySelector("#prototype-format-toggle");
+      const formatTray = document.querySelector("#prototype-format-tray");
+      const voiceEntry = document.querySelector("#prototype-voice-entry");
+      const voiceStage = document.querySelector("#prototype-voice-stage");
+      const voiceStateLabel = document.querySelector("#prototype-voice-state-label");
+      const voiceKicker = document.querySelector("#prototype-voice-kicker");
+      const voiceHeadline = document.querySelector("#prototype-voice-headline");
+      const voiceTranscript = document.querySelector("#prototype-voice-transcript");
+      const draftState = document.querySelector("#prototype-draft-state");
+      const micToggle = document.querySelector("#prototype-mic-toggle");
+      const speakerToggle = document.querySelector("#prototype-speaker-toggle");
+      const endVoice = document.querySelector("#prototype-end-voice");
+      const status = document.querySelector("#prototype-composer-status");
+      let voiceTimers = [];
+
+      const updateSendState = () => {
+        send.disabled = !editor.textContent.trim();
+      };
+
+      const clearVoiceTimers = () => {
+        voiceTimers.forEach((timer) => window.clearTimeout(timer));
+        voiceTimers = [];
+      };
+
+      const setVoiceState = (state, label, kicker, headline, transcript) => {
+        voiceStage.dataset.voiceState = state;
+        voiceStateLabel.textContent = label;
+        voiceKicker.textContent = kicker;
+        voiceHeadline.textContent = headline;
+        voiceTranscript.textContent = transcript;
+      };
+
+      const scheduleVoiceState = (delay, callback) => {
+        voiceTimers.push(window.setTimeout(callback, delay));
+      };
+
+      const startVoiceSequence = () => {
+        clearVoiceTimers();
+        setVoiceState(
+          "connecting",
+          "Connecting…",
+          "Opening voice channel",
+          "Connecting to Kai…",
+          "Your typed draft is safe while the live session is open.",
+        );
+        scheduleVoiceState(650, () =>
+          setVoiceState("listening", "Listening", "Mic is live", "I’m listening", "Start speaking whenever you’re ready."),
+        );
+        scheduleVoiceState(1900, () =>
+          setVoiceState(
+            "listening",
+            "Listening",
+            "Live transcription",
+            "I’m listening",
+            "“I’m thinking the cold open should feel less scripted…”",
+          ),
+        );
+        scheduleVoiceState(3500, () =>
+          setVoiceState("thinking", "Thinking", "Turn received", "Kai is thinking", "Your transcript is now part of the conversation, not the text draft."),
+        );
+        scheduleVoiceState(4700, () =>
+          setVoiceState(
+            "speaking",
+            "Speaking",
+            "Kai is responding",
+            "Keep the first beat loose",
+            "“Agreed. Let the first exchange breathe, then bring the structure in after the hook.”",
+          ),
+        );
+        scheduleVoiceState(8000, () =>
+          setVoiceState("listening", "Listening", "Mic is live", "I’m listening again", "Continue the conversation whenever you’re ready."),
+        );
+      };
+
+      const enterVoiceMode = () => {
+        draftState.textContent = editor.textContent.trim() ? "Typed draft preserved" : "Text input paused";
+        textView.hidden = true;
+        voiceView.hidden = false;
+        composerSurface.classList.add("is-live");
+        editor.setAttribute("contenteditable", "false");
+        status.textContent = "Live conversation · your text draft stays untouched";
+        micToggle.querySelector("span").textContent = "Pause mic";
+        micToggle.setAttribute("aria-pressed", "false");
+        startVoiceSequence();
+      };
+
+      const leaveVoiceMode = () => {
+        clearVoiceTimers();
+        voiceView.hidden = true;
+        textView.hidden = false;
+        composerSurface.classList.remove("is-live");
+        editor.setAttribute("contenteditable", "true");
+        updateSendState();
+        status.textContent = editor.textContent.trim()
+          ? "Draft preserved · live conversation ended"
+          : "Live conversation ended · ready to type";
+        window.requestAnimationFrame(() => editor.focus());
+      };
+
+      editor.addEventListener("input", updateSendState);
+      editor.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          if (!send.disabled) form.requestSubmit();
+        }
+      });
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (send.disabled || !voiceView.hidden) return;
+        editor.textContent = "";
+        updateSendState();
+        status.textContent = "Message handed back to ClickClack";
+      });
+      formatToggle.addEventListener("click", () => {
+        const open = formatTray.hidden;
+        formatTray.hidden = !open;
+        formatToggle.setAttribute("aria-pressed", String(open));
+        status.textContent = open ? "Formatting tools expanded" : "Markdown and slash commands supported";
+      });
+      voiceEntry.addEventListener("click", enterVoiceMode);
+      endVoice.addEventListener("click", leaveVoiceMode);
+      micToggle.addEventListener("click", () => {
+        const paused = voiceStage.dataset.voiceState === "paused";
+        clearVoiceTimers();
+        if (paused) {
+          micToggle.querySelector("span").textContent = "Pause mic";
+          micToggle.setAttribute("aria-pressed", "false");
+          setVoiceState("listening", "Listening", "Mic is live", "I’m listening", "Your text draft is still exactly where you left it.");
+        } else {
+          micToggle.querySelector("span").textContent = "Resume mic";
+          micToggle.setAttribute("aria-pressed", "true");
+          setVoiceState("paused", "Mic paused", "Input paused", "Take your time", "The live session stays open, but no microphone audio is being sent.");
+        }
+      });
+      speakerToggle.addEventListener("click", () => {
+        const muted = speakerToggle.getAttribute("aria-pressed") !== "true";
+        speakerToggle.setAttribute("aria-pressed", String(muted));
+        speakerToggle.setAttribute("aria-label", muted ? "Unmute assistant audio" : "Mute assistant audio");
+        speakerToggle.setAttribute("title", muted ? "Unmute assistant audio" : "Mute assistant audio");
+        speakerToggle.classList.toggle("is-muted", muted);
+        status.textContent = muted ? "Assistant audio muted" : "Assistant audio restored";
+      });
+    </script>
+  </body>
+</html>

@@ -198,6 +198,7 @@
 }
 
 .shell.desktop-shell {
+  --desktop-account-footer-height: 52px;
   grid-template-rows: 52px minmax(0, 1fr);
   /* One continuous chrome plate behind title bar, rail, and sidebar — the
      content panes float on it as a card, Slack-style. */
@@ -213,10 +214,36 @@
   border-right: 0;
 }
 
+/* The account card is one real interactive surface across both navigation
+   columns. Reserve its rail space, let it escape the sidebar grid cell, and
+   center the avatar on the same axis as the workspace keys. */
+@media (min-width: 821px) {
+  .desktop-shell > .guild-rail {
+    padding-bottom: var(--desktop-account-footer-height);
+  }
+
+  .desktop-shell > .sidebar {
+    overflow: visible;
+  }
+
+  .desktop-shell > .sidebar .user-card {
+    position: relative;
+    z-index: 3;
+    width: calc(100% + 72px);
+    height: var(--desktop-account-footer-height);
+    margin-left: -72px;
+    padding-left: 22px;
+  }
+}
+
 /* No workspace header row on desktop: the sidebar is just the scroll list
    plus the user card. */
 .desktop-shell > .sidebar {
   grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.desktop-shell > .sidebar .sidebar-scroll {
+  padding-top: 2px;
 }
 
 /* Narrow windows turn the rail and sidebar into overlay drawers (see
@@ -301,6 +328,7 @@
   position: relative;
   display: flex;
   align-items: center;
+  gap: 12px;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -321,16 +349,10 @@
 
 .desktop-titlebar-leading {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 9px;
   min-width: 0;
-  /* Stop short of the centered search: this group starts 78px in (darwin
-     traffic-light inset) while the 50% here resolves against the safe-area
-     content box, and the search (width clamp(220px, 100vw - 700px, 520px))
-     reaches window-center - 260px at its widest. 50% - 300px leaves ≥8px of
-     clearance in every regime; labels truncate instead of running under it. */
-  max-width: max(150px, calc(50% - 300px));
-  overflow: hidden;
   -webkit-app-region: no-drag;
 }
 
@@ -368,39 +390,36 @@
 }
 
 .desktop-titlebar-workspace {
-  flex: 0 1 auto;
-  min-width: 36px;
-  max-width: 190px;
-  overflow: hidden;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: visible;
   padding: 5px 9px;
   border-radius: 8px;
   color: var(--text-strong);
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.015em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .desktop-titlebar-channel {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   margin: 0;
-  min-width: 30px;
-  max-width: 230px;
-  overflow: hidden;
+  min-width: 0;
+  overflow: visible;
   color: var(--text-strong);
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.015em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.desktop-titlebar-channel.with-glyph::first-letter {
+.desktop-titlebar-channel .title-glyph {
   color: var(--accent);
-  margin-right: 1px;
 }
 
 .desktop-titlebar-divider {
@@ -431,7 +450,6 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  margin-left: auto;
   -webkit-app-region: no-drag;
 }
 
@@ -462,14 +480,16 @@
 }
 
 .desktop-titlebar-search.search {
-  position: absolute;
-  left: 50%;
-  width: clamp(220px, calc(100vw - 700px), 520px);
+  position: static;
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 96px;
+  max-width: 520px;
   height: 32px;
+  margin-left: auto;
   border-color: var(--line-strong);
   background: color-mix(in srgb, var(--panel-2) 84%, transparent);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035) inset;
-  transform: translateX(-50%);
   -webkit-app-region: no-drag;
 }
 
@@ -521,7 +541,7 @@
   margin: 0;
   font-size: 16px;
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.015em;
   color: var(--text-strong);
   font-family: var(--font-display);
   white-space: nowrap;
@@ -530,10 +550,9 @@
 }
 
 /* The leading # / @ glyph carries the accent so the title echoes the active
-   nav item instead of reading as greyed-out text. */
-.topbar-title h1.with-glyph::first-letter {
+   nav item without also tinting the first letter of the title. */
+.topbar-title h1 .title-glyph {
   color: var(--accent);
-  margin-right: 1px;
 }
 
 .topbar-divider {

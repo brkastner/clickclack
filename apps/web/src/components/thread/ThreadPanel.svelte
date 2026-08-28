@@ -13,6 +13,7 @@
     type ChannelProfileShortcut,
   } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
+  import { writeClipboardText } from "../../lib/clipboard";
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
@@ -299,8 +300,7 @@
     clearSheetCloseTimer();
     const generation = actionSheetGeneration;
     try {
-      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(message.body ?? "");
+      await writeClipboardText(message.body ?? "");
       if (destroyed || actionMessage?.id !== message.id) return;
       actionCopyStatus = "copied";
       sheetCloseTimer = window.setTimeout(() => {
@@ -323,8 +323,7 @@
       return { copied: false };
     }
     try {
-      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(url);
+      await writeClipboardText(url);
       copyLinkStatus = "";
       return { copied: true };
     } catch {

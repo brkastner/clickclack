@@ -426,15 +426,21 @@
   color: var(--text-strong);
 }
 
-.composer-voice {
-  position: relative;
+.composer-voice-controls {
   align-self: start;
-  width: var(--composer-control-size);
-  height: var(--composer-control-size);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   margin-top: calc(
     var(--composer-text-padding-block) +
       (var(--composer-line-height) - var(--composer-control-size)) / 2
   );
+}
+
+.composer-voice {
+  position: relative;
+  width: var(--composer-control-size);
+  height: var(--composer-control-size);
   display: grid;
   place-items: center;
   border: 0;
@@ -459,8 +465,58 @@
 }
 
 .composer-voice.is-active {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.composer-voice.is-paused {
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
+}
+
+.composer-voice-send,
+.composer-voice-end {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    transform 80ms ease;
+}
+
+.composer-voice-send {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.composer-voice-send:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.composer-voice-send:disabled {
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.45;
+}
+
+.composer-voice-end {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
+}
+
+.composer-voice-end:hover {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.composer-voice-send:active:not(:disabled),
+.composer-voice-end:active {
+  transform: translateY(1px);
 }
 
 .composer-voice.is-connecting {
@@ -904,5 +960,529 @@
 
   .composer-suggestions {
     max-height: min(320px, 42dvh);
+  }
+}
+
+/* ---------- ACCEPTED COMPOSER + LIVE VOICE PASS ---------- */
+
+.composer {
+  padding: 14px 28px 18px;
+  background: linear-gradient(transparent, var(--bg) 24%);
+}
+
+.composer-card {
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--panel) 97%, transparent);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.34),
+    inset 0 1px rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(18px);
+}
+
+.composer:focus-within .composer-card {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line-strong));
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.34),
+    0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.composer-text-view.is-hidden {
+  display: none;
+}
+
+.composer-editor-shell {
+  min-height: 78px;
+  padding: 17px 19px 10px;
+}
+
+.composer-editor,
+.composer-editor__content {
+  min-height: 50px;
+  max-height: min(170px, 34vh);
+}
+
+.composer-editor__content {
+  padding: 0;
+  font-size: 16.5px;
+  line-height: 1.56;
+}
+
+.composer-controls {
+  min-height: 57px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 7px 10px 10px;
+}
+
+.composer-tools-primary,
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.composer-actions {
+  gap: 8px;
+}
+
+.composer-tool {
+  position: relative;
+  width: 38px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.composer-tool:hover,
+.composer-tool.is-active,
+.composer-tool[aria-pressed="true"] {
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+.composer-tool input[type="file"] {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.composer-format-toggle {
+  width: 42px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.composer-quick-tool {
+  font-family: Georgia, serif;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.composer-quick-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 3px;
+  background: var(--line);
+}
+
+.composer-gif-tool {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.composer-voice-entry {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid color-mix(in srgb, var(--info) 30%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.composer-voice-entry:hover {
+  border-color: color-mix(in srgb, var(--info) 48%, var(--line));
+  background: color-mix(in srgb, var(--info) 20%, transparent);
+}
+
+.composer-voice-entry.is-failed {
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--line));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.composer-controls .send {
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  border-radius: 12px;
+}
+
+.composer-format-tray {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 32%, transparent);
+}
+
+.composer-format-tray .composer-toolbar {
+  min-height: 45px;
+  border: 0;
+  padding: 5px 13px;
+  background: transparent;
+}
+
+.composer-voice-inline-error {
+  padding: 0 18px 10px;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.composer-live-voice {
+  display: none;
+  padding: 0 14px 12px;
+}
+
+.composer-live-voice.is-visible {
+  display: block;
+}
+
+.composer-live-voice__header {
+  min-height: 55px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 4px 8px;
+}
+
+.composer-live-voice__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.composer-live-voice__identity > span:last-child {
+  display: grid;
+  gap: 1px;
+}
+
+.composer-live-voice__identity strong {
+  color: var(--text-strong);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.composer-live-voice__identity small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.composer-live-voice__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--info);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--info) 9%, transparent);
+  animation: live-voice-dot 1.45s ease-in-out infinite;
+}
+
+.composer-live-voice__draft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 36%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.composer-live-voice__stage {
+  min-height: 132px;
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--panel-3) 42%, transparent),
+    color-mix(in srgb, var(--bg) 28%, transparent)
+  );
+  transition:
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.composer-live-voice__stage.is-listening {
+  border-color: color-mix(in srgb, var(--info) 30%, var(--line));
+}
+
+.composer-live-voice__stage.is-thinking {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+}
+
+.composer-live-voice__stage.is-speaking {
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--line));
+}
+
+.composer-live-voice__stage.is-paused {
+  background: color-mix(in srgb, var(--bg) 36%, transparent);
+}
+
+.composer-live-voice__visualizer {
+  width: 100%;
+  height: 52px;
+  color: var(--info);
+}
+
+.composer-live-voice__stage.is-thinking .composer-live-voice__visualizer {
+  color: var(--accent);
+}
+
+.composer-live-voice__stage.is-speaking .composer-live-voice__visualizer {
+  color: var(--warning);
+}
+
+.composer-live-voice__stage.is-paused .composer-live-voice__visualizer {
+  color: var(--muted-2);
+  opacity: 0.55;
+}
+
+.composer-live-voice__fallback-wave {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    transparent 0 4%,
+    currentColor 4% 6%,
+    transparent 6% 12%,
+    currentColor 12% 15%,
+    transparent 15% 23%,
+    currentColor 23% 26%,
+    transparent 26% 35%,
+    currentColor 35% 38%,
+    transparent 38% 48%,
+    currentColor 48% 51%,
+    transparent 51% 60%,
+    currentColor 60% 64%,
+    transparent 64% 73%,
+    currentColor 73% 76%,
+    transparent 76% 85%,
+    currentColor 85% 88%,
+    transparent 88% 100%
+  );
+  opacity: 0.42;
+  animation: live-voice-wave 920ms ease-in-out infinite alternate;
+}
+
+.composer-live-voice__copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.composer-live-voice__copy > span {
+  color: var(--info);
+  font-size: 10.5px;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.composer-live-voice__stage.is-thinking .composer-live-voice__copy > span {
+  color: var(--accent);
+}
+
+.composer-live-voice__stage.is-speaking .composer-live-voice__copy > span {
+  color: var(--warning);
+}
+
+.composer-live-voice__stage.is-paused .composer-live-voice__copy > span {
+  color: var(--muted);
+}
+
+.composer-live-voice__copy strong {
+  color: var(--text-strong);
+  font-size: 17.5px;
+  line-height: 1.3;
+}
+
+.composer-live-voice__copy p {
+  max-width: 620px;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.48;
+}
+
+.composer-live-voice__transcript {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.composer-live-voice__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 11px 1px 0;
+}
+
+.composer-live-voice__control {
+  height: 39px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--panel-2) 72%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.composer-live-voice__control:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--hover-strong);
+  color: var(--text-strong);
+}
+
+.composer-live-voice__control:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.composer-live-voice__control--icon {
+  width: 39px;
+  padding: 0;
+}
+
+.composer-live-voice__control--icon.is-muted {
+  color: var(--danger);
+}
+
+.composer-live-voice__control--mic {
+  border-color: color-mix(in srgb, var(--info) 28%, var(--line));
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+}
+
+.composer-live-voice__control--mic.is-paused {
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--line));
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+}
+
+.composer-live-voice__control--auto-send {
+  min-width: 86px;
+}
+
+.composer-live-voice__control--auto-send.is-manual {
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--line));
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+}
+
+.composer-live-voice__control--end {
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+}
+
+.composer-live-voice__control--end:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 46%, var(--line));
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+@keyframes live-voice-dot {
+  0%,
+  100% {
+    opacity: 0.52;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes live-voice-wave {
+  from {
+    opacity: 0.28;
+    transform: scaleY(0.55);
+  }
+  to {
+    opacity: 0.66;
+    transform: scaleY(1);
+  }
+}
+
+@media (max-width: 900px) {
+  .composer {
+    padding-inline: calc(18px + var(--safe-area-right)) calc(18px + var(--safe-area-left));
+  }
+
+  .composer-live-voice__stage {
+    grid-template-columns: 126px minmax(0, 1fr);
+    gap: 13px;
+  }
+}
+
+@media (max-width: 720px) {
+  .composer {
+    padding: 10px calc(14px + var(--safe-area-right)) calc(10px + var(--safe-area-bottom))
+      calc(14px + var(--safe-area-left));
+  }
+
+  .composer-editor-shell {
+    min-height: 70px;
+    padding-inline: 15px;
+  }
+
+  .composer-quick-tool,
+  .composer-quick-divider {
+    display: none;
+  }
+
+  .composer-voice-entry {
+    width: 40px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .composer-voice-entry span {
+    display: none;
+  }
+
+  .composer-live-voice__stage {
+    grid-template-columns: 1fr;
+    padding: 15px;
+  }
+
+  .composer-live-voice__visualizer {
+    height: 34px;
+  }
+
+  .composer-live-voice__copy strong {
+    font-size: 16.5px;
+  }
+
+  .composer-live-voice__controls {
+    justify-content: stretch;
+  }
+
+  .composer-live-voice__control--mic,
+  .composer-live-voice__control--auto-send,
+  .composer-live-voice__control--end {
+    flex: 1;
   }
 }

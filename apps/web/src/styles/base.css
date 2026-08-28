@@ -68,7 +68,9 @@
     0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent),
     0 8px 30px -12px color-mix(in srgb, var(--accent) 48%, transparent);
   --success: light-dark(#14876a, #30c48d);
+  --info: light-dark(#31748f, #9ccfd8);
   --warn: #e8a33e;
+  --warning: var(--warn);
   --danger: light-dark(#d13438, #ff6d68);
   --scrollbar: light-dark(rgba(16, 21, 29, 0.18), rgba(190, 210, 255, 0.12));
   --scrollbar-hover: light-dark(rgba(16, 21, 29, 0.3), rgba(190, 210, 255, 0.22));

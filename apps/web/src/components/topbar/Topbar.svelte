@@ -55,9 +55,9 @@
 <header class="topbar">
   <div class="topbar-title">
     {#if selectedDirect}
-      <h1 class="with-glyph dm">{`@${dmTitle(selectedDirect, currentUserID)}`}</h1>
+      <h1 class="dm"><span class="title-glyph">@</span>{dmTitle(selectedDirect, currentUserID)}</h1>
     {:else if selectedChannel}
-      <h1 class="with-glyph channel">{`#${channelDisplayTitle(selectedChannel)}`}</h1>
+      <h1 class="channel"><span class="title-glyph">#</span>{channelDisplayTitle(selectedChannel)}</h1>
       {#if channelNotifPreference}
         <button
           type="button"
@@ -78,7 +78,7 @@
         </button>
       {/if}
     {:else}
-      <h1 class="with-glyph">ClickClack</h1>
+      <h1>ClickClack</h1>
     {/if}
     <span class="topbar-divider" aria-hidden="true"></span>
     <p class="topbar-meta">{workspaceName || "no workspace"}</p>
