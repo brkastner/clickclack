@@ -77,6 +77,9 @@
   import {
     BrowserVoiceSession,
     collectVoiceResponseCandidates,
+    voiceDestinationForFocus,
+    voiceFocusChanged,
+    voiceResponsePlaybackEnabled,
     VoiceDraftAccumulator,
     type VoiceState,
     type VoiceTranscript,
@@ -297,6 +300,15 @@
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
   $: selectedDirectWritable = selectedDirect?.can_send ?? true;
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
+  $: syncVoiceDestinationWithFocus(
+    voiceState.status,
+    selectedWorkspaceID,
+    selectedChannelID,
+    selectedDirectID,
+    selectedComposerTopicID,
+    activeTopicFilterID,
+    topicFilterGeneration,
+  );
   $: resetTopicStateForConversation(activeConversationKey);
   // Slash-dispatch notices are scoped to the conversation they fired in.
   $: clearComposerNoticeFor(activeConversationKey);
@@ -391,7 +403,7 @@
   ) {
     if (
       !voiceSession ||
-      (currentVoiceStatus !== "listening" && currentVoiceStatus !== "speaking")
+      !voiceResponsePlaybackEnabled(currentVoiceStatus, awaitingVoiceResponses)
     ) {
       return;
     }
@@ -588,6 +600,49 @@
     voiceFillerTimer = undefined;
   }
 
+  function syncVoiceDestinationWithFocus(
+    currentVoiceStatus: VoiceState["status"],
+    workspaceID: string,
+    channelID: string,
+    directConversationID: string,
+    topicID: string,
+    topicFilterID: string,
+    currentTopicFilterGeneration: number,
+  ) {
+    if (
+      currentVoiceStatus !== "connecting" &&
+      currentVoiceStatus !== "listening" &&
+      currentVoiceStatus !== "speaking"
+    ) {
+      return;
+    }
+    const focusedDestination = voiceDestinationForFocus({
+      workspaceID,
+      channelID: channelID || undefined,
+      directConversationID: directConversationID || undefined,
+      topicID: channelID ? topicID || undefined : undefined,
+      topicFilterID,
+      topicFilterGeneration: currentTopicFilterGeneration,
+    });
+    if (!focusedDestination) return;
+    const focusChanged = voiceFocusChanged(voiceDestination, focusedDestination);
+    voiceDestination = {
+      body: "",
+      uploads: [],
+      ...focusedDestination,
+    };
+    if (!focusChanged) return;
+
+    // A focus hop creates a new response boundary. Input already being
+    // transcribed follows the new destination, while late bot messages from
+    // the conversation we left are no longer eligible for automatic speech.
+    voiceStartedAt = Date.now();
+    activeVoiceResponseText = "";
+    awaitingVoiceResponses = 0;
+    voiceThinking = false;
+    cancelVoiceFiller();
+  }
+
   function toggleVoiceSession() {
     if (!voiceSession) return;
     if (voiceState.status === "connecting") {
@@ -606,16 +661,19 @@
       status = "This conversation has no active recipient";
       return;
     }
-    voiceDestination = {
-      body: "",
-      uploads: [],
+    const focusedDestination = voiceDestinationForFocus({
       workspaceID: selectedWorkspaceID,
       channelID: selectedChannelID || undefined,
       directConversationID: selectedDirectID || undefined,
       topicID: selectedChannelID ? selectedComposerTopicID || undefined : undefined,
       topicFilterID: activeTopicFilterID,
       topicFilterGeneration,
-      viewKey: currentConversationKey(),
+    });
+    if (!focusedDestination) return;
+    voiceDestination = {
+      body: "",
+      uploads: [],
+      ...focusedDestination,
     };
     voiceStartedAt = Date.now();
     voiceDraft.clear();

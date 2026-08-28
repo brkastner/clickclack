@@ -1,6 +1,47 @@
 export type VoiceStatus = "idle" | "connecting" | "listening" | "speaking" | "failed";
 export type VoiceInputStatus = "live" | "pausing" | "paused" | "resuming";
 
+export type VoiceFocus = {
+  workspaceID: string;
+  channelID?: string;
+  directConversationID?: string;
+  topicID?: string;
+  topicFilterID: string;
+  topicFilterGeneration: number;
+};
+
+export type VoiceDestination = VoiceFocus & {
+  viewKey: string;
+};
+
+export function voiceDestinationForFocus(focus: VoiceFocus): VoiceDestination | null {
+  const viewKey = focus.directConversationID || focus.channelID || "";
+  if (!focus.workspaceID || !viewKey) return null;
+  return {
+    workspaceID: focus.workspaceID,
+    channelID: focus.channelID,
+    directConversationID: focus.directConversationID,
+    topicID: focus.channelID ? focus.topicID : undefined,
+    topicFilterID: focus.channelID ? focus.topicFilterID : "",
+    topicFilterGeneration: focus.channelID ? focus.topicFilterGeneration : 0,
+    viewKey,
+  };
+}
+
+export function voiceFocusChanged(
+  previous: VoiceDestination | null,
+  next: VoiceDestination | null,
+): boolean {
+  return previous?.workspaceID !== next?.workspaceID || previous?.viewKey !== next?.viewKey;
+}
+
+export function voiceResponsePlaybackEnabled(
+  status: VoiceStatus,
+  awaitingResponses: number,
+): boolean {
+  return awaitingResponses > 0 && (status === "listening" || status === "speaking");
+}
+
 type VoiceResponseCandidate = {
   id: string;
   body: string;

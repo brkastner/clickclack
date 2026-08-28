@@ -5,6 +5,9 @@ import {
   BrowserVoiceSession,
   collectVoiceResponseCandidates,
   prepareTextForSpeech,
+  voiceDestinationForFocus,
+  voiceFocusChanged,
+  voiceResponsePlaybackEnabled,
   VoiceDraftAccumulator,
   type VoiceState,
   type VoiceTranscript,
@@ -143,6 +146,70 @@ class FakePeer {
     } as unknown as RTCTrackEvent);
   }
 }
+
+test("moves voice routing between focused channels and DMs", () => {
+  const channelA = voiceDestinationForFocus({
+    workspaceID: "workspace-1",
+    channelID: "channel-a",
+    topicID: "topic-a",
+    topicFilterID: "topic-a",
+    topicFilterGeneration: 1,
+  });
+  const channelB = voiceDestinationForFocus({
+    workspaceID: "workspace-1",
+    channelID: "channel-b",
+    topicFilterID: "",
+    topicFilterGeneration: 2,
+  });
+  const direct = voiceDestinationForFocus({
+    workspaceID: "workspace-1",
+    directConversationID: "dm-1",
+    topicFilterID: "",
+    topicFilterGeneration: 0,
+  });
+
+  assert.deepEqual(channelA, {
+    workspaceID: "workspace-1",
+    channelID: "channel-a",
+    directConversationID: undefined,
+    topicID: "topic-a",
+    topicFilterID: "topic-a",
+    topicFilterGeneration: 1,
+    viewKey: "channel-a",
+  });
+  assert.equal(voiceFocusChanged(channelA, channelB), true);
+  assert.equal(voiceFocusChanged(channelB, direct), true);
+  assert.equal(direct?.viewKey, "dm-1");
+  assert.equal(
+    voiceFocusChanged(
+      channelA,
+      voiceDestinationForFocus({
+        workspaceID: "workspace-1",
+        channelID: "channel-a",
+        topicID: "topic-b",
+        topicFilterID: "topic-b",
+        topicFilterGeneration: 2,
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    voiceDestinationForFocus({
+      workspaceID: "workspace-1",
+      topicFilterID: "",
+      topicFilterGeneration: 0,
+    }),
+    null,
+  );
+});
+
+test("speaks responses only while the focused conversation is awaiting one", () => {
+  assert.equal(voiceResponsePlaybackEnabled("listening", 0), false);
+  assert.equal(voiceResponsePlaybackEnabled("speaking", 0), false);
+  assert.equal(voiceResponsePlaybackEnabled("idle", 1), false);
+  assert.equal(voiceResponsePlaybackEnabled("listening", 1), true);
+  assert.equal(voiceResponsePlaybackEnabled("speaking", 1), true);
+});
 
 test("preserves and combines transcript segments across microphone pauses", () => {
   const draft = new VoiceDraftAccumulator();
