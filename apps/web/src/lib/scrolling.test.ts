@@ -23,8 +23,8 @@ test("middle autoscroll has a dead zone and follows vertical direction", () => {
 
 test("middle autoscroll accelerates with distance and caps its speed", () => {
   assert.ok(middleAutoscrollVelocity(160) > middleAutoscrollVelocity(40));
-  assert.equal(middleAutoscrollVelocity(220), 2_400);
-  assert.equal(middleAutoscrollVelocity(1_000), 2_400);
+  assert.equal(middleAutoscrollVelocity(220), 9_600);
+  assert.equal(middleAutoscrollVelocity(1_000), 9_600);
 });
 
 test("message history handles page keys without stealing modal or editor navigation", () => {

@@ -695,7 +695,7 @@
           <div
             class="markdown voice-transcript__text"
             use:enhanceMarkdown
-            use:enhanceCodeBlockCopy={message.author?.kind === "human"}
+            use:enhanceCodeBlockCopy={true}
             use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
           >{@html markdown(message.body)}</div>
         {:else}
@@ -708,7 +708,7 @@
     <div
       class="markdown"
       use:enhanceMarkdown
-      use:enhanceCodeBlockCopy={message.author?.kind === "human"}
+      use:enhanceCodeBlockCopy={true}
       use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
     >{@html markdown(message.body)}</div>
     {#if message.edited_at}

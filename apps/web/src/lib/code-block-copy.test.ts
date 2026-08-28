@@ -9,12 +9,11 @@ const messageRow = readFileSync(
 );
 const messageStyles = readFileSync(new URL("../styles/messages.css", import.meta.url), "utf8");
 
-test("enables per-block copy controls only for human messages", () => {
-  const uses = [
-    ...messageRow.matchAll(/use:enhanceCodeBlockCopy=\{message\.author\?\.kind === "human"\}/gu),
-  ];
+test("enables per-block copy controls for human and agent messages", () => {
+  const uses = [...messageRow.matchAll(/use:enhanceCodeBlockCopy=\{true\}/gu)];
 
-  assert.equal(uses.length, 2, "ordinary and voice message markdown should share the guard");
+  assert.equal(uses.length, 2, "ordinary and voice message markdown should both enable copying");
+  assert.doesNotMatch(messageRow, /enhanceCodeBlockCopy=\{message\.author\?\.kind/u);
 });
 
 test("copies code content rather than the whole message or wrapper", () => {
@@ -37,4 +36,13 @@ test("keeps the control sticky while its tall code block remains visible", () =>
   assert.match(trackStyles, /position:\s*absolute/u);
   assert.match(trackStyles, /inset:\s*0 0 0 auto/u);
   assert.match(trackStyles, /width:\s*42px/u);
+});
+
+test("moves the post-preamble hover timestamp to the answer's top-right", () => {
+  const timestampStyles =
+    messageStyles.match(
+      /\.message-group\.is-agent \.message-row\.after-preamble \.row-stamp\s*\{([\s\S]*?)\}/u,
+    )?.[1] ?? "";
+  assert.match(timestampStyles, /right:\s*0/u);
+  assert.match(timestampStyles, /left:\s*auto/u);
 });

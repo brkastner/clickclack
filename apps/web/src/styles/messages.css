@@ -3156,6 +3156,11 @@
   box-shadow: none;
 }
 
+.message-group.is-agent .message-row.after-preamble .row-stamp {
+  right: 0;
+  left: auto;
+}
+
 .message-row.is-voice .message-content {
   width: min(100%, 760px);
   padding: 12px 14px;
