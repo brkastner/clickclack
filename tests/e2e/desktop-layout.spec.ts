@@ -60,6 +60,7 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     const userCard = document.querySelector<HTMLElement>(".user-card");
     const workspaceLabel = document.querySelector<HTMLElement>(".desktop-titlebar-workspace");
     const channelLabel = document.querySelector<HTMLElement>(".desktop-titlebar-channel");
+    const channelGlyph = channelLabel?.querySelector<HTMLElement>(".title-glyph");
     const search = document.querySelector<HTMLElement>(".desktop-titlebar-search");
 
     if (
@@ -70,6 +71,7 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
       !userCard ||
       !workspaceLabel ||
       !channelLabel ||
+      !channelGlyph ||
       !search
     ) {
       throw new Error("desktop layout fixture did not render");
@@ -109,6 +111,11 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
         workspace: Number.parseFloat(getComputedStyle(workspaceLabel).letterSpacing),
         channel: Number.parseFloat(getComputedStyle(channelLabel).letterSpacing),
       },
+      channelGlyph: {
+        text: channelGlyph.textContent,
+        color: getComputedStyle(channelGlyph).color,
+        titleColor: getComputedStyle(channelLabel).color,
+      },
       searchWidth: search.getBoundingClientRect().width,
       footer: {
         x: userCardRect.x,
@@ -128,12 +135,35 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   expect(geometry.channelTruncated).toBe(false);
   expect(geometry.titleTracking.workspace).toBeGreaterThan(0);
   expect(geometry.titleTracking.channel).toBeGreaterThan(0);
+  expect(geometry.channelGlyph.text).toBe("#");
+  expect(geometry.channelGlyph.color).not.toBe(geometry.channelGlyph.titleColor);
   expect(geometry.searchWidth).toBeGreaterThan(0);
   expect(geometry.searchWidth).toBeLessThanOrEqual(520);
   expect(geometry.avatarX.profile).toBeCloseTo(geometry.avatarX.dm, 0);
   expect(geometry.footer.x).toBeCloseTo(geometry.footer.railX, 0);
   expect(geometry.footer.width).toBeCloseTo(geometry.footer.combinedNavigationWidth, 0);
   expect(geometry.footer.avatarCenterX).toBeCloseTo(geometry.footer.railCenterX, 0);
+});
+
+test("accents only the explicit glyph in the web channel title", async ({ page }) => {
+  const workspace = await createWorkspace(page, Date.now());
+  const channel = await createChannel(page, workspace.id);
+  await page.goto(`/app/${workspace.route_id}/${channel.id}`);
+  await waitForAppReady(page);
+
+  const title = page.locator(".topbar-title h1.channel");
+  const glyph = title.locator(".title-glyph");
+  await expect(title).toHaveText("#channel-layout");
+  await expect(glyph).toHaveText("#");
+  const colors = await title.evaluate((element) => {
+    const titleGlyph = element.querySelector<HTMLElement>(".title-glyph");
+    if (!titleGlyph) throw new Error("channel glyph did not render");
+    return {
+      glyph: getComputedStyle(titleGlyph).color,
+      title: getComputedStyle(element).color,
+    };
+  });
+  expect(colors.glyph).not.toBe(colors.title);
 });
 
 test("opens threads only from the explicit thread action", async ({ context, page }) => {

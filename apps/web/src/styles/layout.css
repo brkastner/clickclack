@@ -418,9 +418,8 @@
   white-space: nowrap;
 }
 
-.desktop-titlebar-channel.with-glyph::first-letter {
+.desktop-titlebar-channel .title-glyph {
   color: var(--accent);
-  margin-right: 1px;
 }
 
 .desktop-titlebar-divider {
@@ -551,10 +550,9 @@
 }
 
 /* The leading # / @ glyph carries the accent so the title echoes the active
-   nav item instead of reading as greyed-out text. */
-.topbar-title h1.with-glyph::first-letter {
+   nav item without also tinting the first letter of the title. */
+.topbar-title h1 .title-glyph {
   color: var(--accent);
-  margin-right: 1px;
 }
 
 .topbar-divider {
