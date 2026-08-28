@@ -6,6 +6,13 @@
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { time, markdown } from "../../lib/format";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import {
+    getMessageAudio,
+    hasCachedMessageAudio,
+    messageAudioKey,
+    type CachedMessageAudio,
+    type MessageAudioState,
+  } from "../../lib/messageAudio";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
@@ -157,6 +164,26 @@
       (!isDeleted || hasThreadReplies || isThreadOpen),
   );
   let topic = $derived(topics.find((candidate) => candidate.id === message.topic_id));
+  let canPlayAloud = $derived(
+    message.author?.kind === "bot" &&
+      !preambleBlock &&
+      !isVoice &&
+      !isDeleted &&
+      !isPending &&
+      !isFailed &&
+      Boolean(message.body.trim()),
+  );
+  let messageAudioLabel = $derived(
+    messageAudioState === "generating"
+      ? "Generating speech"
+      : messageAudioState === "playing"
+        ? "Pause playback"
+        : messageAudioState === "ready"
+          ? "Play again"
+          : messageAudioState === "error"
+            ? "Retry Play aloud"
+            : "Play aloud",
+  );
 
   function openThreadFromRow(event: MouseEvent) {
     if (suppressRowClick || showActionSheet) {
@@ -186,6 +213,11 @@
 
   let showReactPicker = $state(false);
   let showMenu = $state(false);
+  let messageAudioState = $state<MessageAudioState>("idle");
+  let messageAudioError = $state("");
+  let activeMessageAudio: CachedMessageAudio | null = null;
+  let activeMessageAudioKey = "";
+  let removeMessageAudioListeners = () => {};
   let copyStatus = $state<"copied" | "failed" | "">("");
   let copyLinkStatus = $state<"pending" | "failed" | "">("");
   let copyLinkFallback = $state("");
@@ -330,6 +362,65 @@
       return false;
     }
   }
+
+  function detachMessageAudio() {
+    removeMessageAudioListeners();
+    removeMessageAudioListeners = () => {};
+    activeMessageAudio = null;
+  }
+
+  function bindMessageAudio(entry: CachedMessageAudio) {
+    detachMessageAudio();
+    activeMessageAudio = entry;
+    const handleEnded = () => {
+      messageAudioState = "ready";
+    };
+    const handleError = () => {
+      messageAudioState = "error";
+      messageAudioError = "Generated audio could not be played";
+    };
+    entry.audio.addEventListener("ended", handleEnded);
+    entry.audio.addEventListener("error", handleError);
+    removeMessageAudioListeners = () => {
+      entry.audio.removeEventListener("ended", handleEnded);
+      entry.audio.removeEventListener("error", handleError);
+    };
+  }
+
+  async function toggleMessageAudio() {
+    if (!canPlayAloud || messageAudioState === "generating") return;
+    if (messageAudioState === "playing" && activeMessageAudio) {
+      activeMessageAudio.audio.pause();
+      messageAudioState = "ready";
+      return;
+    }
+
+    messageAudioError = "";
+    const cached = hasCachedMessageAudio(message.id, message.body);
+    messageAudioState = cached ? "ready" : "generating";
+    try {
+      const entry = await getMessageAudio(message.id, message.body);
+      if (entry.key !== messageAudioKey(message.id, message.body)) return;
+      bindMessageAudio(entry);
+      entry.audio.currentTime = 0;
+      const playing = entry.audio.play();
+      messageAudioState = "playing";
+      await playing;
+    } catch (error) {
+      messageAudioError = error instanceof Error ? error.message : "Text-to-speech failed";
+      messageAudioState = activeMessageAudio ? "ready" : "error";
+    }
+  }
+
+  $effect(() => {
+    const nextKey = messageAudioKey(message.id, message.body);
+    if (nextKey === activeMessageAudioKey) return;
+    activeMessageAudio?.audio.pause();
+    detachMessageAudio();
+    activeMessageAudioKey = nextKey;
+    messageAudioError = "";
+    messageAudioState = hasCachedMessageAudio(message.id, message.body) ? "ready" : "idle";
+  });
 
   async function writeMessageLink(): Promise<{ copied: boolean; fallback?: string }> {
     if (!onCopyLink || copyLinkStatus === "pending") return { copied: false };
@@ -581,6 +672,7 @@
 
   onDestroy(() => {
     destroyed = true;
+    detachMessageAudio();
     if (copyStatusTimer) window.clearTimeout(copyStatusTimer);
     clearSheetCloseTimer();
     stopLongPressTracking();
@@ -749,6 +841,19 @@
         aria-live="polite"
       >{copyStatus === "copied" ? "Copied" : "Couldn't copy"}</span>
     {/if}
+    <button
+      type="button"
+      class="message-action-copy tooltip"
+      aria-label="Copy message"
+      data-tooltip="Copy message"
+      onclick={() => void writeMessageToClipboard()}
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+        </g>
+      </svg>
+    </button>
     {#each QUICK_REACTS as emoji}
       <button
         type="button"
@@ -788,6 +893,38 @@
         />
       {/if}
     </div>
+    {#if canPlayAloud}
+      <button
+        type="button"
+        class="message-play-aloud tooltip"
+        class:is-generating={messageAudioState === "generating"}
+        class:is-playing={messageAudioState === "playing"}
+        class:is-ready={messageAudioState === "ready"}
+        class:is-error={messageAudioState === "error"}
+        aria-label={messageAudioLabel}
+        aria-busy={messageAudioState === "generating"}
+        data-tooltip={messageAudioError || messageAudioLabel}
+        onclick={toggleMessageAudio}
+      >
+        {#if messageAudioState === "generating"}
+          <svg class="message-play-aloud__spinner" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M20 12a8 8 0 1 1-2.34-5.66"/>
+          </svg>
+        {:else if messageAudioState === "playing"}
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="currentColor" d="M7 5h4v14H7zm6 0h4v14h-4z"/>
+          </svg>
+        {:else if messageAudioState === "ready"}
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="currentColor" d="m8 5 11 7-11 7V5Z"/>
+          </svg>
+        {:else}
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 10v4h4l5 4V6L9 10H5Zm12-1a4 4 0 0 1 0 6m2-8.5a8 8 0 0 1 0 11"/>
+          </svg>
+        {/if}
+      </button>
+    {/if}
     <span class="action-sep" aria-hidden="true"></span>
     <button
       type="button"

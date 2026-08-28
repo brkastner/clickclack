@@ -102,7 +102,7 @@
         >{group.authorName}</button>
         {#if isBot}<span class="bot-chip">bot</span>{/if}
       {/if}
-      {#if group.authorHandle}<span>{handleLabel(group.authorHandle)}</span>{/if}
+      {#if group.authorHandle}<span class="author-handle">{handleLabel(group.authorHandle)}</span>{/if}
       <time>{time(group.timestamp)}</time>
     </header>
     {#each group.messages as message, index (message.id)}

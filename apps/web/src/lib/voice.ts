@@ -252,6 +252,10 @@ export class BrowserVoiceSession {
     return false;
   }
 
+  setOutputMuted(muted: boolean): void {
+    this.audio.muted = muted;
+  }
+
   speak(text: string): boolean {
     const speech = prepareTextForSpeech(text);
     if (!speech || this.dataChannel?.readyState !== "open") return false;

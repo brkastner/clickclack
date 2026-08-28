@@ -156,6 +156,8 @@
   let voiceInputStream: MediaStream | null = null;
   const voiceDraft = new VoiceDraftAccumulator();
   let activeVoiceTranscript: VoiceTranscript | null = null;
+  let activeVoiceResponseText = "";
+  let voiceOutputMuted = false;
   let voiceDestination: OutgoingDraft | null = null;
   let voiceStartedAt = 0;
   let awaitingVoiceResponses = 0;
@@ -402,6 +404,7 @@
     let spoke = false;
     for (const candidate of candidates) {
       if (!voiceSession.speak(candidate.body)) continue;
+      activeVoiceResponseText = candidate.body;
       spokenVoiceMessageIDs.add(candidate.id);
       spoke = true;
     }
@@ -525,6 +528,8 @@
       cancelVoiceFiller();
       voiceDraft.clear();
       activeVoiceTranscript = null;
+      activeVoiceResponseText = "";
+      voiceOutputMuted = false;
       voiceDestination = null;
       awaitingVoiceResponses = 0;
       voiceThinking = false;
@@ -533,6 +538,7 @@
 
   function handleVoiceTranscript(transcript: VoiceTranscript) {
     if (committedVoiceTurnIDs.has(transcript.turnID)) return;
+    activeVoiceResponseText = "";
     if (!voiceDraft.update(transcript)) return;
     const draft = voiceDraft.snapshot();
     if (!draft) return;
@@ -614,6 +620,9 @@
     voiceStartedAt = Date.now();
     voiceDraft.clear();
     activeVoiceTranscript = null;
+    activeVoiceResponseText = "";
+    voiceOutputMuted = false;
+    voiceSession.setOutputMuted(false);
     awaitingVoiceResponses = 0;
     voiceThinking = false;
     committedVoiceTurnIDs = new Set();
@@ -623,6 +632,12 @@
 
   function endVoiceSession() {
     voiceSession?.disconnect();
+  }
+
+  function toggleVoiceOutput() {
+    if (!voiceSession) return;
+    voiceOutputMuted = !voiceOutputMuted;
+    voiceSession.setOutputMuted(voiceOutputMuted);
   }
 
   function sendVoiceDraft() {
@@ -4801,8 +4816,12 @@
       voiceError={voiceState.error}
       voiceWaiting={voiceThinking}
       voiceDraftAvailable={Boolean(activeVoiceTranscript?.text.trim())}
-      voiceStream={remoteVoiceStream ?? voiceInputStream}
+      voiceTranscript={activeVoiceTranscript?.text || ""}
+      voiceResponseText={activeVoiceResponseText}
+      {voiceOutputMuted}
+      voiceStream={voiceState.status === "speaking" ? remoteVoiceStream : voiceInputStream}
       onToggleVoice={toggleVoiceSession}
+      onToggleVoiceOutput={toggleVoiceOutput}
       onSendVoice={sendVoiceDraft}
       onEndVoice={endVoiceSession}
       showGifPicker={showGifPicker}

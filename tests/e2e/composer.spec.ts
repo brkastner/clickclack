@@ -41,6 +41,7 @@ test("offers rich formatting controls and a functional voice control", async ({ 
   await editor.fill("polished composer");
   await editor.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
 
+  await page.getByRole("button", { name: "Toggle formatting tools" }).click();
   const bold = page.getByRole("button", { name: "Bold" });
   await bold.click();
   await expect(bold).toHaveAttribute("aria-pressed", "true");
@@ -51,9 +52,8 @@ test("offers rich formatting controls and a functional voice control", async ({ 
   await heading.click();
   await expect(editor.locator("h2")).toContainText("polished composer");
 
-  const voice = page.getByRole("button", { name: "Start voice conversation" });
+  const voice = page.getByRole("button", { name: "Start live voice conversation" });
   await expect(voice).toBeVisible();
-  await expect(voice).toHaveAttribute("aria-pressed", "false");
   await expect(editor).toContainText("polished composer");
 
   const created = page.waitForRequest(
@@ -73,7 +73,7 @@ test("keeps quotes compact and converts language-tagged code fences", async ({ p
   await openChannel(page, workspace.route_id);
 
   const editor = page.getByLabel("Message body");
-  await page.getByRole("button", { name: "Quote" }).click();
+  await page.getByRole("button", { name: "Blockquote" }).click();
   await editor.pressSequentially("this is a test");
 
   const quote = editor.locator("blockquote");
