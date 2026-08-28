@@ -28,6 +28,7 @@
   import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import { messageAudioPlayback } from "../../lib/messageAudioPlayback";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Channel, DirectConversation, Message, Topic, Upload, User } from "../../lib/types";
   import HistoryLoader from "./HistoryLoader.svelte";
@@ -173,6 +174,17 @@
   let unreadClearing = $state(false);
   let unreadExitTimer: number | undefined;
   let dividerUnreadCount = $derived(targetUnreadCount > 0 ? targetUnreadCount : displayUnreadCount);
+  let messageAudioOverlayVisible = $derived(
+    $messageAudioPlayback.status === "playing" || $messageAudioPlayback.status === "paused",
+  );
+
+  function toggleActiveMessageAudio() {
+    if ($messageAudioPlayback.status === "playing") {
+      messageAudioPlayback.pause();
+    } else if ($messageAudioPlayback.status === "paused") {
+      void messageAudioPlayback.resume();
+    }
+  }
 
   function clearUnreadExitTimer() {
     if (!unreadExitTimer) return;
@@ -921,9 +933,58 @@
       </Virtualizer>
     </div>
   {/if}
+  {#if messageAudioOverlayVisible}
+    <div
+      class="message-audio-overlay"
+      role="group"
+      aria-label="Text-to-speech playback controls"
+      data-testid="message-audio-overlay"
+    >
+      <button
+        type="button"
+        class="message-audio-overlay__control"
+        aria-label="Restart playback"
+        data-tooltip="Restart"
+        onclick={() => void messageAudioPlayback.restart()}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M5.8 15a7 7 0 1 0 .2-6.9L4 10"/>
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="message-audio-overlay__control message-audio-overlay__control--primary"
+        aria-label={$messageAudioPlayback.status === "playing" ? "Pause playback" : "Resume playback"}
+        data-tooltip={$messageAudioPlayback.status === "playing" ? "Pause" : "Play"}
+        onclick={toggleActiveMessageAudio}
+      >
+        {#if $messageAudioPlayback.status === "playing"}
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M7 5h4v14H7zm6 0h4v14h-4z"/>
+          </svg>
+        {:else}
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="m8 5 11 7-11 7V5Z"/>
+          </svg>
+        {/if}
+      </button>
+      <button
+        type="button"
+        class="message-audio-overlay__control"
+        aria-label="Stop playback"
+        data-tooltip="Stop"
+        onclick={() => messageAudioPlayback.stop()}
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+  {/if}
   {#if !loading && messages.length > 0 && displayUnreadCount > 0}
     <div
       class="unread-bar"
+      class:has-audio-overlay={messageAudioOverlayVisible}
       class:is-clearing={unreadClearing}
       role="status"
       aria-hidden={unreadClearing ? "true" : undefined}

@@ -7,12 +7,11 @@
   import { time, markdown } from "../../lib/format";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import {
-    getMessageAudio,
     hasCachedMessageAudio,
     messageAudioKey,
-    type CachedMessageAudio,
     type MessageAudioState,
   } from "../../lib/messageAudio";
+  import { messageAudioPlayback } from "../../lib/messageAudioPlayback";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
@@ -173,13 +172,29 @@
       !isFailed &&
       Boolean(message.body.trim()),
   );
+  let currentMessageAudioKey = $derived(messageAudioKey(message.id, message.body));
+  let messageAudioState = $derived.by((): MessageAudioState => {
+    if ($messageAudioPlayback.key === currentMessageAudioKey) {
+      if ($messageAudioPlayback.status === "generating") return "generating";
+      if ($messageAudioPlayback.status === "playing") return "playing";
+      if ($messageAudioPlayback.status === "paused") return "ready";
+      if ($messageAudioPlayback.status === "error") return "error";
+    }
+    return hasCachedMessageAudio(message.id, message.body) ? "ready" : "idle";
+  });
+  let messageAudioError = $derived(
+    $messageAudioPlayback.key === currentMessageAudioKey ? $messageAudioPlayback.error : "",
+  );
   let messageAudioLabel = $derived(
     messageAudioState === "generating"
       ? "Generating speech"
       : messageAudioState === "playing"
         ? "Pause playback"
         : messageAudioState === "ready"
-          ? "Play again"
+          ? $messageAudioPlayback.key === currentMessageAudioKey &&
+            $messageAudioPlayback.status === "paused"
+            ? "Resume playback"
+            : "Play again"
           : messageAudioState === "error"
             ? "Retry Play aloud"
             : "Play aloud",
@@ -189,11 +204,7 @@
 
   let showReactPicker = $state(false);
   let showMenu = $state(false);
-  let messageAudioState = $state<MessageAudioState>("idle");
-  let messageAudioError = $state("");
-  let activeMessageAudio: CachedMessageAudio | null = null;
-  let activeMessageAudioKey = "";
-  let removeMessageAudioListeners = () => {};
+  let activeMessageAudioKey = $state("");
   let copyStatus = $state<"copied" | "failed" | "">("");
   let copyLinkStatus = $state<"pending" | "failed" | "">("");
   let copyLinkFallback = $state("");
@@ -339,63 +350,20 @@
     }
   }
 
-  function detachMessageAudio() {
-    removeMessageAudioListeners();
-    removeMessageAudioListeners = () => {};
-    activeMessageAudio = null;
-  }
-
-  function bindMessageAudio(entry: CachedMessageAudio) {
-    detachMessageAudio();
-    activeMessageAudio = entry;
-    const handleEnded = () => {
-      messageAudioState = "ready";
-    };
-    const handleError = () => {
-      messageAudioState = "error";
-      messageAudioError = "Generated audio could not be played";
-    };
-    entry.audio.addEventListener("ended", handleEnded);
-    entry.audio.addEventListener("error", handleError);
-    removeMessageAudioListeners = () => {
-      entry.audio.removeEventListener("ended", handleEnded);
-      entry.audio.removeEventListener("error", handleError);
-    };
-  }
-
   async function toggleMessageAudio() {
     if (!canPlayAloud || messageAudioState === "generating") return;
-    if (messageAudioState === "playing" && activeMessageAudio) {
-      activeMessageAudio.audio.pause();
-      messageAudioState = "ready";
-      return;
-    }
-
-    messageAudioError = "";
-    const cached = hasCachedMessageAudio(message.id, message.body);
-    messageAudioState = cached ? "ready" : "generating";
-    try {
-      const entry = await getMessageAudio(message.id, message.body);
-      if (entry.key !== messageAudioKey(message.id, message.body)) return;
-      bindMessageAudio(entry);
-      entry.audio.currentTime = 0;
-      const playing = entry.audio.play();
-      messageAudioState = "playing";
-      await playing;
-    } catch (error) {
-      messageAudioError = error instanceof Error ? error.message : "Text-to-speech failed";
-      messageAudioState = activeMessageAudio ? "ready" : "error";
-    }
+    await messageAudioPlayback.toggle(message.id, message.body);
   }
 
   $effect(() => {
     const nextKey = messageAudioKey(message.id, message.body);
+    if (!activeMessageAudioKey) {
+      activeMessageAudioKey = nextKey;
+      return;
+    }
     if (nextKey === activeMessageAudioKey) return;
-    activeMessageAudio?.audio.pause();
-    detachMessageAudio();
+    if ($messageAudioPlayback.key === activeMessageAudioKey) messageAudioPlayback.stop();
     activeMessageAudioKey = nextKey;
-    messageAudioError = "";
-    messageAudioState = hasCachedMessageAudio(message.id, message.body) ? "ready" : "idle";
   });
 
   async function writeMessageLink(): Promise<{ copied: boolean; fallback?: string }> {
@@ -643,7 +611,6 @@
 
   onDestroy(() => {
     destroyed = true;
-    detachMessageAudio();
     if (copyStatusTimer) window.clearTimeout(copyStatusTimer);
     clearSheetCloseTimer();
     stopLongPressTracking();
