@@ -25,5 +25,16 @@ test("copies code content rather than the whole message or wrapper", () => {
 test("reveals the overlaid control on block hover and keyboard focus", () => {
   assert.match(messageStyles, /\.code-block:hover \.code-block-copy/u);
   assert.match(messageStyles, /\.code-block-copy:focus-visible/u);
-  assert.match(messageStyles, /position:\s*absolute;[\s\S]*?top:\s*7px;[\s\S]*?right:\s*7px;/u);
+  assert.match(
+    messageStyles,
+    /\.code-block-copy\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?top:\s*15px;/u,
+  );
+});
+
+test("keeps the control sticky while its tall code block remains visible", () => {
+  assert.match(action, /controlTrack\.append\(button\);\s*wrapper\.append\(controlTrack, pre\);/u);
+  const trackStyles = messageStyles.match(/\.code-block-copy-track\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
+  assert.match(trackStyles, /position:\s*absolute/u);
+  assert.match(trackStyles, /inset:\s*0 0 0 auto/u);
+  assert.match(trackStyles, /width:\s*42px/u);
 });

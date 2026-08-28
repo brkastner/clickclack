@@ -59,6 +59,8 @@ export function enhanceCodeBlockCopy(node: HTMLElement, enabled: boolean) {
 
       const wrapper = document.createElement("div");
       wrapper.className = "code-block";
+      const controlTrack = document.createElement("div");
+      controlTrack.className = "code-block-copy-track";
       const button = document.createElement("button");
       button.type = "button";
       button.className = "code-block-copy";
@@ -69,7 +71,8 @@ export function enhanceCodeBlockCopy(node: HTMLElement, enabled: boolean) {
       const originalParent = pre.parentNode;
       const originalNextSibling = pre.nextSibling;
       originalParent?.insertBefore(wrapper, pre);
-      wrapper.append(pre, button);
+      controlTrack.append(button);
+      wrapper.append(controlTrack, pre);
 
       const state: DecoratedCodeBlock = {
         code,
