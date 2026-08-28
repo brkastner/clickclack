@@ -2838,7 +2838,7 @@
   content: "";
   position: absolute;
   top: 82px;
-  bottom: -16px;
+  bottom: 14px;
   left: 51px;
   width: 1px;
   background: var(--line);
@@ -2977,14 +2977,16 @@
 
 .message-row .message-actions {
   position: static;
-  width: auto;
-  min-height: 38px;
   display: flex;
+  width: auto;
+  height: 0;
+  min-height: 0;
   align-items: center;
   justify-content: flex-start;
   gap: 2px;
   margin: 0;
-  padding: 5px 0 4px;
+  padding: 0;
+  overflow: hidden;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2999,6 +3001,10 @@
 .message-row:has(:focus-visible) .message-actions,
 .message-row.selected .message-actions,
 .message-row.menu-open .message-actions {
+  height: 38px;
+  min-height: 38px;
+  padding: 5px 0 4px;
+  overflow: visible;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -3093,7 +3099,7 @@
   .message-group.is-self::after {
     top: 59px;
     right: auto;
-    bottom: -13px;
+    bottom: 11px;
     left: 39px;
   }
 

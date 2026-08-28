@@ -174,3 +174,49 @@ test("opens threads from the message surface without hijacking copy or selection
   expect(selectedText).toContain("entire message surface");
   await expect(closeThread).toBeHidden();
 });
+
+test("ends message connectors at content and visible action controls", async ({ page }) => {
+  await installDesktopBridge(page);
+  const workspace = await createWorkspace(page, Date.now());
+  const channel = await createChannel(page, workspace.id);
+  const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: "Connector geometry should stop exactly where this message ends." },
+  });
+  expect(response.ok()).toBe(true);
+  const { message } = (await response.json()) as { message: { id: string } };
+
+  await page.goto(`/app/${workspace.route_id}/${channel.id}`);
+  await waitForAppReady(page);
+  const row = page.locator(`.message-row[data-message-id="${message.id}"]`);
+  const group = row.locator("xpath=ancestor::article[contains(@class, 'message-group')]");
+
+  const connectorGeometry = () =>
+    group.evaluate((element, messageID) => {
+      const targetRow = element.querySelector<HTMLElement>(
+        `.message-row[data-message-id="${messageID}"]`,
+      );
+      const content = targetRow?.querySelector<HTMLElement>(".message-content");
+      const actions = targetRow?.querySelector<HTMLElement>(".message-actions");
+      if (!targetRow || !content || !actions) throw new Error("message geometry did not render");
+      const groupRect = element.getBoundingClientRect();
+      const contentRect = content.getBoundingClientRect();
+      const actionsRect = actions.getBoundingClientRect();
+      const connectorBottom = Number.parseFloat(getComputedStyle(element, "::after").bottom);
+      return {
+        actionsHeight: actionsRect.height,
+        contentBottom: contentRect.bottom,
+        actionsBottom: actionsRect.bottom,
+        lineBottom: groupRect.bottom - connectorBottom,
+      };
+    }, message.id);
+
+  const resting = await connectorGeometry();
+  expect(resting.actionsHeight).toBe(0);
+  expect(resting.lineBottom).toBeCloseTo(resting.contentBottom, 0);
+
+  await row.hover();
+  await expect(row.getByRole("button", { name: "Copy message" })).toBeVisible();
+  const hovered = await connectorGeometry();
+  expect(hovered.actionsHeight).toBeGreaterThanOrEqual(38);
+  expect(hovered.lineBottom).toBeCloseTo(hovered.actionsBottom, 0);
+});
