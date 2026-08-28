@@ -185,22 +185,6 @@
             : "Play aloud",
   );
 
-  function openThreadFromRow(event: MouseEvent) {
-    if (suppressRowClick || showActionSheet) {
-      // A long-press just opened the action sheet; swallow the synthetic click.
-      suppressRowClick = false;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    if (!canOpenThread) return;
-    const selection = window.getSelection();
-    if (selection && !selection.isCollapsed && selection.toString()) return;
-    const target = event.target as HTMLElement | null;
-    if (target?.closest(MESSAGE_INTERACTIVE_TARGETS)) return;
-    onOpenThread(message);
-  }
-
   // ---- Hover toolbar: quick reacts + full picker + ⋮ overflow menu ----
 
   let showReactPicker = $state(false);
@@ -471,7 +455,6 @@
   let longPressCleanup: (() => void) | undefined;
   let actionSheetGeneration = 0;
   let actionSheetReturnFocus = $state<HTMLElement>();
-  let suppressRowClick = false;
   let actionSheetId = $derived(`message-action-sheet-${message.id}`);
 
   $effect(() => {
@@ -530,7 +513,6 @@
     const startY = event.clientY;
     longPressTimer = window.setTimeout(() => {
       longPressTimer = undefined;
-      suppressRowClick = true;
       openActionSheet();
     }, LONG_PRESS_MS);
     const onMove = (moveEvent: PointerEvent) => {
@@ -570,9 +552,6 @@
     clearSheetCloseTimer();
     actionSheetGeneration += 1;
     showActionSheet = false;
-    // The sheet's scrim can swallow the long-press mouseup, so the suppressed
-    // click may never reach the row — clear the flag on close either way.
-    suppressRowClick = false;
   }
 
   function sheetReact(emoji: string) {
@@ -702,12 +681,10 @@
   class:is-preamble-live={preambleBlock?.final === false}
   class:before-final-message={precedesFinalMessage}
   class:after-preamble={followsPreamble}
-  class:can-open-thread={canOpenThread}
   class:editing={editing}
   class:menu-open={showMenu || showReactPicker}
   class:actions-flip={actionsFlipped}
   data-message-id={message.id}
-  onclick={openThreadFromRow}
   onpointerdown={handleRowPointerDown}
   oncontextmenu={handleRowContextMenu}
   onmouseenter={() => {

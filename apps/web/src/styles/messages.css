@@ -780,10 +780,6 @@
   background: var(--accent-soft);
 }
 
-.message-row.can-open-thread {
-  cursor: pointer;
-}
-
 .message-row.is-voice {
   cursor: default;
 }
@@ -2838,7 +2834,7 @@
   content: "";
   position: absolute;
   top: 82px;
-  bottom: 14px;
+  bottom: 52px;
   left: 51px;
   width: 1px;
   background: var(--line);
@@ -2979,14 +2975,14 @@
   position: static;
   display: flex;
   width: auto;
-  height: 0;
-  min-height: 0;
+  height: 38px;
+  min-height: 38px;
   align-items: center;
   justify-content: flex-start;
   gap: 2px;
   margin: 0;
-  padding: 0;
-  overflow: hidden;
+  padding: 5px 0 4px;
+  overflow: visible;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -3001,10 +2997,6 @@
 .message-row:has(:focus-visible) .message-actions,
 .message-row.selected .message-actions,
 .message-row.menu-open .message-actions {
-  height: 38px;
-  min-height: 38px;
-  padding: 5px 0 4px;
-  overflow: visible;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -3099,7 +3091,7 @@
   .message-group.is-self::after {
     top: 59px;
     right: auto;
-    bottom: 11px;
+    bottom: 49px;
     left: 39px;
   }
 

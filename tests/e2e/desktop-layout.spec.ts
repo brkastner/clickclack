@@ -105,6 +105,10 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
       },
       workspaceTruncated: workspaceLabel.scrollWidth > workspaceLabel.clientWidth,
       channelTruncated: channelLabel.scrollWidth > channelLabel.clientWidth,
+      titleTracking: {
+        workspace: Number.parseFloat(getComputedStyle(workspaceLabel).letterSpacing),
+        channel: Number.parseFloat(getComputedStyle(channelLabel).letterSpacing),
+      },
       searchWidth: search.getBoundingClientRect().width,
       footer: {
         x: userCardRect.x,
@@ -122,6 +126,8 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   expect(geometry.topGap).toBeLessThanOrEqual(4);
   expect(geometry.workspaceTruncated).toBe(false);
   expect(geometry.channelTruncated).toBe(false);
+  expect(geometry.titleTracking.workspace).toBeGreaterThan(0);
+  expect(geometry.titleTracking.channel).toBeGreaterThan(0);
   expect(geometry.searchWidth).toBeGreaterThan(0);
   expect(geometry.searchWidth).toBeLessThanOrEqual(520);
   expect(geometry.avatarX.profile).toBeCloseTo(geometry.avatarX.dm, 0);
@@ -130,16 +136,13 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   expect(geometry.footer.avatarCenterX).toBeCloseTo(geometry.footer.railCenterX, 0);
 });
 
-test("opens threads from the message surface without hijacking copy or selection", async ({
-  context,
-  page,
-}) => {
+test("opens threads only from the explicit thread action", async ({ context, page }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await installDesktopBridge(page);
   const workspace = await createWorkspace(page, Date.now());
   const channel = await createChannel(page, workspace.id);
   const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
-    data: { body: "The entire message surface opens this thread safely." },
+    data: { body: "The entire message surface stays selectable without opening a thread." },
   });
   expect(response.ok()).toBe(true);
   const { message } = (await response.json()) as { message: { id: string } };
@@ -150,8 +153,6 @@ test("opens threads from the message surface without hijacking copy or selection
   const closeThread = page.getByRole("button", { name: "Close thread" });
 
   await row.locator(".message-content").click({ position: { x: 24, y: 12 } });
-  await expect(closeThread).toBeVisible();
-  await closeThread.click();
   await expect(closeThread).toBeHidden();
 
   await row.hover();
@@ -167,28 +168,37 @@ test("opens threads from the message surface without hijacking copy or selection
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    const text = selection?.toString() || "";
     element.click();
-    return text;
+    return selection?.toString() || "";
   });
   expect(selectedText).toContain("entire message surface");
   await expect(closeThread).toBeHidden();
+
+  await row.hover();
+  await row.getByRole("button", { name: "Open thread" }).click();
+  await expect(closeThread).toBeVisible();
 });
 
-test("ends message connectors at content and visible action controls", async ({ page }) => {
+test("reserves message actions without extending connectors through them", async ({ page }) => {
   await installDesktopBridge(page);
   const workspace = await createWorkspace(page, Date.now());
   const channel = await createChannel(page, workspace.id);
-  const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+  const firstResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: "Earlier message controls should not move anything below them." },
+  });
+  const lastResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
     data: { body: "Connector geometry should stop exactly where this message ends." },
   });
-  expect(response.ok()).toBe(true);
-  const { message } = (await response.json()) as { message: { id: string } };
+  expect(firstResponse.ok()).toBe(true);
+  expect(lastResponse.ok()).toBe(true);
+  const { message: firstMessage } = (await firstResponse.json()) as { message: { id: string } };
+  const { message: lastMessage } = (await lastResponse.json()) as { message: { id: string } };
 
   await page.goto(`/app/${workspace.route_id}/${channel.id}`);
   await waitForAppReady(page);
-  const row = page.locator(`.message-row[data-message-id="${message.id}"]`);
-  const group = row.locator("xpath=ancestor::article[contains(@class, 'message-group')]");
+  const earlierRow = page.locator(`.message-row[data-message-id="${firstMessage.id}"]`);
+  const lastRow = page.locator(`.message-row[data-message-id="${lastMessage.id}"]`);
+  const group = lastRow.locator("xpath=ancestor::article[contains(@class, 'message-group')]");
 
   const connectorGeometry = () =>
     group.evaluate((element, messageID) => {
@@ -205,18 +215,22 @@ test("ends message connectors at content and visible action controls", async ({ 
       return {
         actionsHeight: actionsRect.height,
         contentBottom: contentRect.bottom,
-        actionsBottom: actionsRect.bottom,
         lineBottom: groupRect.bottom - connectorBottom,
       };
-    }, message.id);
+    }, lastMessage.id);
 
   const resting = await connectorGeometry();
-  expect(resting.actionsHeight).toBe(0);
+  const lastRowTop = await lastRow.evaluate((element) => element.getBoundingClientRect().top);
+  expect(resting.actionsHeight).toBeGreaterThanOrEqual(38);
   expect(resting.lineBottom).toBeCloseTo(resting.contentBottom, 0);
 
-  await row.hover();
-  await expect(row.getByRole("button", { name: "Copy message" })).toBeVisible();
+  await earlierRow.hover();
+  await expect(earlierRow.getByRole("button", { name: "Copy message" })).toBeVisible();
   const hovered = await connectorGeometry();
+  const lastRowTopAfterHover = await lastRow.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  expect(lastRowTopAfterHover).toBeCloseTo(lastRowTop, 0);
   expect(hovered.actionsHeight).toBeGreaterThanOrEqual(38);
-  expect(hovered.lineBottom).toBeCloseTo(hovered.actionsBottom, 0);
+  expect(hovered.lineBottom).toBeCloseTo(hovered.contentBottom, 0);
 });
