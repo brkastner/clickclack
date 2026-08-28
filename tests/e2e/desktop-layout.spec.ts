@@ -3,17 +3,19 @@ import { waitForAppReady } from "./app-ready";
 
 async function installDesktopBridge(page: Page) {
   await page.addInitScript(() => {
-    window.clickclackDesktop = {
-      integratedTitleBar: true,
-      platform: "linux",
-      notify: async () => false,
-      onNavigate: () => () => {},
-      onQuickCompose: () => () => {},
-      openSettings: () => {},
-      setActiveRoute: () => {},
-      setUnreadCount: () => {},
-      signInWithGitHub: async () => false,
-    };
+    Object.assign(window, {
+      clickclackDesktop: {
+        integratedTitleBar: true,
+        platform: "linux",
+        notify: async () => false,
+        onNavigate: () => () => {},
+        onQuickCompose: () => () => {},
+        openSettings: () => {},
+        setActiveRoute: () => {},
+        setUnreadCount: () => {},
+        signInWithGitHub: async () => false,
+      },
+    });
   });
 }
 
@@ -198,7 +200,7 @@ test("opens threads only from the explicit thread action", async ({ context, pag
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    element.click();
+    (element as HTMLElement).click();
     return selection?.toString() || "";
   });
   expect(selectedText).toContain("entire message surface");
