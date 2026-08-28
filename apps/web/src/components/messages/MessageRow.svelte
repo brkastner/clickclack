@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
   import { readableAPIError } from "../../lib/api";
-  import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
+  import { enhanceCodeBlockCopy } from "../../lib/actions/code-block-copy";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
+  import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { time, markdown } from "../../lib/format";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
@@ -694,6 +695,7 @@
           <div
             class="markdown voice-transcript__text"
             use:enhanceMarkdown
+            use:enhanceCodeBlockCopy={message.author?.kind === "human"}
             use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
           >{@html markdown(message.body)}</div>
         {:else}
@@ -706,6 +708,7 @@
     <div
       class="markdown"
       use:enhanceMarkdown
+      use:enhanceCodeBlockCopy={message.author?.kind === "human"}
       use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
     >{@html markdown(message.body)}</div>
     {#if message.edited_at}
