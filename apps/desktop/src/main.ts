@@ -382,6 +382,16 @@ function registerIPC() {
     await beginDesktopOAuth();
     return true;
   });
+  ipcMain.handle("desktop:read-clipboard", (event) => {
+    if (!isMainSender(event)) return null;
+    return {
+      hasImage: !clipboard.readImage().isEmpty(),
+      text: clipboard.readText(),
+    };
+  });
+  ipcMain.on("desktop:paste-native", (event) => {
+    if (isMainSender(event)) event.sender.paste();
+  });
   ipcMain.handle("desktop:write-clipboard-text", (event, input) => {
     if (!isMainSender(event) || typeof input !== "string") return false;
     clipboard.writeText(input);

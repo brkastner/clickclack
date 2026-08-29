@@ -17,8 +17,8 @@ test("enables per-block copy controls for human and agent messages", () => {
 });
 
 test("copies code content rather than the whole message or wrapper", () => {
-  assert.match(action, /clipboard\.writeText\(state\.code\.textContent \?\? ""\)/u);
-  assert.doesNotMatch(action, /clipboard\.writeText\(state\.wrapper\.textContent/u);
+  assert.match(action, /writeClipboardText\(state\.code\.textContent \?\? ""\)/u);
+  assert.doesNotMatch(action, /writeClipboardText\(state\.wrapper\.textContent/u);
 });
 
 test("reveals the overlaid control on block hover and keyboard focus", () => {

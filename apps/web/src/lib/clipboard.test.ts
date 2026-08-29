@@ -1,6 +1,31 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { writeClipboardTextWith } from "./clipboard-core.ts";
+
+const composer = readFileSync(
+  new URL("../components/composer/ChatComposer.svelte", import.meta.url),
+  "utf8",
+);
+const desktopMain = readFileSync(new URL("../../../desktop/src/main.ts", import.meta.url), "utf8");
+const desktopPreload = readFileSync(
+  new URL("../../../desktop/src/app-preload.ts", import.meta.url),
+  "utf8",
+);
+
+test("routes trusted desktop paste gestures through Electron's native clipboard", () => {
+  assert.match(desktopPreload, /event\.isTrusted/u);
+  assert.match(desktopPreload, /"copy"/u);
+  assert.match(desktopPreload, /selectedText\(event\.target\)/u);
+  assert.match(desktopPreload, /desktop:write-clipboard-text/u);
+  assert.match(desktopPreload, /desktop:read-clipboard/u);
+  assert.match(desktopPreload, /desktop:paste-native/u);
+  assert.match(desktopMain, /if \(!isMainSender\(event\)\) return null;/u);
+  assert.match(desktopMain, /clipboard\.readText\(\)/u);
+  assert.match(desktopMain, /clipboard\.readImage\(\)\.isEmpty\(\)/u);
+  assert.match(composer, /desktop\?\.onPasteText/u);
+  assert.match(composer, /insertPastedText\(text, true\)/u);
+});
 
 test("uses the Electron clipboard bridge when available", async () => {
   const calls: string[] = [];

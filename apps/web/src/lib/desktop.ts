@@ -9,6 +9,7 @@ export type ClickClackDesktopBridge = {
   integratedTitleBar: boolean;
   notify(notification: DesktopNotification): Promise<boolean>;
   onNavigate(callback: (route: string) => void): () => void;
+  onPasteText(callback: (text: string) => void): () => void;
   onQuickCompose(callback: () => void): () => void;
   openSettings(): void;
   platform: "darwin" | "linux" | "win32" | string;

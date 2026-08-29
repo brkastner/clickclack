@@ -15,6 +15,7 @@
     type PendingAttachment,
   } from "../../lib/attachments";
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
+  import { desktop } from "../../lib/desktop";
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
@@ -318,6 +319,12 @@
     return () => onInputRef(null);
   });
 
+  $effect(() =>
+    desktop?.onPasteText((text) => {
+      if (editorInstance?.isFocused) insertPastedText(text, true);
+    }),
+  );
+
   $effect(() => {
     if (activeSuggestions.length === 0) {
       selectedSuggestionIndex = 0;
@@ -482,21 +489,32 @@
     onFocus();
   }
 
+  function insertPastedText(text: string, forcePlainText = false): boolean {
+    const editor = editorInstance;
+    if (!editor || !text) return false;
+    const containsBlockMarkdown = /(^|\n)(#{1,6}\s|>\s|[-*+]\s|\d+\.\s|```[\w.+-]*\s*$)/m.test(text);
+    if (!containsBlockMarkdown) {
+      if (!forcePlainText) return false;
+      return editor.view.pasteText(text);
+    }
+    if (editor.isEmpty) editor.commands.setContent(text, { contentType: "markdown" });
+    else editor.commands.insertContent(text, { contentType: "markdown" });
+    return true;
+  }
+
   function handlePaste(event: ClipboardEvent): boolean {
-    if (!event.clipboardData) return false;
-    const files = clipboardImageFiles(event.clipboardData.items);
+    const files = event.clipboardData
+      ? clipboardImageFiles(event.clipboardData.items)
+      : [];
     if (files.length > 0 && onPasteFiles) {
       event.preventDefault();
       onPasteFiles(files);
       return true;
     }
+    if (!event.clipboardData) return false;
     const text = event.clipboardData.getData("text/plain");
-    const containsBlockMarkdown = /(^|\n)(#{1,6}\s|>\s|[-*+]\s|\d+\.\s|```[\w.+-]*\s*$)/m.test(text);
-    const editor = editorInstance;
-    if (!editor || !text || !containsBlockMarkdown) return false;
+    if (!insertPastedText(text)) return false;
     event.preventDefault();
-    if (editor.isEmpty) editor.commands.setContent(text, { contentType: "markdown" });
-    else editor.commands.insertContent(text, { contentType: "markdown" });
     return true;
   }
 

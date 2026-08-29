@@ -1,3 +1,5 @@
+import { writeClipboardText } from "../clipboard";
+
 type DecoratedCodeBlock = {
   code: HTMLElement;
   wrapper: HTMLDivElement;
@@ -86,9 +88,7 @@ export function enhanceCodeBlockCopy(node: HTMLElement, enabled: boolean) {
         event.preventDefault();
         event.stopPropagation();
         if (state.resetTimer) window.clearTimeout(state.resetTimer);
-        const copy = navigator.clipboard
-          ? navigator.clipboard.writeText(state.code.textContent ?? "")
-          : Promise.reject(new Error("Clipboard unavailable"));
+        const copy = writeClipboardText(state.code.textContent ?? "");
         void copy
           .then(() => {
             if (destroyed) return;
