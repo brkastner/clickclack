@@ -338,11 +338,13 @@ test("pinned-items controls are absent from desktop direct conversations", async
         platform: "darwin",
         notify: async () => true,
         onNavigate: () => () => {},
+        onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},
         setActiveRoute: () => {},
         setUnreadCount: () => {},
         signInWithGitHub: async () => true,
+        writeClipboardText: async () => true,
       },
     });
   });

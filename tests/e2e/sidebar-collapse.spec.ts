@@ -122,12 +122,10 @@ test("sidebar sections collapse independently and persist per workspace", async 
   await expect(page.getByRole("heading", { name: `#${activeChannel.name}` })).toBeVisible();
   const channels = page.getByRole("button", { name: "Channels", exact: true });
   const directMessages = page.getByRole("button", { name: "Direct messages", exact: true });
-  const people = page.getByRole("button", { name: "People", exact: true });
   await expect(channels).toHaveAttribute("aria-controls", "sidebar-channels-list");
   await expect(directMessages).toHaveAttribute("aria-controls", "sidebar-direct-messages-list");
-  await expect(people).toHaveAttribute("aria-controls", "sidebar-people-list");
 
-  for (const toggle of [channels, directMessages, people]) {
+  for (const toggle of [channels, directMessages]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
   }
   await channels.click();
@@ -167,7 +165,6 @@ test("sidebar sections collapse independently and persist per workspace", async 
   await expect(hiddenDirectLink).toHaveCount(0);
   await expect(unreadDirectLink.getByLabel("1 unread", { exact: true })).toHaveText("1");
   await expect(directMessages.locator("..").getByLabel("1 unread", { exact: true })).toHaveCount(0);
-  await people.click();
 
   await page.getByRole("button", { name: "Create channel" }).click();
   await expect(
@@ -181,7 +178,7 @@ test("sidebar sections collapse independently and persist per workspace", async 
   await page.keyboard.press("Escape");
 
   await page.reload();
-  for (const toggle of [channels, directMessages, people]) {
+  for (const toggle of [channels, directMessages]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
   }
   await expect(channelList).toBeVisible();
@@ -200,7 +197,7 @@ test("sidebar sections collapse independently and persist per workspace", async 
     workspace: { route_id: string };
   };
   await page.goto(`/app/${second.route_id}`);
-  for (const toggle of [channels, directMessages, people]) {
+  for (const toggle of [channels, directMessages]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
   }
 
@@ -209,7 +206,7 @@ test("sidebar sections collapse independently and persist per workspace", async 
     localStorage.setItem(`clickclack:sidebar-sections:v1:${workspaceID}`, "not-json");
   }, workspace.id);
   await page.reload();
-  for (const toggle of [channels, directMessages, people]) {
+  for (const toggle of [channels, directMessages]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
   }
 

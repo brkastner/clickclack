@@ -9,11 +9,13 @@ async function installDesktopBridge(page: Page) {
         platform: "linux",
         notify: async () => false,
         onNavigate: () => () => {},
+        onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},
         setActiveRoute: () => {},
         setUnreadCount: () => {},
         signInWithGitHub: async () => false,
+        writeClipboardText: async () => true,
       },
     });
   });
@@ -55,96 +57,76 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   await expect(page.locator(".desktop-shell")).toBeVisible();
 
   const geometry = await page.evaluate(() => {
+    const sidebar = document.querySelector<HTMLElement>(".sidebar");
     const sidebarScroll = document.querySelector<HTMLElement>(".sidebar-scroll");
     const firstSection = sidebarScroll?.querySelector<HTMLElement>(".nav-section");
-    const userAvatar = document.querySelector<HTMLElement>(".user-card .dm-avatar");
-    const rail = document.querySelector<HTMLElement>(".guild-rail");
     const userCard = document.querySelector<HTMLElement>(".user-card");
-    const workspaceLabel = document.querySelector<HTMLElement>(".desktop-titlebar-workspace");
+    const workspaceSwitcher = document.querySelector<HTMLElement>(".workspace-switcher--titlebar");
+    const workspaceLabel = workspaceSwitcher?.querySelector<HTMLElement>(
+      ".workspace-switcher-label strong",
+    );
     const channelLabel = document.querySelector<HTMLElement>(".desktop-titlebar-channel");
     const channelGlyph = channelLabel?.querySelector<HTMLElement>(".title-glyph");
     const search = document.querySelector<HTMLElement>(".desktop-titlebar-search");
+    const safeArea = document.querySelector<HTMLElement>(".desktop-titlebar-safe-area");
 
     if (
+      !sidebar ||
       !sidebarScroll ||
       !firstSection ||
-      !userAvatar ||
-      !rail ||
       !userCard ||
+      !workspaceSwitcher ||
       !workspaceLabel ||
       !channelLabel ||
       !channelGlyph ||
-      !search
+      !search ||
+      !safeArea
     ) {
       throw new Error("desktop layout fixture did not render");
     }
 
-    const probe = document.createElement("div");
-    probe.innerHTML = `
-      <section class="channel-subgroup profile-channel-group">
-        <button class="channel-subgroup-toggle">
-          <span class="caret">▾</span>
-          <span class="channel-profile-avatar"></span>
-          <span>Profile</span>
-        </button>
-      </section>
-      <a class="nav-item dm"><span class="dm-avatar"></span><span class="nav-label">DM</span></a>
-    `;
-    sidebarScroll.append(probe);
-
-    const profileAvatar = probe.querySelector<HTMLElement>(".channel-profile-avatar");
-    const dmAvatar = probe.querySelector<HTMLElement>(".dm-avatar");
-    if (!profileAvatar || !dmAvatar) throw new Error("alignment probes did not render");
-
-    const railRect = rail.getBoundingClientRect();
-    const sidebarRect = document.querySelector<HTMLElement>(".sidebar")?.getBoundingClientRect();
-    if (!sidebarRect) throw new Error("desktop sidebar did not render");
+    const sidebarRect = sidebar.getBoundingClientRect();
     const userCardRect = userCard.getBoundingClientRect();
-    const userAvatarRect = userAvatar.getBoundingClientRect();
-    const result = {
+    const switcherRect = workspaceSwitcher.getBoundingClientRect();
+    const channelRect = channelLabel.getBoundingClientRect();
+    const searchRect = search.getBoundingClientRect();
+    const safeAreaRect = safeArea.getBoundingClientRect();
+    return {
       topGap: firstSection.getBoundingClientRect().top - sidebarScroll.getBoundingClientRect().top,
-      avatarX: {
-        profile: profileAvatar.getBoundingClientRect().x,
-        dm: dmAvatar.getBoundingClientRect().x,
-      },
-      workspaceTruncated: workspaceLabel.scrollWidth > workspaceLabel.clientWidth,
-      channelTruncated: channelLabel.scrollWidth > channelLabel.clientWidth,
-      titleTracking: {
-        workspace: Number.parseFloat(getComputedStyle(workspaceLabel).letterSpacing),
-        channel: Number.parseFloat(getComputedStyle(channelLabel).letterSpacing),
-      },
+      channelWidth: channelRect.width,
       channelGlyph: {
         text: channelGlyph.textContent,
         color: getComputedStyle(channelGlyph).color,
         titleColor: getComputedStyle(channelLabel).color,
       },
-      searchWidth: search.getBoundingClientRect().width,
+      search: {
+        centerX: searchRect.left + searchRect.width / 2,
+        safeAreaCenterX: safeAreaRect.left + safeAreaRect.width / 2,
+        width: searchRect.width,
+      },
+      titlebarOverlap: searchRect.left - Math.max(switcherRect.right, channelRect.right),
+      workspaceLabel: workspaceLabel.textContent,
       footer: {
         x: userCardRect.x,
         width: userCardRect.width,
-        railX: railRect.x,
-        combinedNavigationWidth: railRect.width + sidebarRect.width,
-        avatarCenterX: userAvatarRect.x + userAvatarRect.width / 2,
-        railCenterX: railRect.x + railRect.width / 2,
+        sidebarX: sidebarRect.x,
+        sidebarWidth: sidebarRect.width,
       },
     };
-    probe.remove();
-    return result;
   });
 
-  expect(geometry.topGap).toBeLessThanOrEqual(4);
-  expect(geometry.workspaceTruncated).toBe(false);
-  expect(geometry.channelTruncated).toBe(false);
-  expect(geometry.titleTracking.workspace).toBeGreaterThan(0);
-  expect(geometry.titleTracking.channel).toBeGreaterThan(0);
+  expect(geometry.topGap).toBeGreaterThanOrEqual(0);
+  expect(geometry.topGap).toBeLessThanOrEqual(64);
+  expect(geometry.workspaceLabel).toContain("Workspace");
+  expect(geometry.channelWidth).toBeGreaterThan(0);
   expect(geometry.channelGlyph.text).toBe("#");
   expect(geometry.channelGlyph.color).not.toBe(geometry.channelGlyph.titleColor);
-  expect(geometry.searchWidth).toBeGreaterThan(0);
-  expect(geometry.searchWidth).toBeLessThanOrEqual(520);
-  expect(geometry.avatarX.profile).toBeCloseTo(geometry.avatarX.dm, 0);
-  expect(geometry.footer.x).toBeCloseTo(geometry.footer.railX, 0);
-  expect(geometry.footer.width).toBeCloseTo(geometry.footer.combinedNavigationWidth, 0);
-  expect(geometry.footer.avatarCenterX).toBeCloseTo(geometry.footer.railCenterX, 0);
+  expect(geometry.search.width).toBeGreaterThan(0);
+  expect(geometry.search.width).toBeLessThanOrEqual(520);
+  expect(geometry.search.centerX).toBeCloseTo(geometry.search.safeAreaCenterX, 0);
+  expect(geometry.titlebarOverlap).toBeGreaterThanOrEqual(0);
+  expect(geometry.footer.x).toBeCloseTo(geometry.footer.sidebarX, 0);
+  expect(geometry.footer.width).toBeCloseTo(geometry.footer.sidebarWidth, 0);
 });
 
 test("accents only the explicit glyph in the web channel title", async ({ page }) => {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { safeExternalChannelURL } from "../../lib/chat/channels";
-  import type { ChannelNotificationPreference } from "../../lib/types";
+  import type { ChannelNotificationPreference, Workspace } from "../../lib/types";
+  import WorkspaceSwitcher from "../navigation/WorkspaceSwitcher.svelte";
 
   type Props = {
     channelNotifPreference?: ChannelNotificationPreference | null;
@@ -16,7 +17,15 @@
     platform: string;
     searchQuery: string;
     sidebarCollapsed: boolean;
-    workspaceName?: string;
+    workspaces: Workspace[];
+    selectedWorkspaceID: string;
+    createWorkspaceName: string;
+    showWorkspaceCreate: boolean;
+    hrefForWorkspace: (workspaceID: string) => string;
+    onSelectWorkspace: (workspaceID: string) => void;
+    onToggleWorkspaceCreate: () => void;
+    onWorkspaceName: (value: string) => void;
+    onCreateWorkspace: () => void;
     onOpenChannelSettings?: () => void;
     onOpenWorkspaceSettings: () => void;
     onResetSearch: () => void;
@@ -47,7 +56,15 @@
     platform,
     searchQuery,
     sidebarCollapsed,
-    workspaceName,
+    workspaces,
+    selectedWorkspaceID,
+    createWorkspaceName,
+    showWorkspaceCreate,
+    hrefForWorkspace,
+    onSelectWorkspace,
+    onToggleWorkspaceCreate,
+    onWorkspaceName,
+    onCreateWorkspace,
     onOpenChannelSettings = () => {},
     onOpenWorkspaceSettings,
     onResetSearch,
@@ -102,15 +119,20 @@
           />
         </svg>
       </button>
-      <button
-        type="button"
-        class="desktop-titlebar-workspace"
-        aria-label="Workspace settings"
-        title="Workspace settings"
-        onclick={onOpenWorkspaceSettings}
-      >
-        {workspaceName || "ClickClack"}
-      </button>
+      <WorkspaceSwitcher
+        {workspaces}
+        {selectedWorkspaceID}
+        {createWorkspaceName}
+        {showWorkspaceCreate}
+        {connected}
+        titlebar
+        {hrefForWorkspace}
+        {onSelectWorkspace}
+        {onToggleWorkspaceCreate}
+        {onWorkspaceName}
+        {onCreateWorkspace}
+        {onOpenWorkspaceSettings}
+      />
       {#if channelTitle}
         <span class="topbar-divider desktop-titlebar-divider" aria-hidden="true"></span>
         <h1 class="desktop-titlebar-channel" title={channelTitle}>

@@ -20,12 +20,9 @@ async function expectHittable(locator: Locator) {
     .toBe(true);
 }
 
-// Regression: with enough workspaces the rail outgrew the shell (the shell's
-// implicit grid row expanded to fit it), and focusing the + button
-// programmatically scrolled the overflow:hidden shell — pushing the
-// guild-create popover above the viewport. An explicit constrained shell row
-// keeps the rail inside the shell so .guild-list scrolls internally instead.
-test("create form stays usable with a crowded rail", async ({ page, request }) => {
+// The workspace switcher's menu must scroll internally when many workspaces
+// exist so its create controls stay on-screen and interactive.
+test("create form stays usable with a crowded workspace menu", async ({ page, request }) => {
   for (let i = 0; i < 14; i++) {
     const name = `Crowd ${i} ${randomUUID().slice(0, 6)}`;
     const response = await request.post("/api/workspaces", { data: { name } });
@@ -34,6 +31,7 @@ test("create form stays usable with a crowded rail", async ({ page, request }) =
 
   await page.goto("/app");
   await waitForAppReady(page);
-  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page.getByRole("button", { name: "Switch workspace" }).click();
+  await page.getByRole("menuitem", { name: "New workspace" }).click();
   await expectHittable(page.getByLabel("Workspace name"));
 });

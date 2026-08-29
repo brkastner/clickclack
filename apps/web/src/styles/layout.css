@@ -147,12 +147,7 @@
 
 .shell {
   display: grid;
-  grid-template-columns: 72px 260px minmax(0, 1fr) 0;
-  /* One explicit constrained row: without it the implicit row grows to the
-     tallest item (a crowded workspace rail), the rail overflows the shell,
-     and focusing the rail's + button programmatically scrolls this
-     overflow:hidden box — pushing the guild-create popover above the
-     viewport. A constrained row lets .guild-list's internal scroll engage. */
+  grid-template-columns: 260px minmax(0, 1fr) 0;
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
@@ -162,77 +157,54 @@
   transition: grid-template-columns 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.shell.thread-open {
-  grid-template-columns: 72px 260px minmax(0, 1fr) minmax(340px, 28vw);
-}
-
+.shell.thread-open,
 .shell.search-open {
-  grid-template-columns: 72px 260px minmax(0, 1fr) minmax(340px, 28vw);
+  grid-template-columns: 260px minmax(0, 1fr) minmax(340px, 28vw);
 }
 
 .shell.artifact-open {
-  grid-template-columns: 72px 260px minmax(0, 1fr) minmax(460px, 42vw);
+  grid-template-columns: 260px minmax(0, 1fr) minmax(460px, 42vw);
 }
 
 .shell.sidebar-collapsed {
-  grid-template-columns: 72px 0 minmax(0, 1fr) 0;
+  grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
-.shell.sidebar-collapsed.thread-open {
-  grid-template-columns: 72px 0 minmax(0, 1fr) minmax(340px, 28vw);
-}
-
+.shell.sidebar-collapsed.thread-open,
 .shell.sidebar-collapsed.search-open {
-  grid-template-columns: 72px 0 minmax(0, 1fr) minmax(340px, 28vw);
+  grid-template-columns: 0 minmax(0, 1fr) minmax(340px, 28vw);
 }
 
 .shell.sidebar-collapsed.artifact-open {
-  grid-template-columns: 72px 0 minmax(0, 1fr) minmax(460px, 42vw);
+  grid-template-columns: 0 minmax(0, 1fr) minmax(460px, 42vw);
 }
 
 .shell > .thread,
 .shell > .search-results,
 .shell > .artifact-viewer {
-  grid-column: 4;
+  grid-column: 3;
   grid-row: 1;
 }
 
 .shell.desktop-shell {
   --desktop-account-footer-height: 52px;
   grid-template-rows: 52px minmax(0, 1fr);
-  /* One continuous chrome plate behind title bar, rail, and sidebar — the
-     content panes float on it as a card, Slack-style. */
+  /* One continuous chrome plate behind the title bar and sidebar; content
+     panes float on it as a card. */
   background:
     radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.5px) 0 0 /
       14px 14px,
     var(--rail);
 }
 
-.desktop-shell > .guild-rail,
 .desktop-shell > .sidebar {
-  background: transparent;
+  background: #232136;
   border-right: 0;
 }
 
-/* The account card is one real interactive surface across both navigation
-   columns. Reserve its rail space, let it escape the sidebar grid cell, and
-   center the avatar on the same axis as the workspace keys. */
 @media (min-width: 821px) {
-  .desktop-shell > .guild-rail {
-    padding-bottom: var(--desktop-account-footer-height);
-  }
-
-  .desktop-shell > .sidebar {
-    overflow: visible;
-  }
-
   .desktop-shell > .sidebar .user-card {
-    position: relative;
-    z-index: 3;
-    width: calc(100% + 72px);
     height: var(--desktop-account-footer-height);
-    margin-left: -72px;
-    padding-left: 22px;
   }
 }
 
@@ -246,17 +218,8 @@
   padding-top: 2px;
 }
 
-/* Narrow windows turn the rail and sidebar into overlay drawers (see
-   modals.css); floating panes need their opaque surfaces back. */
+/* Narrow windows turn the sidebar into an overlay drawer (see modals.css). */
 @media (max-width: 820px) {
-  .desktop-shell > .guild-rail {
-    background:
-      radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.5px) 0 0 /
-        14px 14px,
-      var(--rail);
-    border-right: 1px solid var(--line);
-  }
-
   .desktop-shell > .sidebar {
     background: var(--panel);
     border-right: 1px solid var(--line);
@@ -285,7 +248,6 @@
   grid-row: 1;
 }
 
-.desktop-shell > .guild-rail,
 .desktop-shell > .sidebar,
 .desktop-shell > .timeline,
 .desktop-shell > .thread,
@@ -349,10 +311,11 @@
 
 .desktop-titlebar-leading {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
   gap: 9px;
   min-width: 0;
+  max-width: calc(50% - 350px);
   -webkit-app-region: no-drag;
 }
 
@@ -389,26 +352,26 @@
   border-radius: 8px;
 }
 
-.desktop-titlebar-workspace {
-  flex: 0 0 auto;
-  min-width: 0;
-  overflow: visible;
-  padding: 5px 9px;
-  border-radius: 8px;
+.desktop-titlebar .workspace-switcher-trigger,
+.desktop-titlebar .workspace-switcher-popover button {
+  display: flex;
+  place-items: initial;
+}
+
+.desktop-titlebar .workspace-switcher-trigger {
   color: var(--text-strong);
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0.015em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.desktop-titlebar .workspace-switcher-popover button {
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .desktop-titlebar-channel {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   margin: 0;
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
   color: var(--text-strong);
   font-family: var(--font-display);
   font-size: 13px;
@@ -450,6 +413,7 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  margin-left: auto;
   -webkit-app-region: no-drag;
 }
 
@@ -480,13 +444,14 @@
 }
 
 .desktop-titlebar-search.search {
-  position: static;
-  flex: 1 1 220px;
-  width: auto;
+  position: absolute;
+  left: 50%;
+  width: 520px;
   min-width: 96px;
-  max-width: 520px;
+  max-width: calc(100% - 24px);
   height: 32px;
-  margin-left: auto;
+  margin: 0;
+  transform: translateX(-50%);
   border-color: var(--line-strong);
   background: color-mix(in srgb, var(--panel-2) 84%, transparent);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035) inset;
@@ -497,6 +462,16 @@
   border-color: color-mix(in srgb, var(--accent) 66%, var(--line));
   background: var(--panel-2);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+@media (max-width: 1100px) {
+  .desktop-titlebar-leading {
+    max-width: calc(50% - 180px);
+  }
+
+  .desktop-titlebar-search.search {
+    width: 180px;
+  }
 }
 
 /* ---------- TIMELINE ---------- */

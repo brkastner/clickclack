@@ -21,21 +21,23 @@ async function expectHittable(locator: Locator) {
     .toBe(true);
 }
 
-test("the workspace create form opens and is not clipped by the rail", async ({ page }) => {
+test("the workspace create form opens and is not clipped by the switcher", async ({ page }) => {
   await page.goto("/app");
   await waitForAppReady(page);
 
-  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page.getByRole("button", { name: "Switch workspace" }).click();
+  await page.getByRole("menuitem", { name: "New workspace" }).click();
 
-  // Regression: the rail scrolled itself, and a scroll container clips both
-  // axes, so this popover — anchored outside the rail at left: 100% — rendered
-  // but was painted away. Clicking + looked like it did nothing at all.
+  // Regression: nested scroll containers can clip a popover even though its
+  // form still has a layout box. The switcher must keep the form hittable.
   const nameInput = page.getByLabel("Workspace name");
   await expectHittable(nameInput);
 
-  const name = `Rail Workspace ${randomUUID().replaceAll("-", "").slice(0, 8)}`;
+  const name = `Switcher Workspace ${randomUUID().replaceAll("-", "").slice(0, 8)}`;
   await nameInput.fill(name);
   await nameInput.press("Enter");
 
-  await expect(page.getByRole("link", { name })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Switch workspace" }).getByText(name),
+  ).toBeVisible();
 });

@@ -1,22 +1,21 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import { apiResourceURL } from "../../lib/api";
   import {
-    avatarHue,
     directConversationForUser,
     handleLabel,
     type ChannelProfileShortcut,
   } from "../../lib/chat/people";
-  import type { Channel, DirectConversation, User } from "../../lib/types";
+  import type { Channel, DirectConversation, User, Workspace } from "../../lib/types";
   import ChannelList from "./ChannelList.svelte";
   import DirectMessageList from "./DirectMessageList.svelte";
+  import WorkspaceSwitcher from "./WorkspaceSwitcher.svelte";
 
   type Props = {
     workspaceID: string;
-    workspaceName?: string;
-    workspaceIconURL?: string;
+    workspaces: Workspace[];
+    createWorkspaceName: string;
+    showWorkspaceCreate: boolean;
     connected: boolean;
-    sidebarCollapsed: boolean;
     showHeader?: boolean;
     channels: Channel[];
     directConversations: DirectConversation[];
@@ -29,7 +28,7 @@
     selectedChannelID: string;
     selectedDirectID: string;
     selectedProfile: User | null;
-    onToggleCollapse: () => void;
+    hrefForWorkspace: (workspaceID: string) => string;
     hrefForChannel: (channelID: string) => string;
     hrefForDirect: (conversationID: string) => string;
     onSelectChannel: (channelID: string) => void;
@@ -42,15 +41,19 @@
     onUndoHideDirect: () => void;
     onOpenProfile: (profile: User) => void;
     onOpenSettings: () => void;
+    onSelectWorkspace: (workspaceID: string) => void;
+    onToggleWorkspaceCreate: () => void;
+    onWorkspaceName: (value: string) => void;
+    onCreateWorkspace: () => void;
     onOpenWorkspaceSettings: () => void;
   };
 
   let {
     workspaceID,
-    workspaceName,
-    workspaceIconURL,
+    workspaces,
+    createWorkspaceName,
+    showWorkspaceCreate,
     connected,
-    sidebarCollapsed,
     showHeader = true,
     channels,
     directConversations,
@@ -61,7 +64,7 @@
     selectedChannelID,
     selectedDirectID,
     selectedProfile,
-    onToggleCollapse,
+    hrefForWorkspace,
     hrefForChannel,
     hrefForDirect,
     onSelectChannel,
@@ -74,6 +77,10 @@
     onUndoHideDirect,
     onOpenProfile,
     onOpenSettings,
+    onSelectWorkspace,
+    onToggleWorkspaceCreate,
+    onWorkspaceName,
+    onCreateWorkspace,
     onOpenWorkspaceSettings,
   }: Props = $props();
 
@@ -192,55 +199,59 @@
 
 <svelte:window onstorage={handleStorage} />
 
-<aside class="sidebar" aria-label="Channels and DMs">
+<aside id="primary-navigation" class="sidebar" aria-label="Channels and DMs">
   {#if showHeader}
-  <header class="workspace-header">
-    <button
-      type="button"
-      class="workspace-menu"
-      aria-label="Workspace settings"
-      title="Workspace settings"
-      onclick={onOpenWorkspaceSettings}
-    >
-      {#if workspaceIconURL}
-        <img class="workspace-header-icon" src={apiResourceURL(workspaceIconURL)} alt="" />
-      {/if}
-      <span class="workspace-name">
-        <strong>
-          <span class="workspace-name-label">{workspaceName || "Pick a workspace"}</span>
-          <svg class="workspace-menu-caret" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
-            <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" />
-          </svg>
-        </strong>
-        {#if !connected}
-          <span class="presence">Connecting…</span>
-        {/if}
-      </span>
-    </button>
-    <div class="workspace-header-actions">
-      <button
-        type="button"
-        class="sidebar-collapse"
-        aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        onclick={onToggleCollapse}
-      >
-        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-          <path
-            fill="none"
-            stroke="currentColor"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d={sidebarCollapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"}
-          />
-        </svg>
-      </button>
-    </div>
-  </header>
+    <header class="workspace-header">
+      <WorkspaceSwitcher
+        {workspaces}
+        selectedWorkspaceID={workspaceID}
+        {createWorkspaceName}
+        {showWorkspaceCreate}
+        {connected}
+        {hrefForWorkspace}
+        {onSelectWorkspace}
+        {onToggleWorkspaceCreate}
+        {onWorkspaceName}
+        {onCreateWorkspace}
+        {onOpenWorkspaceSettings}
+      />
+    </header>
   {/if}
 
   <div class="sidebar-scroll">
+    <section class="sidebar-people-row" aria-label="Recent people">
+      {#each recentPeople as person (person.id)}
+        {@const conversation = directConversationForUser(directConversations, person.id)}
+        <a
+          href={conversation ? hrefForDirect(conversation.id) : "#"}
+          class="sidebar-person"
+          class:active={conversation?.id === selectedDirectID || selectedProfile?.id === person.id}
+          title={person.display_name}
+          aria-label={person.display_name}
+          onclick={(event) => {
+            if (conversation) {
+              if (!shouldHandleClientNavigation(event)) return;
+              event.preventDefault();
+              onSelectDirect(conversation.id);
+            } else {
+              event.preventDefault();
+              onOpenProfile(person);
+            }
+          }}
+        >
+          <Avatar
+            id={person.id}
+            name={person.display_name}
+            src={person.avatar_url}
+            size={34}
+          />
+        </a>
+      {/each}
+      {#if recentPeople.length === 0}
+        <span class="sidebar-people-empty">No recent people</span>
+      {/if}
+    </section>
+
     <ChannelList
       {workspaceID}
       expanded={sections.channels}
@@ -278,47 +289,6 @@
       onToggle={() => toggleSection("directMessages")}
     />
 
-    <section class="nav-section" class:collapsed={!sections.people}>
-      <div class="section-title">
-        <button type="button" class="section-toggle" aria-expanded={sections.people} aria-controls="sidebar-people-list" onclick={() => toggleSection("people")}>
-          <span class="caret" aria-hidden="true">▾</span>
-          <span class="label">People</span>
-        </button>
-      </div>
-      <div class="nav-list" id="sidebar-people-list" hidden={!sections.people}>
-        {#each recentPeople as person (person.id)}
-          {@const conversation = directConversationForUser(directConversations, person.id)}
-          <a
-            href={conversation ? hrefForDirect(conversation.id) : "#"}
-            class="nav-item dm"
-            class:active={conversation?.id === selectedDirectID || selectedProfile?.id === person.id}
-            onclick={(event) => {
-              if (conversation) {
-                if (!shouldHandleClientNavigation(event)) return;
-                event.preventDefault();
-                onSelectDirect(conversation.id);
-              } else {
-                event.preventDefault();
-                onOpenProfile(person);
-              }
-            }}
-          >
-            <Avatar
-              class="dm-avatar"
-              id={person.id}
-              name={person.display_name}
-              src={person.avatar_url}
-              size={22}
-            />
-            <span class="nav-label">{person.display_name}</span>
-            <span class="presence-dot active" aria-hidden="true"></span>
-          </a>
-        {/each}
-        {#if recentPeople.length === 0}
-          <p class="nav-empty">People appear here as you chat</p>
-        {/if}
-      </div>
-    </section>
   </div>
 
   {#if currentUser}

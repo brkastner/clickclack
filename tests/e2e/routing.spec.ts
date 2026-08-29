@@ -401,13 +401,14 @@ test("creating the first workspace enters the routed app state", async ({ page }
   });
 
   await page.goto("/app");
-  await page.getByRole("button", { name: "Create workspace" }).click();
+  await page.getByRole("button", { name: "Switch workspace" }).click();
+  await page.getByRole("menuitem", { name: "New workspace" }).click();
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Fresh Workspace");
   await page.getByRole("textbox", { name: "Workspace name" }).press("Enter");
 
   await expect(page).toHaveURL(/\/app\/T01KR3EMPTYFLOW12$/);
   await expect(page.getByText("Fresh Workspace").first()).toBeVisible();
-  await expect(page.getByPlaceholder("Pick a channel to start")).toBeVisible();
+  await expect(page.getByLabel("Message body")).toBeVisible();
   await expect
     .poll(() => requestedPaths.includes("/api/workspaces/wsp_empty_flow/channels"))
     .toBe(true);

@@ -185,13 +185,12 @@ type MobileGeometry = {
   viewportWidth: number;
   viewportHeight: number;
   scrollWidth: number;
-  rail: GeometryBox;
   sidebar: GeometryBox;
   timeline: GeometryBox;
   toolbar: GeometryBox;
   composer: GeometryBox;
   toggle: GeometryBox;
-  firstGuild: GeometryBox;
+  workspaceTrigger: GeometryBox;
   textareaFontSize: number;
   toolbarOverflowX: string;
 };
@@ -214,19 +213,18 @@ async function mobileGeometry(page: Page): Promise<MobileGeometry> {
     const textarea = document.querySelector<HTMLElement>(
       '[role="textbox"][aria-label="Message body"]',
     );
-    const toolbar = document.querySelector<HTMLElement>(".composer-toolbar");
+    const toolbar = document.querySelector<HTMLElement>(".composer-controls");
     if (!textarea || !toolbar) throw new Error("missing composer controls");
     return {
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       scrollWidth: document.documentElement.scrollWidth,
-      rail: box(".guild-rail"),
       sidebar: box(".sidebar"),
       timeline: box(".timeline"),
-      toolbar: box(".composer-toolbar"),
+      toolbar: box(".composer-controls"),
       composer: box(".composer"),
       toggle: box(".mobile-nav-toggle"),
-      firstGuild: box(".guild-rail .guild.home"),
+      workspaceTrigger: box(".workspace-switcher-trigger"),
       textareaFontSize: Number.parseFloat(getComputedStyle(textarea).fontSize),
       toolbarOverflowX: getComputedStyle(toolbar).overflowX,
     };
@@ -1370,7 +1368,8 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
 
   await openMobileNavigation();
   await page.setViewportSize({ width: 1024, height: 844 });
-  await expect(page.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Switch workspace" })).toBeVisible();
+  await expect(page.locator(".guild-rail")).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
@@ -1386,18 +1385,18 @@ test("mobile navigation behaves like a drawer", async ({ page }) => {
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
-test("desktop sidebar collapse preference still toggles", async ({ page }) => {
+test("workspace switching lives in the sidebar header", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 844 });
   await page.goto("/app");
   await waitForAppReady(page);
 
-  const shell = page.locator(".shell");
-  await page.getByRole("button", { name: "Collapse sidebar" }).click();
-  await expect(shell).toHaveClass(/sidebar-collapsed/);
-  await page
-    .getByRole("button", { name: "Expand sidebar" })
-    .evaluate((button: HTMLButtonElement) => button.click());
-  await expect(shell).not.toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".guild-rail")).toHaveCount(0);
+  const switcher = page.getByRole("button", { name: "Switch workspace" });
+  await expect(switcher).toBeVisible();
+  await switcher.click();
+  await expect(page.getByRole("menu", { name: "Workspaces" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Workspaces" })).toHaveCount(0);
 });
 
 test("desktop shell moves sidebar and search controls into the title bar", async ({ page }) => {
@@ -1408,12 +1407,14 @@ test("desktop shell moves sidebar and search controls into the title bar", async
         integratedTitleBar: true,
         notify: async () => true,
         onNavigate: () => () => {},
+        onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},
         platform: "darwin",
         setActiveRoute: () => {},
         setUnreadCount: () => {},
         signInWithGitHub: async () => true,
+        writeClipboardText: async () => true,
       },
     });
   });
@@ -1426,7 +1427,8 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   const titlebar = page.locator(".desktop-titlebar");
   const titlebarSearch = titlebar.getByLabel("Search messages");
   await expect(titlebar).toBeVisible();
-  await expect(page.getByTitle("ClickClack home")).toHaveAttribute("href", "/app");
+  await expect(page.locator(".guild-rail")).toHaveCount(0);
+  await expect(titlebar.getByRole("button", { name: "Switch workspace" })).toBeVisible();
   await expect(page.locator(".timeline .topbar")).toHaveCount(0);
   await expect(activeChannelHeading(titlebar)).toBeVisible();
   await expect(page.locator(".sidebar .sidebar-collapse")).toHaveCount(0);
@@ -1443,7 +1445,8 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await expect(shell).not.toHaveClass(/sidebar-collapsed/);
 
   await expect(page.locator(".sidebar .workspace-header")).toHaveCount(0);
-  await titlebar.getByRole("button", { name: "Workspace settings" }).click();
+  await titlebar.getByRole("button", { name: "Switch workspace" }).click();
+  await titlebar.getByRole("menuitem", { name: "Workspace settings" }).click();
   await expect(page.getByRole("dialog", { name: "Workspace settings" })).toBeVisible();
   await page.goBack();
   await expect(activeChannelHeading(page)).toBeVisible();
@@ -1520,12 +1523,14 @@ test("desktop title bar preserves Windows caption-control space", async ({ page 
         integratedTitleBar: true,
         notify: async () => true,
         onNavigate: () => () => {},
+        onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},
         platform: "win32",
         setActiveRoute: () => {},
         setUnreadCount: () => {},
         signInWithGitHub: async () => true,
+        writeClipboardText: async () => true,
       },
     });
   });
@@ -1552,12 +1557,14 @@ test("desktop bridge keeps native frame layout when renderer chrome is disabled"
         integratedTitleBar: false,
         notify: async () => true,
         onNavigate: () => () => {},
+        onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},
         platform: "darwin",
         setActiveRoute: () => {},
         setUnreadCount: () => {},
         signInWithGitHub: async () => true,
+        writeClipboardText: async () => true,
       },
     });
   });
@@ -1567,7 +1574,8 @@ test("desktop bridge keeps native frame layout when renderer chrome is disabled"
   await expect(page.locator(".desktop-titlebar")).toHaveCount(0);
   await expect(page.locator(".topbar .search")).toBeVisible();
   await expect(page.locator(".sidebar .workspace-header")).toBeVisible();
-  await expect(page.locator(".sidebar .sidebar-collapse")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Switch workspace" })).toBeVisible();
+  await expect(page.locator(".guild-rail")).toHaveCount(0);
 });
 
 test("mobile navigation geometry clears the timeline at narrow widths", async ({ page }) => {
@@ -1577,6 +1585,8 @@ test("mobile navigation geometry clears the timeline at narrow widths", async ({
     await page.goto(generalRoute);
     await waitForAppReady(page);
     await expect(activeChannelHeading(page)).toBeVisible();
+    await expect(page.getByLabel("Message body")).toBeVisible();
+    await expect(page.locator(".composer-controls")).toBeVisible();
     await expect
       .poll(() =>
         page.evaluate(
@@ -1589,14 +1599,13 @@ test("mobile navigation geometry clears the timeline at narrow widths", async ({
       .poll(async () => (await mobileGeometry(page)).sidebar.right)
       .toBeLessThanOrEqual(0.5);
     const closed = await mobileGeometry(page);
-    expect(closed.rail.right).toBeLessThanOrEqual(0.5);
     expect(closed.timeline.left).toBe(0);
     expect(closed.timeline.width).toBe(width);
     expect(closed.scrollWidth).toBeLessThanOrEqual(width);
     expect(closed.toolbar.right).toBeLessThanOrEqual(closed.viewportWidth);
     expect(closed.toolbar.bottom).toBeLessThanOrEqual(closed.composer.bottom);
     expect(closed.textareaFontSize).toBeGreaterThanOrEqual(16);
-    expect(closed.toolbarOverflowX).toBe("auto");
+    expect(closed.toolbarOverflowX).toBe("visible");
 
     await page.getByRole("button", { name: "Toggle navigation" }).click();
     await expect(page.getByRole("button", { name: "Toggle navigation" })).toHaveAttribute(
@@ -1605,12 +1614,11 @@ test("mobile navigation geometry clears the timeline at narrow widths", async ({
     );
     await expect
       .poll(async () => (await mobileGeometry(page)).sidebar.left)
-      .toBeGreaterThanOrEqual(71.5);
+      .toBeGreaterThanOrEqual(-0.5);
     const open = await mobileGeometry(page);
-    expect(open.rail.left).toBeGreaterThanOrEqual(0);
-    expect(open.sidebar.left).toBeGreaterThanOrEqual(open.rail.right - 0.5);
+    expect(open.sidebar.left).toBeGreaterThanOrEqual(-0.5);
     expect(open.sidebar.right).toBeLessThanOrEqual(open.viewportWidth + 0.5);
-    expect(open.firstGuild.top).toBeGreaterThanOrEqual(open.toggle.bottom);
+    expect(open.workspaceTrigger.right).toBeLessThanOrEqual(open.toggle.left + 0.5);
     expect(open.scrollWidth).toBeLessThanOrEqual(width);
   }
 });

@@ -117,11 +117,13 @@
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
     return [...profileGroups, ...ordinaryGroups];
   });
+  const ordinaryGroups = $derived(sectionGroups.filter((group) => !group.profile));
   const priorityChannels = $derived(
     channels.filter(
       (channel) =>
-        (channel.id === selectedChannelID && !selectedDirectID) ||
-        (channel.unread_count || 0) > 0,
+        !channel.sidebar_section?.startsWith("profile:") &&
+        ((channel.id === selectedChannelID && !selectedDirectID) ||
+          (channel.unread_count || 0) > 0),
     ),
   );
 
@@ -562,6 +564,7 @@
   {@const visibleChannels = visibleGroupChannels(group)}
   <section
     class="channel-subgroup"
+    role="group"
     class:archived-channel-group={subdued}
     class:profile-channel-group={Boolean(group.profile)}
     class:profile-drop-target={dropGroupKey === group.key}
@@ -685,9 +688,20 @@
   </section>
 {/snippet}
 
-<section class="nav-section" class:collapsed={!expanded}>
+<section class="nav-section sidebar-channel-navigation">
+  <span id="channel-order-instructions" class="sr-only">
+    Drag with a pointer, use Arrow Up and Arrow Down while focused, or open the move menu. Moves stay within the current channel section. On a profile header, hold Alt with Arrow Up or Arrow Down to reorder profiles.
+  </span>
+
+  <div class="sidebar-profile-groups">
+    {#each profileGroups as group, index (group.key)}
+      {@render channelSubgroup(group, `sidebar-profile-section-${index}`, false)}
+    {/each}
+  </div>
+
   <div
-    class="section-title"
+    class="section-title sidebar-channels-title"
+    role="group"
     class:profile-drop-target={dropGroupKey === "unsectioned"}
     ondragover={(event) => {
       if (!draggedChannelID || !draggedGroupKey.startsWith("profile:")) return;
@@ -714,19 +728,17 @@
       onclick={onCreateChannel}
     >＋</button>
   </div>
+
   <div
     class="nav-list"
     id="sidebar-channels-list"
     hidden={!expanded && priorityChannels.length === 0}
   >
     {#if expanded}
-      <span id="channel-order-instructions" class="sr-only">
-        Drag with a pointer, use Arrow Up and Arrow Down while focused, or open the move menu. Moves stay within the current channel section. On a profile header, hold Alt with Arrow Up or Arrow Down to reorder profiles.
-      </span>
       {#each unsectionedChannels as channel (channel.id)}
         {@render channelRow(channel, unsectionedChannels, "unsectioned", false, true)}
       {/each}
-      {#each sectionGroups as group, index (group.key)}
+      {#each ordinaryGroups as group, index (group.key)}
         {@render channelSubgroup(group, `sidebar-channel-section-${index}`, false)}
       {/each}
       {#if archivedChannels.length > 0}

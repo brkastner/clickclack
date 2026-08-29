@@ -57,7 +57,6 @@
   import AgentResponding from "./components/messages/AgentResponding.svelte";
   import CreateChannelModal from "./components/navigation/CreateChannelModal.svelte";
   import CreateDirectModal from "./components/navigation/CreateDirectModal.svelte";
-  import GuildRail from "./components/navigation/GuildRail.svelte";
   import Sidebar from "./components/navigation/Sidebar.svelte";
   import ProfilePane from "./components/profile/ProfilePane.svelte";
   import PinnedPanel from "./components/pins/PinnedPanel.svelte";
@@ -4692,7 +4691,15 @@
       {sidebarCollapsed}
       {mobileNavOpen}
       mobileNavigation={mobileNavViewport}
-      workspaceName={selectedWorkspace?.name}
+      {workspaces}
+      {selectedWorkspaceID}
+      createWorkspaceName={workspaceName}
+      {showWorkspaceCreate}
+      hrefForWorkspace={(workspaceID) => appHref(workspaceID)}
+      onSelectWorkspace={(workspaceID) => void selectWorkspace(workspaceID)}
+      onToggleWorkspaceCreate={() => (showWorkspaceCreate = !showWorkspaceCreate)}
+      onWorkspaceName={(value) => (workspaceName = value)}
+      onCreateWorkspace={() => void createWorkspace()}
       onOpenChannelSettings={openChannelSettings}
       onOpenWorkspaceSettings={openWorkspaceSettings}
       onResetSearch={resetSearch}
@@ -4708,7 +4715,7 @@
     class="mobile-nav-toggle"
     type="button"
     aria-label="Toggle navigation"
-    aria-controls="workspace-navigation"
+    aria-controls="primary-navigation"
     aria-expanded={mobileNavOpen}
     onclick={() => (mobileNavOpen = !mobileNavOpen)}
   >
@@ -4724,25 +4731,12 @@
     ></button>
   {/if}
 
-  <GuildRail
-    {workspaces}
-    homeHref={integratedTitleBar ? "/app" : "/"}
-    {selectedWorkspaceID}
-    {workspaceName}
-    {showWorkspaceCreate}
-    hrefForWorkspace={(workspaceID) => appHref(workspaceID)}
-    onSelectWorkspace={(workspaceID) => void selectWorkspace(workspaceID)}
-    onToggleWorkspaceCreate={() => (showWorkspaceCreate = !showWorkspaceCreate)}
-    onWorkspaceName={(value) => (workspaceName = value)}
-    onCreateWorkspace={() => void createWorkspace()}
-  />
-
   <Sidebar
     workspaceID={selectedWorkspaceID}
-    workspaceName={selectedWorkspace?.name}
-    workspaceIconURL={selectedWorkspace?.icon_url ? apiResourceURL(selectedWorkspace.icon_url) : ""}
+    {workspaces}
+    createWorkspaceName={workspaceName}
+    {showWorkspaceCreate}
     {connected}
-    {sidebarCollapsed}
     showHeader={!integratedTitleBar}
     {channels}
     {directConversations}
@@ -4753,7 +4747,7 @@
     {selectedChannelID}
     {selectedDirectID}
     {selectedProfile}
-    onToggleCollapse={handleSidebarCollapse}
+    hrefForWorkspace={(workspaceID) => appHref(workspaceID)}
     hrefForChannel={(channelID) => appHref(selectedWorkspaceID, channelID)}
     hrefForDirect={(conversationID) => appHref(selectedWorkspaceID, conversationID)}
     onSelectChannel={(channelID) => void selectChannel(channelID)}
@@ -4767,6 +4761,10 @@
     onUndoHideDirect={() => void undoHideDirectConversation()}
     onOpenProfile={openUserProfile}
     onOpenSettings={openProfileSettings}
+    onSelectWorkspace={(workspaceID) => void selectWorkspace(workspaceID)}
+    onToggleWorkspaceCreate={() => (showWorkspaceCreate = !showWorkspaceCreate)}
+    onWorkspaceName={(value) => (workspaceName = value)}
+    onCreateWorkspace={() => void createWorkspace()}
     onOpenWorkspaceSettings={openWorkspaceSettings}
   />
 

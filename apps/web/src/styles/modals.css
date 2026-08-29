@@ -617,6 +617,7 @@
   color: var(--text);
   font-size: 22px;
   line-height: 1;
+  transition: left 180ms ease;
 }
 
 .mobile-nav-toggle .bars {
@@ -638,12 +639,12 @@
 
 @media (max-width: 1180px) {
   .shell {
-    grid-template-columns: 72px 240px minmax(0, 1fr);
+    grid-template-columns: 240px minmax(0, 1fr) 0;
   }
   .shell.sidebar-collapsed,
   .shell.sidebar-collapsed.thread-open,
   .shell.sidebar-collapsed.search-open {
-    grid-template-columns: 72px 0 minmax(0, 1fr);
+    grid-template-columns: 0 minmax(0, 1fr) 0;
   }
   .thread,
   .search-results {
@@ -685,44 +686,32 @@
   .sidebar-collapsed .sidebar {
     opacity: 1;
     pointer-events: none;
-    transform: translate3d(calc(-100% - 72px), 0, 0);
+    transform: translate3d(-100%, 0, 0);
   }
-  .guild-rail,
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
     z-index: 20;
+    width: min(260px, 100vw);
     height: 100vh;
     height: 100dvh;
     pointer-events: none;
     transform: translate3d(-100%, 0, 0);
     transition: transform 180ms ease;
   }
-  .guild-rail {
-    width: 72px;
-    padding-top: calc(14px + var(--safe-area-top));
-    padding-bottom: calc(14px + var(--safe-area-bottom));
-  }
-  .sidebar {
-    left: 72px;
-    width: min(260px, calc(100vw - 72px));
-    transform: translate3d(calc(-100% - 72px), 0, 0);
-  }
-  .nav-open .guild-rail,
   .nav-open .sidebar {
     pointer-events: auto;
     transform: translate3d(0, 0, 0);
   }
-  .nav-open .guild-rail {
-    padding-top: calc(62px + var(--safe-area-top));
+  .nav-open .mobile-nav-toggle {
+    left: min(208px, calc(100vw - 52px));
   }
-  .desktop-shell .guild-rail,
+  .nav-open .workspace-header {
+    padding-right: 58px;
+  }
   .desktop-shell .sidebar {
     top: 52px;
     height: calc(100dvh - 52px);
-  }
-  .desktop-shell.nav-open .guild-rail {
-    padding-top: calc(14px + var(--safe-area-top));
   }
   .desktop-shell .mobile-nav-backdrop {
     top: 52px;
@@ -733,7 +722,7 @@
     top: 0;
     right: 0;
     bottom: 0;
-    left: min(332px, 100vw);
+    left: min(260px, 100vw);
     z-index: 15;
     border: 0;
     background: rgba(5, 8, 16, 0.46);
