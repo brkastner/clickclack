@@ -471,6 +471,58 @@
   outline: none;
 }
 
+.channel-subgroup-header {
+  display: flex;
+  align-items: center;
+}
+
+.channel-subgroup-header .channel-subgroup-toggle {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The profile header navigates, so collapsing moves to its own caret button in
+   the outer gutter where the group caret used to sit. */
+.channel-subgroup-caret {
+  flex: 0 0 14px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin-left: -10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+}
+
+.channel-subgroup-caret .caret {
+  font-size: 10px;
+  opacity: 0.7;
+  transition: transform 140ms ease;
+}
+
+.channel-subgroup-caret[aria-expanded="false"] .caret {
+  transform: rotate(-90deg);
+}
+
+.channel-subgroup-caret:hover,
+.channel-subgroup-caret:focus-visible {
+  background: var(--hover);
+  color: var(--text);
+  outline: none;
+}
+
+.channel-subgroup-toggle.profile-source-link {
+  text-decoration: none;
+}
+
+.channel-subgroup-toggle.profile-source-link.active {
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .channel-subgroup-toggle .caret {
   font-size: 10px;
   opacity: 0.7;
@@ -519,9 +571,49 @@
   left: -6px;
 }
 
+/* A navigating profile header keeps its avatar on the shared alignment line
+   while the separate caret button occupies the outer gutter. */
+.profile-channel-group .profile-subgroup-header .channel-subgroup-toggle {
+  padding-left: 4px;
+}
+
 .profile-drop-target {
   background: color-mix(in srgb, var(--accent) 13%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.channel-subgroup-toggle.profile-reorderable {
+  cursor: grab;
+}
+
+.channel-subgroup-toggle.profile-reorderable:active {
+  cursor: grabbing;
+}
+
+.channel-subgroup.profile-drop-before,
+.channel-subgroup.profile-drop-after {
+  position: relative;
+}
+
+.channel-subgroup.profile-drop-before::before,
+.channel-subgroup.profile-drop-after::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.channel-subgroup.profile-drop-before::before {
+  top: -3px;
+}
+
+.channel-subgroup.profile-drop-after::after {
+  bottom: -3px;
 }
 
 .channel-subgroup-count {

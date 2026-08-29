@@ -21,6 +21,9 @@
     channels: Channel[];
     directConversations: DirectConversation[];
     recentPeople: User[];
+    // Identity source for profile shortcuts; must match the list they were
+    // built from so a profile's bot resolves consistently.
+    profilePeople: User[];
     profileShortcuts: ChannelProfileShortcut[];
     currentUser: User | null;
     selectedChannelID: string;
@@ -52,6 +55,7 @@
     channels,
     directConversations,
     recentPeople,
+    profilePeople,
     profileShortcuts,
     currentUser,
     selectedChannelID,
@@ -242,10 +246,14 @@
       expanded={sections.channels}
       channels={standardChannels}
       profiles={profileShortcuts}
+      {directConversations}
+      people={profilePeople}
       {selectedChannelID}
       {selectedDirectID}
       {hrefForChannel}
+      {hrefForDirect}
       {onSelectChannel}
+      {onSelectDirect}
       {onCreateChannel}
       onToggle={() => toggleSection("channels")}
       onReorder={saveChannelOrder}

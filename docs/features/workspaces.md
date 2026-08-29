@@ -102,6 +102,23 @@ removing the profile removes that copied presentation. Self-referential source
 channels remain the canonical profile catalog and are not duplicated as
 shortcuts when their presentation is copied elsewhere.
 
+A profile's own source channel is represented by the group header rather than
+repeated as a row inside the group. Clicking the header expands the group and
+opens its target; the separate caret button collapses it. A profile whose label
+matches its bot's own display name is that bot's canonical identity, so its
+header opens the bot's direct conversation. Persona profiles, where several
+labels present one shared bot, open their own source channel instead. A
+canonical profile with no direct conversation falls back to its channel. The header carries
+the source channel's unread badge, so an unread profile channel stays visible
+while the group is collapsed.
+
+Profile groups render above ordinary alphabetized sections, in the viewer's own
+channel order keyed by each profile's source channel. Managers reorder them by
+dragging a profile header onto another one, or by holding Alt with Arrow Up or
+Arrow Down while the header has focus. That order is the same browser-local
+per-user channel order that positions ordinary channels, so it is not shared
+across users and needs no server state.
+
 Guest workspace members are waiting-room users. They can only see `#guest`, can
 post three messages per day, and cannot create rooms or DMs. Moderators and
 owners can promote them to `member`, time them out, or block them. See

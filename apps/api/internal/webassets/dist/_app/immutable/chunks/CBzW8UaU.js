@@ -1,0 +1,1 @@
+var e=typeof window>`u`?void 0:window.clickclackDesktop;async function t(e,t){if(!(t.desktop&&await t.desktop(e))){if(!t.browser)throw Error(`Clipboard unavailable`);await t.browser(e)}}function n(n){return t(n,{browser:globalThis.navigator?.clipboard?.writeText.bind(globalThis.navigator.clipboard),desktop:e?.writeClipboardText})}export{e as n,n as t};

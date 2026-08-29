@@ -4747,6 +4747,7 @@
     {channels}
     {directConversations}
     {recentPeople}
+    profilePeople={mentionPeople}
     {profileShortcuts}
     currentUser={user}
     {selectedChannelID}

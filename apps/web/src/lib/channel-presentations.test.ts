@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Channel, Message, User } from "./types.ts";
+import type { Channel, DirectConversation, Message, User } from "./types.ts";
 import {
+  type ChannelProfileShortcut,
   collectChannelProfileShortcuts,
+  moveChannelInOrder,
+  orderProfileShortcuts,
+  profileHeaderTarget,
+  profileIsCanonicalIdentity,
   presentChannelMessage,
   presentChannelUser,
 } from "./chat/people.ts";
@@ -119,5 +124,101 @@ test("profile shortcuts omit missing and deleted bot identities", () => {
   assert.deepEqual(
     collectChannelProfileShortcuts([channel], [{ ...bot, deleted_at: "2026-01-02T00:00:00Z" }]),
     [],
+  );
+});
+
+function shortcut(channelID: string, name: string): ChannelProfileShortcut {
+  return {
+    id: `${channelID}:${bot.id}`,
+    channel_id: channelID,
+    channel_name: channelID,
+    bot_user_id: bot.id,
+    display_name: name,
+    avatar_url: "",
+    handle: "kai",
+    unread_count: 0,
+  };
+}
+
+test("profile groups follow the viewer channel order", () => {
+  const profiles = [
+    shortcut("chn_career", "рекрутер"),
+    shortcut("chn_kai", "кай"),
+    shortcut("chn_pi", "пи"),
+  ];
+  const ordered = orderProfileShortcuts(profiles, ["chn_pi", "chn_career", "chn_kai"]);
+  assert.deepEqual(
+    ordered.map((profile) => profile.display_name),
+    ["пи", "рекрутер", "кай"],
+  );
+});
+
+test("profiles missing from the viewer order keep their relative tail position", () => {
+  const profiles = [
+    shortcut("chn_career", "рекрутер"),
+    shortcut("chn_kai", "кай"),
+    shortcut("chn_pi", "пи"),
+  ];
+  const ordered = orderProfileShortcuts(profiles, ["chn_pi"]);
+  assert.deepEqual(
+    ordered.map((profile) => profile.display_name),
+    ["пи", "рекрутер", "кай"],
+  );
+});
+
+test("moving a channel in the viewer order lands before or after the target", () => {
+  const order = ["a", "b", "c", "d"];
+  assert.deepEqual(moveChannelInOrder(order, "d", "a", true), ["d", "a", "b", "c"]);
+  assert.deepEqual(moveChannelInOrder(order, "a", "c", false), ["b", "c", "a", "d"]);
+});
+
+test("moving a channel is a no-op for unknown or self targets", () => {
+  const order = ["a", "b"];
+  assert.equal(moveChannelInOrder(order, "a", "a", true), order);
+  assert.equal(moveChannelInOrder(order, "z", "a", true), order);
+  assert.equal(moveChannelInOrder(order, "a", "z", true), order);
+});
+
+const kaiDM = {
+  id: "dm_kai",
+  workspace_id: "wsp_1",
+  members: [{ ...bot }, { id: "usr_kas", kind: "human", display_name: "kas", created_at: "" }],
+  created_at: "2026-01-01T00:00:00Z",
+} as unknown as DirectConversation;
+
+test("a canonical profile header opens the bot direct conversation", () => {
+  const canonical = { ...shortcut("chn_kai", "кай"), bot_user_id: bot.id };
+  assert.equal(profileIsCanonicalIdentity(canonical, [bot]), true);
+  assert.deepEqual(profileHeaderTarget(canonical, [bot], [kaiDM]), {
+    kind: "direct",
+    id: "dm_kai",
+  });
+});
+
+test("persona profiles over one bot keep their own source channel", () => {
+  for (const label of ["лиза", "рекрутер", "казначей", "девушки"]) {
+    const persona = { ...shortcut(`chn_${label}`, label), bot_user_id: bot.id };
+    assert.equal(profileIsCanonicalIdentity(persona, [bot]), false);
+    assert.deepEqual(profileHeaderTarget(persona, [bot], [kaiDM]), {
+      kind: "channel",
+      id: `chn_${label}`,
+    });
+  }
+});
+
+test("a canonical profile falls back to its channel when no direct conversation exists", () => {
+  const canonical = { ...shortcut("chn_kai", "кай"), bot_user_id: bot.id };
+  assert.deepEqual(profileHeaderTarget(canonical, [bot], []), {
+    kind: "channel",
+    id: "chn_kai",
+  });
+});
+
+test("a missing or deleted bot is never canonical", () => {
+  const canonical = { ...shortcut("chn_kai", "кай"), bot_user_id: bot.id };
+  assert.equal(profileIsCanonicalIdentity(canonical, []), false);
+  assert.equal(
+    profileIsCanonicalIdentity(canonical, [{ ...bot, deleted_at: "2026-01-02T00:00:00Z" }]),
+    false,
   );
 });

@@ -1,8 +1,13 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { channelDisplayTitle } from "../../lib/chat/channels";
-  import type { ChannelProfileShortcut } from "../../lib/chat/people";
-  import type { Channel } from "../../lib/types";
+  import {
+    moveChannelInOrder,
+    orderProfileShortcuts,
+    profileHeaderTarget,
+    type ChannelProfileShortcut,
+  } from "../../lib/chat/people";
+  import type { Channel, DirectConversation, User } from "../../lib/types";
   import Avatar from "../avatar/Avatar.svelte";
 
   type Props = {
@@ -10,10 +15,14 @@
     expanded: boolean;
     channels: Channel[];
     profiles: ChannelProfileShortcut[];
+    directConversations: DirectConversation[];
+    people: User[];
     selectedChannelID: string;
     selectedDirectID: string;
     hrefForChannel: (channelID: string) => string;
+    hrefForDirect: (conversationID: string) => string;
     onSelectChannel: (channelID: string) => void;
+    onSelectDirect: (conversationID: string) => void;
     onCreateChannel: () => void;
     onToggle: () => void;
     onReorder: (channelIDs: string[]) => void;
@@ -25,6 +34,9 @@
     label: string;
     channels: Channel[];
     profile?: ChannelProfileShortcut;
+    // A profile's own source channel is represented by the group header, so it
+    // is held here instead of being repeated as a row inside the group.
+    sourceChannel?: Channel;
   };
 
   let {
@@ -32,10 +44,14 @@
     expanded,
     channels,
     profiles,
+    directConversations,
+    people,
     selectedChannelID,
     selectedDirectID,
     hrefForChannel,
+    hrefForDirect,
     onSelectChannel,
+    onSelectDirect,
     onCreateChannel,
     onToggle,
     onReorder,
@@ -57,6 +73,9 @@
   let moveMenuElement = $state<HTMLDivElement>();
   let moveMenuTrigger: HTMLButtonElement | undefined;
   let moveAnnouncement = $state("");
+  let draggedProfileChannelID = $state("");
+  let profileDropTargetID = $state("");
+  let profileDropBefore = $state(true);
   let groupDisclosure = $state<Record<string, boolean>>({});
 
   const activeChannels = $derived(channels.filter((channel) => !channel.archived_at));
@@ -73,19 +92,22 @@
       group.push(channel);
       grouped.set(section, group);
     }
-    const profileGroups = profiles.map(
-      (profile): ChannelGroup => {
-        const key = `profile:${profile.channel_id}`;
-        const profileChannels = grouped.get(key) ?? [];
-        grouped.delete(key);
-        return {
-          key,
-          label: profile.display_name,
-          channels: profileChannels,
-          profile,
-        };
-      },
+    const orderedProfiles = orderProfileShortcuts(
+      profiles,
+      channels.map((channel) => channel.id),
     );
+    const profileGroups = orderedProfiles.map((profile): ChannelGroup => {
+      const key = `profile:${profile.channel_id}`;
+      const profileChannels = grouped.get(key) ?? [];
+      grouped.delete(key);
+      return {
+        key,
+        label: profile.display_name,
+        channels: profileChannels.filter((channel) => channel.id !== profile.channel_id),
+        profile,
+        sourceChannel: profileChannels.find((channel) => channel.id === profile.channel_id),
+      };
+    });
     const ordinaryGroups = [...grouped.entries()]
       .map(([section, groupedChannels]): ChannelGroup => ({
         key: `section:${section}`,
@@ -170,6 +192,41 @@
         );
   }
 
+  // The header now stands in for the source channel, so its unread count has to
+  // surface there instead of on a hidden row.
+  function groupUnreadCount(group: ChannelGroup): number {
+    return group.sourceChannel?.unread_count || 0;
+  }
+
+  // Canonical profiles (кай, пи) stand for the bot itself and open its DM;
+  // persona profiles open the channel the header replaced.
+  function headerTarget(group: ChannelGroup) {
+    if (!group.profile) return null;
+    return profileHeaderTarget(group.profile, people, directConversations);
+  }
+
+  function headerHref(group: ChannelGroup): string {
+    const target = headerTarget(group);
+    if (!target) return "";
+    return target.kind === "direct" ? hrefForDirect(target.id) : hrefForChannel(target.id);
+  }
+
+  function headerIsActive(group: ChannelGroup): boolean {
+    const target = headerTarget(group);
+    if (!target) return false;
+    return target.kind === "direct"
+      ? selectedDirectID === target.id
+      : selectedChannelID === target.id && !selectedDirectID;
+  }
+
+  function openHeaderTarget(group: ChannelGroup) {
+    const target = headerTarget(group);
+    if (!target) return;
+    if (!groupExpanded(group.key)) toggleGroup(group.key);
+    if (target.kind === "direct") onSelectDirect(target.id);
+    else onSelectChannel(target.id);
+  }
+
   function announceMove(message: string) {
     moveAnnouncement = "";
     queueMicrotask(() => {
@@ -184,13 +241,9 @@
     scopeChannels: Channel[],
   ) {
     if (!channelID || !targetID || channelID === targetID) return;
-    const order = channels.map((channel) => channel.id);
-    const from = order.indexOf(channelID);
-    if (from < 0) return;
-    order.splice(from, 1);
-    const target = order.indexOf(targetID);
-    if (target < 0) return;
-    order.splice(target + (before ? 0 : 1), 0, channelID);
+    const current = channels.map((channel) => channel.id);
+    const order = moveChannelInOrder(current, channelID, targetID, before);
+    if (order === current) return;
     onReorder(order);
     const moved = channels.find((channel) => channel.id === channelID);
     const scopeOrder = scopeChannels
@@ -210,6 +263,53 @@
     const target = index + offset;
     if (index < 0 || target < 0 || target >= scopeChannels.length) return;
     moveChannel(channelID, scopeChannels[target].id, offset < 0, scopeChannels);
+  }
+
+  const profileGroups = $derived(sectionGroups.filter((group) => Boolean(group.profile)));
+
+  // Profile headers reorder by moving their source channel in the same viewer
+  // order that positions ordinary channels, so one stored order drives both.
+  function moveProfileGroup(sourceID: string, targetID: string, before: boolean) {
+    if (!sourceID || !targetID || sourceID === targetID) return;
+    const current = channels.map((channel) => channel.id);
+    const order = moveChannelInOrder(current, sourceID, targetID, before);
+    if (order === current) return;
+    onReorder(order);
+    const moved = profileGroups.find((group) => group.profile?.channel_id === sourceID);
+    if (!moved?.profile) return;
+    const position =
+      orderProfileShortcuts(
+        profileGroups.flatMap((group) => (group.profile ? [group.profile] : [])),
+        order,
+      ).findIndex((profile) => profile.channel_id === sourceID) + 1;
+    announceMove(
+      `Moved ${moved.profile.display_name} to position ${position} of ${profileGroups.length}`,
+    );
+  }
+
+  function moveProfileGroupBy(sourceID: string, offset: number) {
+    const index = profileGroups.findIndex((group) => group.profile?.channel_id === sourceID);
+    const target = index + offset;
+    if (index < 0 || target < 0 || target >= profileGroups.length) return;
+    const targetID = profileGroups[target].profile?.channel_id || "";
+    moveProfileGroup(sourceID, targetID, offset < 0);
+  }
+
+  function handleProfileHeaderDragStart(event: DragEvent, sourceID: string) {
+    dragGestureActive = true;
+    moveMenuChannelID = "";
+    draggedProfileChannelID = sourceID;
+    event.dataTransfer?.setData("text/plain", sourceID);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleProfileHeaderDragOver(event: DragEvent, sourceID: string) {
+    if (!draggedProfileChannelID || draggedProfileChannelID === sourceID) return;
+    event.preventDefault();
+    const header = event.currentTarget as HTMLElement;
+    profileDropTargetID = sourceID;
+    profileDropBefore = event.clientY < header.getBoundingClientRect().top + header.offsetHeight / 2;
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
   }
 
   function handleDragStart(event: DragEvent, channelID: string, groupKey: string) {
@@ -238,6 +338,7 @@
   }
 
   function handleProfileDragOver(event: DragEvent, group: ChannelGroup) {
+    if (draggedProfileChannelID) return;
     if (!draggedChannelID || !group.profile || draggedGroupKey === group.key) return;
     event.preventDefault();
     dropTargetID = "";
@@ -261,6 +362,8 @@
     draggedGroupKey = "";
     dropTargetID = "";
     dropGroupKey = "";
+    draggedProfileChannelID = "";
+    profileDropTargetID = "";
   }
 
   function finishDrag() {
@@ -462,22 +565,92 @@
     class:archived-channel-group={subdued}
     class:profile-channel-group={Boolean(group.profile)}
     class:profile-drop-target={dropGroupKey === group.key}
-    ondragover={(event) => handleProfileDragOver(event, group)}
+    class:profile-drop-before={Boolean(group.profile) &&
+      profileDropTargetID === group.profile?.channel_id &&
+      profileDropBefore}
+    class:profile-drop-after={Boolean(group.profile) &&
+      profileDropTargetID === group.profile?.channel_id &&
+      !profileDropBefore}
+    ondragover={(event) => {
+      if (group.profile && draggedProfileChannelID) {
+        handleProfileHeaderDragOver(event, group.profile.channel_id);
+        return;
+      }
+      handleProfileDragOver(event, group);
+    }}
     ondrop={(event) => {
+      if (group.profile && draggedProfileChannelID) {
+        event.preventDefault();
+        moveProfileGroup(draggedProfileChannelID, group.profile.channel_id, profileDropBefore);
+        finishDrag();
+        return;
+      }
       if (!group.profile || !draggedChannelID || draggedGroupKey === group.key) return;
       event.preventDefault();
       assignProfile(draggedChannelID, group.profile);
       finishDrag();
     }}
   >
-    <button
-      type="button"
+    <div class="channel-subgroup-header" class:profile-subgroup-header={Boolean(group.sourceChannel)}>
+    {#if group.sourceChannel}
+      <button
+        type="button"
+        class="channel-subgroup-caret"
+        aria-expanded={groupIsExpanded}
+        aria-controls={domID}
+        aria-label={`${groupIsExpanded ? "Collapse" : "Expand"} ${group.label}`}
+        onclick={() => {
+          if (dragGestureActive) return;
+          toggleGroup(group.key);
+        }}
+      >
+        <span class="caret" aria-hidden="true">▾</span>
+      </button>
+    {/if}
+    <svelte:element
+      this={group.sourceChannel ? "a" : "button"}
+      role={group.sourceChannel ? undefined : "button"}
+      href={group.sourceChannel ? headerHref(group) : undefined}
+      type={group.sourceChannel ? undefined : "button"}
       class="channel-subgroup-toggle"
-      aria-expanded={groupIsExpanded}
-      aria-controls={domID}
-      onclick={() => toggleGroup(group.key)}
+      class:profile-reorderable={Boolean(group.profile)}
+      class:profile-source-link={Boolean(group.sourceChannel)}
+      class:active={Boolean(group.sourceChannel) && headerIsActive(group)}
+      aria-expanded={group.sourceChannel ? undefined : groupIsExpanded}
+      aria-controls={group.sourceChannel ? undefined : domID}
+      aria-current={group.sourceChannel && headerIsActive(group) ? "page" : undefined}
+      draggable={group.profile ? "true" : "false"}
+      aria-describedby={group.profile ? "channel-order-instructions" : undefined}
+      ondragstart={(event: DragEvent) => {
+        if (group.profile) handleProfileHeaderDragStart(event, group.profile.channel_id);
+      }}
+      ondragend={finishDrag}
+      onkeydown={(event: KeyboardEvent) => {
+        if (!group.profile) return;
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+        if (!event.altKey) return;
+        event.preventDefault();
+        moveProfileGroupBy(group.profile.channel_id, event.key === "ArrowUp" ? -1 : 1);
+      }}
+      onclick={(event: MouseEvent) => {
+        if (dragGestureActive) {
+          event.preventDefault();
+          return;
+        }
+        // A profile header stands in for its source channel: open that channel
+        // and reveal the children instead of toggling the disclosure shut.
+        if (group.sourceChannel) {
+          if (!shouldHandleClientNavigation(event)) return;
+          event.preventDefault();
+          openHeaderTarget(group);
+          return;
+        }
+        toggleGroup(group.key);
+      }}
     >
-      <span class="caret" aria-hidden="true">▾</span>
+      {#if !group.sourceChannel}
+        <span class="caret" aria-hidden="true">▾</span>
+      {/if}
       {#if group.profile}
         <Avatar
           class="channel-profile-avatar"
@@ -490,8 +663,15 @@
         />
       {/if}
       <span>{group.label}</span>
-      <span class="channel-subgroup-count">{group.channels.length}</span>
-    </button>
+      {#if groupUnreadCount(group) > 0}
+        <span class="unread-badge" aria-label={`${groupUnreadCount(group)} unread`}>
+          {groupUnreadCount(group) > 99 ? "99+" : groupUnreadCount(group)}
+        </span>
+      {:else}
+        <span class="channel-subgroup-count">{group.channels.length}</span>
+      {/if}
+    </svelte:element>
+    </div>
     <div
       class="channel-subgroup-list"
       id={domID}
@@ -541,7 +721,7 @@
   >
     {#if expanded}
       <span id="channel-order-instructions" class="sr-only">
-        Drag with a pointer, use Arrow Up and Arrow Down while focused, or open the move menu. Moves stay within the current channel section.
+        Drag with a pointer, use Arrow Up and Arrow Down while focused, or open the move menu. Moves stay within the current channel section. On a profile header, hold Alt with Arrow Up or Arrow Down to reorder profiles.
       </span>
       {#each unsectionedChannels as channel (channel.id)}
         {@render channelRow(channel, unsectionedChannels, "unsectioned", false, true)}

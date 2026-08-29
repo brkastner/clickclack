@@ -140,6 +140,75 @@ export function collectChannelProfileShortcuts(
   });
 }
 
+// Sidebar profile groups follow the viewer's channel order, keyed by each
+// profile's source channel. Profiles whose source channel is missing keep their
+// original relative position at the end.
+export function orderProfileShortcuts(
+  profiles: ChannelProfileShortcut[],
+  channelIDs: string[],
+): ChannelProfileShortcut[] {
+  const rank = new Map<string, number>();
+  channelIDs.forEach((id, index) => {
+    if (!rank.has(id)) rank.set(id, index);
+  });
+  return profiles
+    .map((profile, index) => ({ profile, index }))
+    .sort((a, b) => {
+      const left = rank.get(a.profile.channel_id) ?? Number.MAX_SAFE_INTEGER;
+      const right = rank.get(b.profile.channel_id) ?? Number.MAX_SAFE_INTEGER;
+      return left === right ? a.index - b.index : left - right;
+    })
+    .map((entry) => entry.profile);
+}
+
+// Moves one channel ID within a viewer order, landing before or after the
+// target. Returns the original order when either ID is absent.
+export function moveChannelInOrder(
+  order: string[],
+  movingID: string,
+  targetID: string,
+  before: boolean,
+): string[] {
+  if (!movingID || !targetID || movingID === targetID) return order;
+  const next = [...order];
+  const from = next.indexOf(movingID);
+  if (from < 0) return order;
+  next.splice(from, 1);
+  const target = next.indexOf(targetID);
+  if (target < 0) return order;
+  next.splice(target + (before ? 0 : 1), 0, movingID);
+  return next;
+}
+
+// A profile is the bot's canonical identity when its label matches the bot's
+// own display name. Persona profiles (several labels over one bot) are wrappers
+// and keep their own channel; only a canonical profile stands for the bot
+// itself and therefore opens that bot's direct conversation.
+export function profileIsCanonicalIdentity(
+  profile: Pick<ChannelProfileShortcut, "bot_user_id" | "display_name">,
+  people: User[],
+): boolean {
+  const bot = people.find((person) => person.id === profile.bot_user_id);
+  if (!bot || bot.deleted_at) return false;
+  const label = profile.display_name.trim();
+  return label !== "" && label === (bot.display_name || "").trim();
+}
+
+// Resolves the conversation a profile header should open. Canonical profiles
+// target the bot's DM; personas and any canonical profile without a DM fall
+// back to the profile's own source channel.
+export function profileHeaderTarget(
+  profile: Pick<ChannelProfileShortcut, "bot_user_id" | "display_name" | "channel_id">,
+  people: User[],
+  conversations: DirectConversation[],
+): { kind: "direct"; id: string } | { kind: "channel"; id: string } {
+  if (profileIsCanonicalIdentity(profile, people)) {
+    const direct = directConversationForUser(conversations, profile.bot_user_id);
+    if (direct) return { kind: "direct", id: direct.id };
+  }
+  return { kind: "channel", id: profile.channel_id };
+}
+
 export function collectMentionPeople(
   currentUser: User | null,
   recent: User[],
