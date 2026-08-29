@@ -1,0 +1,1 @@
+import{bt as e,xt as t}from"../chunks/DOzLS480.js";import"../chunks/xihTtKlq.js";import{t as n}from"../chunks/tOJ0ZE0T.js";function r(r,i){t(i,!0),n(r,{get routeWorkspaceID(){return i.params.workspaceID}}),e()}export{r as component};

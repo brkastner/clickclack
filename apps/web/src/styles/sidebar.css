@@ -28,74 +28,6 @@
   min-height: 60px;
 }
 
-.workspace-header-icon {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: 8px;
-  object-fit: cover;
-  background: var(--panel-2);
-}
-
-.workspace-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.workspace-menu {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-  margin-left: -8px;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.workspace-menu:hover {
-  background: var(--panel-2);
-}
-
-.workspace-menu-caret {
-  flex: 0 0 auto;
-  color: var(--muted);
-  transition: color 120ms ease;
-}
-
-.workspace-menu:hover .workspace-menu-caret {
-  color: var(--text-strong);
-}
-
-.sidebar-collapse {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 8px;
-  background: var(--panel-2);
-  color: var(--muted);
-  transition:
-    color 120ms ease,
-    background 120ms ease,
-    transform 120ms ease;
-}
-
-.sidebar-collapse:hover {
-  background: var(--panel-3);
-  color: var(--text-strong);
-  transform: translateX(-1px);
-}
-
 .workspace-name {
   display: flex;
   flex-direction: column;
@@ -1019,16 +951,6 @@
 
 .dm-row .nav-item {
   min-width: 0;
-}
-
-.profile-dm-row .nav-item {
-  grid-column: 1 / -1;
-}
-
-.profile-handle {
-  flex-shrink: 0;
-  color: var(--muted-2);
-  font-size: 11px;
 }
 
 .dm-actions-trigger {

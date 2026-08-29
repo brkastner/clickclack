@@ -84,15 +84,15 @@
     onOpenWorkspaceSettings,
   }: Props = $props();
 
-  type SectionState = { channels: boolean; directMessages: boolean; people: boolean };
+  type SectionState = { channels: boolean; directMessages: boolean };
   const SECTION_STORAGE_PREFIX = "clickclack:sidebar-sections:v1:";
-  const DEFAULT_SECTION_STATE: SectionState = { channels: true, directMessages: true, people: true };
+  const DEFAULT_SECTION_STATE: SectionState = { channels: true, directMessages: true };
   let sections = $state<SectionState>({ ...DEFAULT_SECTION_STATE });
 
   function isSectionState(value: unknown): value is SectionState {
     if (!value || typeof value !== "object") return false;
     const candidate = value as Record<string, unknown>;
-    return typeof candidate.channels === "boolean" && typeof candidate.directMessages === "boolean" && typeof candidate.people === "boolean";
+    return typeof candidate.channels === "boolean" && typeof candidate.directMessages === "boolean";
   }
 
   function loadSections(id: string): SectionState {
@@ -186,7 +186,6 @@
     });
     return [...saved, ...byID.values()];
   });
-  let standardChannels = $derived(orderedChannels);
 
   $effect(() => {
     channelOrder = loadChannelOrder(workspaceID, currentUser?.id || "");
@@ -255,7 +254,7 @@
     <ChannelList
       {workspaceID}
       expanded={sections.channels}
-      channels={standardChannels}
+      channels={orderedChannels}
       profiles={profileShortcuts}
       {directConversations}
       people={profilePeople}
@@ -274,13 +273,9 @@
     <DirectMessageList
       expanded={sections.directMessages}
       conversations={directConversations}
-      profiles={[]}
       currentUserID={currentUser?.id}
-      {selectedChannelID}
       {selectedDirectID}
-      {hrefForChannel}
       {hrefForDirect}
-      {onSelectChannel}
       {onSelectDirect}
       {onCreateDirect}
       {onHideDirect}
