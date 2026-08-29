@@ -146,8 +146,9 @@
 /* ---------- SHELL ---------- */
 
 .shell {
+  --sidebar-width: 300px;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 0;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0;
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
@@ -159,11 +160,11 @@
 
 .shell.thread-open,
 .shell.search-open {
-  grid-template-columns: 260px minmax(0, 1fr) minmax(340px, 28vw);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) minmax(340px, 28vw);
 }
 
 .shell.artifact-open {
-  grid-template-columns: 260px minmax(0, 1fr) minmax(460px, 42vw);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) minmax(460px, 42vw);
 }
 
 .shell.sidebar-collapsed {
@@ -187,7 +188,7 @@
 }
 
 .shell.desktop-shell {
-  --desktop-account-footer-height: 52px;
+  --desktop-account-footer-height: 60px;
   grid-template-rows: 52px minmax(0, 1fr);
   /* One continuous chrome plate behind the title bar and sidebar; content
      panes float on it as a card. */
@@ -215,7 +216,7 @@
 }
 
 .desktop-shell > .sidebar .sidebar-scroll {
-  padding-top: 2px;
+  padding-top: 8px;
 }
 
 /* Narrow windows turn the sidebar into an overlay drawer (see modals.css). */

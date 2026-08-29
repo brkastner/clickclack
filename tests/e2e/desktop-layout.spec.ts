@@ -115,8 +115,10 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     };
   });
 
-  expect(geometry.topGap).toBeGreaterThanOrEqual(0);
-  expect(geometry.topGap).toBeLessThanOrEqual(64);
+  // The scaled recent-people shelf reserves room for its avatars and vertical
+  // breathing space before the first navigation section.
+  expect(geometry.topGap).toBeGreaterThanOrEqual(96);
+  expect(geometry.topGap).toBeLessThanOrEqual(124);
   expect(geometry.workspaceLabel).toContain("Workspace");
   expect(geometry.channelWidth).toBeGreaterThan(0);
   expect(geometry.channelGlyph.text).toBe("#");

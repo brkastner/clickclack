@@ -84,6 +84,8 @@
     onOpenWorkspaceSettings,
   }: Props = $props();
 
+  const displayedRecentPeople = $derived(recentPeople.slice(1).concat(recentPeople.slice(0, 1)));
+
   type SectionState = { channels: boolean; directMessages: boolean };
   const SECTION_STORAGE_PREFIX = "clickclack:sidebar-sections:v1:";
   const DEFAULT_SECTION_STATE: SectionState = { channels: true, directMessages: true };
@@ -219,7 +221,7 @@
 
   <div class="sidebar-scroll">
     <section class="sidebar-people-row" aria-label="Recent people">
-      {#each recentPeople as person (person.id)}
+      {#each displayedRecentPeople as person (person.id)}
         {@const conversation = directConversationForUser(directConversations, person.id)}
         <a
           href={conversation ? hrefForDirect(conversation.id) : "#"}
@@ -242,7 +244,7 @@
             id={person.id}
             name={person.display_name}
             src={person.avatar_url}
-            size={34}
+            size={48}
           />
         </a>
       {/each}
