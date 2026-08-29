@@ -193,10 +193,9 @@
   let showCreateDirect = false;
   let gifQuery = "";
   let browserNotificationsEnabled = false;
-  // Client-only preferences for agent activity. Consecutive same-turn
-  // agent_commentary/agent_tool rows are coalesced into one preamble block;
-  // these two independent flags drop the commentary prose and/or the tool-call
-  // sub-items from that block. When both are set the block is omitted entirely.
+  // Client-only preferences for agent activity. Commentary renders as normal
+  // text between collapsible runs of tool rows; these flags independently hide
+  // narration and/or tool blocks.
   // Default: show both. Persisted in localStorage like other client prefs.
   let hideCommentary = false;
   let hideToolCalls = false;
@@ -342,9 +341,8 @@
   $: activeUnreadSince = activeUnreadCount > 0
     ? unreadSinceForKey(activeConversationKey, activeUnreadBoundarySeq, messageWindows)
     : "";
-  // Coalesce consecutive same-turn agent activity rows into one preamble block
-  // per turn, applying the two visibility flags. Ordinary messages pass through
-  // untouched and keep their order.
+  // Present each turn as ordinary commentary separated by collapsible tool
+  // runs, applying the two visibility flags. Ordinary messages pass through.
   $: visibleMessages = coalesceAgentActivity(
     messages,
     { hideCommentary, hideToolCalls },

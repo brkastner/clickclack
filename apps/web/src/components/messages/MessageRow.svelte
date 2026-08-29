@@ -136,22 +136,21 @@
   let canEditMessage = $derived(
     Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID,
   );
-  // Coalesced agent activity: consecutive same-turn agent_commentary/agent_tool
-  // rows are collapsed (client-side) into one synthetic row carrying a
-  // preamble_block. When present, the row renders as a single preamble block
-  // (incrementing commentary + collapsed tool sub-items, collapse-to-one-line
-  // when the turn ends) instead of the final-answer treatment.
+  // Consecutive tool rows become a synthetic collapsible preamble block.
+  // Commentary rows remain ordinary text and split one turn into as many tool
+  // blocks as its narration requires.
   let preambleBlock = $derived(message.preamble_block);
-  // Boxed preamble<->answer cohesion. Within an agent message group the
-  // synthetic preamble row is immediately followed by the same author's final
-  // answer (coalesceAgentActivity anchors the block at the turn, ordinary
-  // messages pass through), so within-group adjacency alone identifies the
-  // pair. The preamble that precedes a final answer and the answer that follows
-  // a preamble share one bordered card with a flat internal seam, mirroring the
-  // ClawCanvas inline model so the activity log and the answer read as one unit.
-  let followsPreamble = $derived(Boolean(previousMessage?.preamble_block) && !preambleBlock);
+  let isAgentCommentary = $derived(message.kind === "agent_commentary" && !preambleBlock);
+  // Only the final tool block joins visually to the ordinary answer. A
+  // commentary row between tool groups must remain a standalone message.
+  let followsPreamble = $derived(
+    Boolean(previousMessage?.preamble_block) &&
+      (message.kind === undefined || message.kind === "message"),
+  );
   let precedesFinalMessage = $derived(
-    Boolean(preambleBlock) && Boolean(nextMessage) && !nextMessage?.preamble_block,
+    Boolean(preambleBlock) &&
+      Boolean(nextMessage) &&
+      (nextMessage?.kind === undefined || nextMessage?.kind === "message"),
   );
   let threadReplyCount = $derived(message.thread_state?.reply_count || 0);
   let hasThreadReplies = $derived(threadReplyCount > 0);
@@ -159,6 +158,7 @@
   let isThreadOpen = $derived(selectedThreadID === message.id);
   let canOpenThread = $derived(
     !preambleBlock &&
+      !isAgentCommentary &&
       !isVoice &&
       !isPending &&
       !isFailed &&
@@ -466,6 +466,7 @@
       !event.isPrimary ||
       event.button !== 0 ||
       preambleBlock ||
+      isAgentCommentary ||
       isDeleted ||
       isPending ||
       isFailed ||
@@ -769,7 +770,7 @@
     </button>
     {/if}
   </div>
-  {#if !preambleBlock && !isDeleted}
+  {#if !preambleBlock && !isAgentCommentary && !isDeleted}
   <div class="message-actions" aria-label="Message actions">
     {#if copyStatus}
       <span

@@ -85,3 +85,78 @@ test("keeps real tool output expandable", () => {
     expandable: true,
   });
 });
+
+test("renders commentary between tools as normal text and starts a new tool block", () => {
+  const rows = [
+    message("msg_01", "I'll inspect the sidebar.", "agent_commentary"),
+    message("msg_02", "**read**\n\nSidebar.svelte"),
+    message("msg_03", "**grep**\n\nchannel order"),
+    message("msg_04", "The order is stored in the channel list.", "agent_commentary"),
+    message("msg_05", "**edit**\n\nChannelList.svelte"),
+    message("msg_06", "done", "message"),
+  ];
+
+  const result = coalesceAgentActivity(rows, {
+    hideCommentary: false,
+    hideToolCalls: false,
+  });
+
+  assert.equal(result.length, 5);
+  assert.equal(result[0]?.body, "I'll inspect the sidebar.");
+  assert.equal(result[0]?.preamble_block, undefined);
+  assert.deepEqual(
+    result[1]?.preamble_block?.items.map((item) => item.id),
+    ["msg_02", "msg_03"],
+  );
+  assert.equal(result[1]?.preamble_block?.final, true);
+  assert.equal(result[2]?.body, "The order is stored in the channel list.");
+  assert.equal(result[2]?.preamble_block, undefined);
+  assert.deepEqual(
+    result[3]?.preamble_block?.items.map((item) => item.id),
+    ["msg_05"],
+  );
+  assert.equal(result[3]?.preamble_block?.final, true);
+  assert.equal(result[4]?.body, "done");
+});
+
+test("keeps only the trailing tool block live while a turn is running", () => {
+  const rows = [
+    message("msg_01", "**read**\n\nfirst.ts"),
+    message("msg_02", "I found the next seam.", "agent_commentary"),
+    message("msg_03", "**read**\n\nsecond.ts"),
+  ];
+
+  const result = coalesceAgentActivity(
+    rows,
+    {
+      hideCommentary: false,
+      hideToolCalls: false,
+    },
+    Date.parse("2026-08-28T21:31:04.000Z"),
+  );
+
+  assert.equal(result[0]?.preamble_block?.final, true);
+  assert.equal(result[1]?.body, "I found the next seam.");
+  assert.equal(result[2]?.preamble_block?.final, false);
+});
+
+test("hidden commentary still separates collapsible tool groups", () => {
+  const rows = [
+    message("msg_01", "**read**\n\nfirst.ts"),
+    message("msg_02", "I found the next seam.", "agent_commentary"),
+    message("msg_03", "**read**\n\nsecond.ts"),
+  ];
+
+  const result = coalesceAgentActivity(
+    rows,
+    {
+      hideCommentary: true,
+      hideToolCalls: false,
+    },
+    Date.parse("2026-08-28T21:31:04.000Z"),
+  );
+
+  assert.equal(result.length, 2);
+  assert.equal(result[0]?.preamble_block?.final, true);
+  assert.equal(result[1]?.preamble_block?.final, false);
+});

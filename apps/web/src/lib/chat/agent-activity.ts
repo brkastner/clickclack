@@ -1,38 +1,22 @@
-// Render-time coalescing of durable agent activity rows into one preamble block
-// per agent turn.
+// Render-time presentation of durable agent activity rows.
 //
-// The server stores agent narration as flat, individual rows in the messages
-// table: kind="agent_commentary" for prose snapshots and kind="agent_tool" for
-// tool calls, all sharing a turn_id within one agent turn (set by the bridge).
-// Rendered one-row-per-message that reads as noise: a dozen badged rows per
-// turn. This module collapses each turn's activity rows into a single
-// synthetic "preamble" message whose block interleaves commentary prose and
-// tool calls in arrival order (commentary, tool, commentary, tool...), the
-// same chronological step timeline clickglass renders.
+// Commentary is narration, so it renders as ordinary message text. Consecutive
+// tool rows collapse into one preamble block. A commentary row closes the
+// current tool block; later tools start a new block. This repeats for the full
+// turn: commentary, tools, commentary, tools, final answer.
 //
-// Grouping is by turn_id across the whole list, not by adjacency. The bridge
-// flushes trailing commentary on a debounce, so the agent's final answer (an
-// ordinary kind="message" row) can land BETWEEN two activity rows of the same
-// turn. Adjacency grouping splits that into two blocks and leaves the trailing
-// fragment permanently expanded under the final answer, which reads as the
-// final message being swallowed by the preamble. Instead, every activity row
-// of a turn folds into one block anchored at the turn's first activity row, so
-// the block always renders above the final answer as one unit.
+// Rows are still grouped by turn_id across the whole list and emitted at the
+// turn's first activity position. That keeps late activity above the ordinary
+// final answer while preserving the activity row order inside the turn.
 //
-// A turn is final (collapse to one line) when its narration is over:
-//   - a normal message from the same author (the final answer) follows the
-//     turn's first activity row, or
-//   - any message at all follows the turn's last activity row, or
-//   - the turn's newest activity row is stale (no new frames for a few
-//     minutes), covering turns whose final answer never landed as a durable
-//     row (it went to another surface, or the bridge restarted); without
-//     this such turns would render as LIVE and expanded forever.
-// While the turn's rows are the newest content in the channel it is live.
+// A tool block is final (collapsed) when another commentary/tool segment follows
+// it, when the turn's ordinary final answer exists, or when the turn is stale.
+// Only the trailing tool block of a live turn remains expanded.
 //
 // Two independent operator flags control visibility:
-//   hideCommentary  - drop the prose items from the block
-//   hideToolCalls   - drop the tool-call items from the block
-// With both set, the block is omitted entirely (no synthetic row emitted).
+//   hideCommentary  - drop narration rows
+//   hideToolCalls   - drop collapsible tool blocks
+// Commentary still splits tool groups when hidden, preserving chronology.
 
 import type { Message, PreambleBlock, PreambleItem } from "../types";
 
@@ -155,49 +139,84 @@ function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-// Build the ordered item list for one turn's activity rows. Returns null when
-// the flags suppress every visible item.
-function buildBlock(
-  turnId: string,
-  rows: Message[],
-  final: boolean,
-  flags: AgentActivityFlags,
-): PreambleBlock | null {
+function buildToolBlock(turnId: string, rows: Message[], final: boolean): PreambleBlock {
   const items: PreambleItem[] = [];
   for (const row of rows) {
-    if (row.kind === "agent_tool") {
-      if (flags.hideToolCalls) continue;
-      const parsed = parseToolBody(row.body);
-      const prior = items.at(-1);
-      if (
-        prior?.type === "tool" &&
-        !prior.detail &&
-        !parsed.detail &&
-        prior.name === parsed.name &&
-        !prior.expandable &&
-        !parsed.expandable
-      ) {
-        prior.count += 1;
-        continue;
-      }
-      items.push({
-        type: "tool",
-        id: row.id,
-        name: parsed.name,
-        ...(parsed.detail ? { detail: parsed.detail } : {}),
-        full: row.body.trim(),
-        count: 1,
-        expandable: parsed.expandable,
-      });
-    } else {
-      // agent_commentary
-      if (flags.hideCommentary) continue;
-      const body = row.body.trim();
-      if (body) items.push({ type: "commentary", id: row.id, body });
+    const parsed = parseToolBody(row.body);
+    const prior = items.at(-1);
+    if (
+      prior?.type === "tool" &&
+      !prior.detail &&
+      !parsed.detail &&
+      prior.name === parsed.name &&
+      !prior.expandable &&
+      !parsed.expandable
+    ) {
+      prior.count += 1;
+      continue;
     }
+    items.push({
+      type: "tool",
+      id: row.id,
+      name: parsed.name,
+      ...(parsed.detail ? { detail: parsed.detail } : {}),
+      full: row.body.trim(),
+      count: 1,
+      expandable: parsed.expandable,
+    });
   }
-  if (items.length === 0) return null;
   return { turnId, items, final };
+}
+
+type TurnSegment = { type: "commentary"; row: Message } | { type: "tools"; rows: Message[] };
+
+function segmentTurn(rows: Message[]): TurnSegment[] {
+  const segments: TurnSegment[] = [];
+  let tools: Message[] = [];
+  const flushTools = () => {
+    if (tools.length > 0) segments.push({ type: "tools", rows: tools });
+    tools = [];
+  };
+  for (const row of rows) {
+    if (row.kind === "agent_tool") {
+      tools.push(row);
+      continue;
+    }
+    flushTools();
+    segments.push({ type: "commentary", row });
+  }
+  flushTools();
+  return segments;
+}
+
+function buildTurnRows(
+  turn: TurnAccumulator,
+  turnFinal: boolean,
+  flags: AgentActivityFlags,
+): Message[] {
+  const segments = segmentTurn(turn.rows);
+  const out: Message[] = [];
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (!segment) continue;
+    if (segment.type === "commentary") {
+      if (flags.hideCommentary || !segment.row.body.trim()) continue;
+      out.push({ ...segment.row, body: segment.row.body.trim() });
+      continue;
+    }
+    if (flags.hideToolCalls) continue;
+    const first = segment.rows[0];
+    if (!first) continue;
+    const final = turnFinal || index < segments.length - 1;
+    out.push({
+      ...first,
+      body: "",
+      attachments: undefined,
+      quoted_message_id: undefined,
+      preamble_block: buildToolBlock(turn.turnId, segment.rows, final),
+    });
+  }
+  return out;
 }
 
 type TurnAccumulator = {
@@ -208,10 +227,9 @@ type TurnAccumulator = {
   author: string;
 };
 
-// Walk an ordered message list and collapse each turn's agent activity rows
-// (grouped by turn_id across the whole list) into a single synthetic preamble
-// message anchored at the turn's first activity row. Ordinary messages pass
-// through untouched and keep their order.
+// Walk an ordered message list and replace each turn's activity rows with its
+// commentary/tool segments at the first activity position. Ordinary messages
+// pass through untouched and keep their order.
 export function coalesceAgentActivity(
   messages: Message[],
   flags: AgentActivityFlags,
@@ -267,20 +285,7 @@ export function coalesceAgentActivity(
     const key = turnKey(message);
     const turn = turns.get(key);
     if (!turn || turn.firstIndex !== i) continue; // folded into the anchor row
-    const block = buildBlock(turn.turnId, turn.rows, finals.get(key) === true, flags);
-    if (!block) continue;
-    // Synthesize one row from the turn's first activity row so author,
-    // timestamp, channel/seq, and turn_id flow through grouping and the
-    // virtualizer unchanged. The body is cleared; preamble_block drives
-    // rendering.
-    out.push({
-      ...turn.rows[0],
-      kind: "agent_commentary",
-      body: "",
-      attachments: undefined,
-      quoted_message_id: undefined,
-      preamble_block: block,
-    });
+    out.push(...buildTurnRows(turn, finals.get(key) === true, flags));
   }
   return out;
 }

@@ -101,10 +101,8 @@ export type PreambleToolItem = {
 
 export type PreambleItem = PreambleCommentaryItem | PreambleToolItem;
 
-// A render-time coalescing of one agent turn's activity rows: commentary
-// prose and tool calls interleaved in arrival order (commentary, tool,
-// commentary, tool...), built client-side from flat agent_commentary/
-// agent_tool rows that share a turn_id.
+// A render-time collapsible run of consecutive tool rows. Commentary is kept
+// outside the block as ordinary text and separates successive tool runs.
 export type PreambleBlock = {
   turnId: string;
   items: PreambleItem[];
@@ -139,9 +137,8 @@ export type Message = {
   kind?: "message" | "agent_commentary" | "agent_tool";
   // Correlates a sequence of agent activity rows within one agent turn.
   turn_id?: string;
-  // Client-only: when consecutive same-turn agent activity rows are coalesced
-  // into one preamble block for rendering, the synthetic row carries the
-  // collapsed block here. Never sent by the server.
+  // Client-only: a synthetic row for one consecutive run of agent_tool rows
+  // carries its collapsed block here. Never sent by the server.
   preamble_block?: PreambleBlock;
   author?: User;
   attachments?: Upload[];
