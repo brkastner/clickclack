@@ -1900,7 +1900,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await page.getByLabel("Find a person").press("Enter");
   await expect(page.getByRole("heading", { name: /Second User/ })).toBeVisible();
   await expect(
-    page.locator(".nav-section", { hasText: "People" }).getByText("Second User"),
+    page.getByLabel("Recent people").getByRole("link", { name: "Second User" }),
   ).toBeVisible();
   await page.getByLabel("Message body").fill("private playwright");
   await page.getByRole("button", { name: "Send" }).click();
