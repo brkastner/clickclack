@@ -6,6 +6,7 @@
     rotateEventSubscriptionSecret,
     type EventSubscription,
   } from "../../../lib/integrations";
+  import { writeClipboardText } from "../../../lib/clipboard";
   import DeliveriesPanel from "./DeliveriesPanel.svelte";
 
   type Props = {
@@ -129,7 +130,7 @@
 
   async function copySecret(id: string) {
     try {
-      await navigator.clipboard.writeText(revealedSecrets[id] ?? "");
+      await writeClipboardText(revealedSecrets[id] ?? "");
       copiedID = id;
       setTimeout(() => {
         if (copiedID === id) copiedID = "";

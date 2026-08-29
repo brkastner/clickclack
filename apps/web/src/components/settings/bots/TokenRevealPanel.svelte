@@ -12,6 +12,7 @@
     type OpenClawAccountMode,
   } from "../../../lib/bots";
   import type { AppSnippetInput } from "../../../lib/app-catalog";
+  import { writeClipboardText } from "../../../lib/clipboard";
 
   type SnippetBuilder = (input: AppSnippetInput) => string;
 
@@ -173,7 +174,7 @@
 
   async function copyTo(value: string, kind: "token" | "config" | "shell" | "code") {
     try {
-      await navigator.clipboard.writeText(value);
+      await writeClipboardText(value);
       copied = kind;
       setTimeout(() => {
         if (copied === kind) copied = null;

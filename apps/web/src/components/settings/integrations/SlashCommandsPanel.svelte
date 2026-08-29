@@ -6,6 +6,7 @@
     rotateSlashCommandSecret,
     type SlashCommand,
   } from "../../../lib/integrations";
+  import { writeClipboardText } from "../../../lib/clipboard";
 
   type Props = {
     workspaceID: string;
@@ -131,7 +132,7 @@
 
   async function copySecret(id: string) {
     try {
-      await navigator.clipboard.writeText(revealedSecrets[id] ?? "");
+      await writeClipboardText(revealedSecrets[id] ?? "");
       copiedID = id;
       setTimeout(() => {
         if (copiedID === id) copiedID = "";

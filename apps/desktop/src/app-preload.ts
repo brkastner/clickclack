@@ -43,7 +43,16 @@ function isComposerTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(".composer-editor__content"));
 }
 
-function installDesktopPasteHandling() {
+function selectedText(target: EventTarget | null): string {
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? start;
+    return target.value.slice(start, end);
+  }
+  return globalThis.getSelection()?.toString() ?? "";
+}
+
+function installDesktopClipboardHandling() {
   globalThis.addEventListener(
     "keydown",
     (event) => {
@@ -58,6 +67,17 @@ function installDesktopPasteHandling() {
       }
       event.preventDefault();
       void deliverDesktopPaste();
+    },
+    true,
+  );
+  globalThis.addEventListener(
+    "copy",
+    (event) => {
+      if (!event.isTrusted) return;
+      const text = selectedText(event.target);
+      if (!text) return;
+      event.preventDefault();
+      void ipcRenderer.invoke("desktop:write-clipboard-text", text);
     },
     true,
   );
@@ -106,6 +126,6 @@ const trustedOrigin = process.argv
   ?.slice(DESKTOP_SERVER_ORIGIN_ARG.length);
 
 if (desktopBridgeAllowed(globalThis.location.origin, trustedOrigin)) {
-  installDesktopPasteHandling();
+  installDesktopClipboardHandling();
   contextBridge.exposeInMainWorld("clickclackDesktop", Object.freeze(bridge));
 }

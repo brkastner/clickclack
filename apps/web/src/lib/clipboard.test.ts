@@ -15,6 +15,9 @@ const desktopPreload = readFileSync(
 
 test("routes trusted desktop paste gestures through Electron's native clipboard", () => {
   assert.match(desktopPreload, /event\.isTrusted/u);
+  assert.match(desktopPreload, /"copy"/u);
+  assert.match(desktopPreload, /selectedText\(event\.target\)/u);
+  assert.match(desktopPreload, /desktop:write-clipboard-text/u);
   assert.match(desktopPreload, /desktop:read-clipboard/u);
   assert.match(desktopPreload, /desktop:paste-native/u);
   assert.match(desktopMain, /if \(!isMainSender\(event\)\) return null;/u);
