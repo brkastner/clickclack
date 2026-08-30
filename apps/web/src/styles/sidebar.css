@@ -127,20 +127,14 @@
 }
 
 .sidebar-people-row {
-  display: flex;
-  min-height: 88px;
-  align-items: center;
-  justify-content: space-evenly;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, 50px);
+  grid-template-rows: repeat(2, 50px);
+  min-height: 160px;
+  place-content: space-evenly;
   margin: 0 0 14px;
-  padding: 14px 3px 18px;
-  overflow-x: auto;
+  padding: 0;
   border-bottom: 1px solid var(--line);
-  scrollbar-width: none;
-}
-
-.sidebar-people-row::-webkit-scrollbar {
-  display: none;
 }
 
 .sidebar-person {
@@ -174,6 +168,9 @@
 }
 
 .sidebar-people-empty {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  place-self: center;
   color: var(--muted-2);
   font-family: var(--font-mono);
   font-size: 10px;

@@ -84,7 +84,9 @@
     onOpenWorkspaceSettings,
   }: Props = $props();
 
-  const displayedRecentPeople = $derived(recentPeople.slice(1).concat(recentPeople.slice(0, 1)));
+  const displayedRecentPeople = $derived(
+    recentPeople.slice(1).concat(recentPeople.slice(0, 1)).slice(0, 4),
+  );
 
   type SectionState = { channels: boolean; directMessages: boolean };
   const SECTION_STORAGE_PREFIX = "clickclack:sidebar-sections:v1:";

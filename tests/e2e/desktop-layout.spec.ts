@@ -59,6 +59,7 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   const geometry = await page.evaluate(() => {
     const sidebar = document.querySelector<HTMLElement>(".sidebar");
     const sidebarScroll = document.querySelector<HTMLElement>(".sidebar-scroll");
+    const peopleShelf = sidebarScroll?.querySelector<HTMLElement>(".sidebar-people-row");
     const firstSection = sidebarScroll?.querySelector<HTMLElement>(".nav-section");
     const userCard = document.querySelector<HTMLElement>(".user-card");
     const workspaceSwitcher = document.querySelector<HTMLElement>(".workspace-switcher--titlebar");
@@ -74,6 +75,7 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     if (
       !sidebar ||
       !sidebarScroll ||
+      !peopleShelf ||
       !firstSection ||
       !userCard ||
       !workspaceSwitcher ||
@@ -86,14 +88,44 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
       throw new Error("desktop layout fixture did not render");
     }
 
+    peopleShelf.replaceChildren(
+      ...Array.from({ length: 4 }, () => {
+        const person = document.createElement("a");
+        person.className = "sidebar-person";
+        return person;
+      }),
+    );
+
     const sidebarRect = sidebar.getBoundingClientRect();
+    const shelfRect = peopleShelf.getBoundingClientRect();
+    const people = [...peopleShelf.querySelectorAll<HTMLElement>(".sidebar-person")].map((person) =>
+      person.getBoundingClientRect(),
+    );
     const userCardRect = userCard.getBoundingClientRect();
     const switcherRect = workspaceSwitcher.getBoundingClientRect();
     const channelRect = channelLabel.getBoundingClientRect();
     const searchRect = search.getBoundingClientRect();
     const safeAreaRect = safeArea.getBoundingClientRect();
+    const peopleShelfStyle = getComputedStyle(peopleShelf);
     return {
       topGap: firstSection.getBoundingClientRect().top - sidebarScroll.getBoundingClientRect().top,
+      peopleShelf: {
+        display: peopleShelfStyle.display,
+        columns: peopleShelfStyle.gridTemplateColumns,
+        rows: peopleShelfStyle.gridTemplateRows,
+        horizontal: [
+          people[0].left - shelfRect.left,
+          people[1].left - people[0].right,
+          shelfRect.right - people[1].right,
+        ],
+        vertical: [
+          people[0].top - shelfRect.top,
+          people[2].top - people[0].bottom,
+          shelfRect.bottom -
+            Number.parseFloat(peopleShelfStyle.borderBottomWidth) -
+            people[2].bottom,
+        ],
+      },
       channelWidth: channelRect.width,
       channelGlyph: {
         text: channelGlyph.textContent,
@@ -120,10 +152,17 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     };
   });
 
-  // The scaled recent-people shelf reserves room for its avatars and vertical
-  // breathing space before the first navigation section.
-  expect(geometry.topGap).toBeGreaterThanOrEqual(96);
-  expect(geometry.topGap).toBeLessThanOrEqual(124);
+  // The recent-people shelf forms a true 2×2 grid: every row/column gap is
+  // distributed evenly with the corresponding outer edges.
+  expect(geometry.topGap).toBeGreaterThanOrEqual(176);
+  expect(geometry.topGap).toBeLessThanOrEqual(190);
+  expect(geometry.peopleShelf.display).toBe("grid");
+  expect(geometry.peopleShelf.columns).toBe("50px 50px");
+  expect(geometry.peopleShelf.rows).toBe("50px 50px");
+  for (const spacing of [geometry.peopleShelf.horizontal, geometry.peopleShelf.vertical]) {
+    expect(Math.abs(spacing[0] - spacing[1])).toBeLessThanOrEqual(1);
+    expect(Math.abs(spacing[1] - spacing[2])).toBeLessThanOrEqual(1);
+  }
   expect(geometry.workspaceLabel).toContain("Workspace");
   expect(geometry.channelWidth).toBeGreaterThan(0);
   expect(geometry.channelGlyph.text).toBe("#");
