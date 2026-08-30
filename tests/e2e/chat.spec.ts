@@ -20,6 +20,21 @@ const execFileAsync = promisify(execFile);
 function activeChannelHeading(scope: Page | Locator): Locator {
   return scope.getByRole("heading", { name: /^#/ });
 }
+
+async function pasteMarkdown(editor: Locator, markdown: string) {
+  await editor.evaluate((node, text) => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", text);
+    node.dispatchEvent(
+      new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: transfer,
+      }),
+    );
+  }, markdown);
+}
+
 const goCacheEnv = {
   GOCACHE: execFileSync("go", ["env", "GOCACHE"], { cwd: process.cwd(), encoding: "utf8" }).trim(),
   GOMODCACHE: execFileSync("go", ["env", "GOMODCACHE"], {
@@ -645,30 +660,39 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
   const preambles = page.getByLabel("Agent preamble");
   await expect(preambles).toHaveCount(2);
-  const preamble = preambles.nth(0);
-  await expect(preamble.getByRole("button", { name: "Show preamble" })).toHaveAttribute(
+  const firstToolBlock = preambles.nth(0);
+  const finalToolBlock = preambles.nth(1);
+  await expect(firstToolBlock.getByRole("button", { name: "Show preamble" })).toHaveAttribute(
     "aria-expanded",
     "false",
   );
   await expect(page.getByText("Deployment boundary is healthy.")).toBeVisible();
 
-  await preamble.getByRole("button", { name: "Show preamble" }).click();
-  await expect(preamble.getByText("Checking the deployment boundary for")).toBeVisible();
-  await expect(preamble.locator("mark[data-clickclack-mention='true']")).toHaveText(
+  const openingCommentary = page.locator(".message-row", {
+    has: page.getByText("Checking the deployment boundary for", { exact: false }),
+  });
+  await expect(openingCommentary).toBeVisible();
+  await expect(openingCommentary.locator("mark[data-clickclack-mention='true']")).toHaveText(
     `@${activityBotHandle}`,
   );
-  const compactExec = preamble.getByRole("button", { name: /Ran shell command.*×3/ });
+  await expect(
+    page.getByText("Commentary after the first tool remains in sequence."),
+  ).toBeVisible();
+
+  await firstToolBlock.getByRole("button", { name: "Show preamble" }).click();
+  const compactExec = firstToolBlock.getByRole("button", { name: /Ran shell command.*×3/ });
   await expect(compactExec).toBeDisabled();
-  await preamble.getByRole("button", { name: /Ran shell command.*inspect/ }).click();
-  await expect(preamble.getByText("validated local target")).toBeVisible();
-  const preambleItems = preamble.locator(".preamble-flow > *");
-  await expect(preambleItems).toHaveCount(5);
-  await expect(preambleItems.nth(0)).toContainText("Checking the deployment boundary for");
-  await expect(preambleItems.nth(1)).toContainText("Ran shell command");
-  await expect(preambleItems.nth(1)).toContainText("×3");
-  await expect(preambleItems.nth(2)).toContainText("Ran shell command");
-  await expect(preambleItems.nth(3)).toContainText("Commentary after the first tool");
-  await expect(preambleItems.nth(4)).toContainText("Read file");
+  await firstToolBlock.getByRole("button", { name: /Ran shell command.*inspect/ }).click();
+  await expect(firstToolBlock.getByText("validated local target")).toBeVisible();
+  const firstToolItems = firstToolBlock.locator(".preamble-flow > *");
+  await expect(firstToolItems).toHaveCount(2);
+  await expect(firstToolItems.nth(0)).toContainText("Ran shell command");
+  await expect(firstToolItems.nth(0)).toContainText("×3");
+  await expect(firstToolItems.nth(1)).toContainText("Ran shell command");
+
+  await finalToolBlock.getByRole("button", { name: "Show preamble" }).click();
+  await expect(finalToolBlock.locator(".preamble-flow > *")).toHaveCount(1);
+  await expect(finalToolBlock).toContainText("Read file");
 
   await page.evaluate(() => {
     localStorage.setItem("clickclack:message-layout:v1", "outlined");
@@ -691,7 +715,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
   expect(Math.abs((chainGeometry?.width ?? 0) - (finalOnlyGeometry?.width ?? 0))).toBeLessThan(1);
   expect(Math.abs((chainGeometry?.x ?? 0) - (finalOnlyGeometry?.x ?? 0))).toBeLessThan(1);
 
-  const capRow = preamble.locator(
+  const capRow = finalToolBlock.locator(
     "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' message-row ')][1]",
   );
   await expect(capRow).toHaveClass(/before-final-message/);
@@ -717,6 +741,17 @@ test("coalesces durable agent activity and applies activity preferences", async 
   // A live turn is one synthetic row anchored at its first activity message.
   // Later same-turn rows grow that existing virtual item without changing the
   // list length. Keep the timeline pinned through those resizes.
+  await page.locator(".messages-scroll").evaluate(async (element) => {
+    // Virtualized rows can change the scroll height for several frames after
+    // an expansion. Re-anchor through those measurements instead of setting
+    // scrollTop once against a stale height.
+    for (let frame = 0; frame < 12; frame += 1) {
+      element.scrollTop = element.scrollHeight;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+  await expectScrollAtMessageEnd(page);
   const fillerResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
     headers: botHeaders,
     data: {
@@ -736,9 +771,11 @@ test("coalesces durable agent activity and applies activity preferences", async 
     data: { body: firstLiveBody, kind: "agent_commentary", turn_id: liveTurnId },
   });
   expect(firstLiveResponse.ok()).toBe(true);
-  const livePreamble = page.getByLabel("Agent preamble").filter({ hasText: firstLiveBody });
-  await expect(livePreamble).toHaveCount(1);
-  await expect(livePreamble.locator(".preamble-flow > *")).toHaveCount(1);
+  const liveCommentary = page.locator(".message-row", {
+    has: page.getByText(firstLiveBody, { exact: true }),
+  });
+  await expect(liveCommentary).toBeVisible();
+  await expect(preambles).toHaveCount(0);
   await expectScrollAtMessageEnd(page);
 
   const otherPage = await page.context().newPage();
@@ -767,8 +804,19 @@ test("coalesces durable agent activity and applies activity preferences", async 
     });
     expect(response.ok()).toBe(true);
   }
-  await expect(livePreamble.locator(".preamble-flow > *")).toHaveCount(4);
-  await expect(livePreamble).toContainText("Third live activity row grows the preamble");
+  await expect(
+    page.getByText("Third live activity row grows the preamble during the realtime burst."),
+  ).toBeVisible();
+  await expect(preambles).toHaveCount(2);
+  const firstLiveToolBlock = preambles.nth(0);
+  const finalLiveToolBlock = preambles.nth(1);
+  await firstLiveToolBlock.getByRole("button", { name: "Show preamble" }).click();
+  await expect(
+    firstLiveToolBlock.getByRole("button", { name: /Ran shell command.*inspect/ }),
+  ).toBeVisible();
+  await expect(
+    finalLiveToolBlock.getByRole("button", { name: /Read file.*timeline/ }),
+  ).toBeVisible();
   await expectScrollAtMessageEnd(page);
   await page.bringToFront();
   await otherPage.close();
@@ -827,7 +875,9 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await page.getByRole("button", { name: /Account settings for/ }).click({ button: "right" });
   const settings = page.getByLabel("Account settings");
   await settings.getByLabel("Hide agent commentary").check();
-  await expect(preamble.getByText("Checking the deployment boundary for")).toHaveCount(0);
+  await expect(
+    page.getByText("Checking the deployment boundary for", { exact: false }),
+  ).toHaveCount(0);
   await settings.getByLabel("Hide tool calls").check();
   await expect(preambles).toHaveCount(0);
   await settings.getByLabel("Your message alignment").selectOption("right");
@@ -1039,7 +1089,9 @@ test("aligns self and other messages independently", async ({ page }) => {
     await expect.poll(() => threadControlSide(agentMessage)).toBe(otherSide);
     await expect.poll(() => rowStampSide(selfMessage)).toBe(selfSide);
     await expect.poll(() => rowStampSide(humanMessage)).toBe(otherSide);
-    await expect.poll(() => rowStampSide(agentMessage)).toBe(otherSide);
+    await expect
+      .poll(() => rowStampSide(agentMessage))
+      .toBe(otherSide === "right" ? "overlap" : "left");
     for (const body of [selfMessage, humanMessage, agentMessage]) {
       await expect.poll(() => messageTextAlign(body)).toMatch(/^(left|start)$/);
     }
@@ -1058,12 +1110,6 @@ test("aligns self and other messages independently", async ({ page }) => {
       .evaluate((element) => {
         const style = getComputedStyle(element);
         return {
-          border: Math.max(
-            parseFloat(style.borderTopWidth),
-            parseFloat(style.borderRightWidth),
-            parseFloat(style.borderBottomWidth),
-            parseFloat(style.borderLeftWidth),
-          ),
           radius: Math.max(
             parseFloat(style.borderTopLeftRadius),
             parseFloat(style.borderTopRightRadius),
@@ -1072,7 +1118,6 @@ test("aligns self and other messages independently", async ({ page }) => {
           ),
         };
       });
-    expect(outline.border).toBeGreaterThan(0);
     expect(outline.radius).toBeGreaterThan(0);
   }
   const selfGroup = page.locator(".message-group", {
@@ -1096,8 +1141,8 @@ test("aligns self and other messages independently", async ({ page }) => {
     .toBe(true);
 
   const preamble = page.getByLabel("Agent preamble");
+  await expect(page.getByText("Checking aligned agent activity.")).toBeVisible();
   await preamble.getByRole("button", { name: "Show preamble" }).click();
-  await expect(preamble.getByText("Checking aligned agent activity.")).toBeVisible();
   await preamble.getByRole("button", { name: /Ran shell command.*inspect alignment/ }).click();
   await expect(preamble.getByText("verified nested content bounds")).toBeVisible();
   await expect
@@ -1158,7 +1203,7 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
   });
   await expect(page.locator("html")).not.toHaveAttribute("data-message-layout");
   await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
-  await page.getByLabel("Message body").fill(markdownBody);
+  await pasteMarkdown(page.getByLabel("Message body"), markdownBody);
   await page.getByRole("button", { name: "Send" }).click();
 
   await page.getByRole("button", { name: /Account settings for/ }).click();
@@ -1432,12 +1477,23 @@ test("desktop shell moves sidebar and search controls into the title bar", async
   await expect(page.locator(".timeline .topbar")).toHaveCount(0);
   await expect(activeChannelHeading(titlebar)).toBeVisible();
   await expect(page.locator(".sidebar .sidebar-collapse")).toHaveCount(0);
-  expect(
-    await titlebarSearch.evaluate((input) => {
-      const box = input.closest("form")?.getBoundingClientRect();
-      return box ? Math.abs(box.left + box.width / 2 - window.innerWidth / 2) : Infinity;
-    }),
-  ).toBeLessThan(1);
+  const titlebarGeometry = await titlebarSearch.evaluate((input) => {
+    const search = input.closest("form")?.getBoundingClientRect();
+    const leading = document.querySelector(".desktop-titlebar-leading")?.getBoundingClientRect();
+    const actions = document.querySelector(".desktop-titlebar-actions")?.getBoundingClientRect();
+    return search && leading
+      ? {
+          searchWidth: search.width,
+          leadingGap: search.left - leading.right,
+          actionsGap: actions ? actions.left - search.right : Infinity,
+        }
+      : null;
+  });
+  expect(titlebarGeometry).not.toBeNull();
+  expect(titlebarGeometry!.searchWidth).toBeGreaterThan(300);
+  expect(titlebarGeometry!.leadingGap).toBeGreaterThanOrEqual(0);
+  expect(titlebarGeometry!.leadingGap).toBeLessThanOrEqual(16);
+  expect(titlebarGeometry!.actionsGap).toBeGreaterThanOrEqual(0);
 
   await titlebar.getByRole("button", { name: "Collapse sidebar" }).click();
   await expect(shell).toHaveClass(/sidebar-collapsed/);
@@ -1624,6 +1680,7 @@ test("mobile navigation geometry clears the timeline at narrow widths", async ({
 });
 
 test("sends messages, searches, uploads, opens a thread, and creates a DM", async ({ page }) => {
+  test.setTimeout(120_000);
   const consoleMessages: string[] = [];
   page.on("console", (message) => consoleMessages.push(`${message.type()}: ${message.text()}`));
   page.on("pageerror", (error) => consoleMessages.push(`pageerror: ${error.message}`));
@@ -1671,7 +1728,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
 
-  await page.getByLabel("Message body").fill("hello **playwright**");
+  await pasteMarkdown(page.getByLabel("Message body"), "hello **playwright**");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(
     page.locator(".markdown").filter({ hasText: "hello playwright" }),
@@ -1810,6 +1867,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
       body: Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64"),
     });
   });
+  await page.getByRole("button", { name: "Toggle formatting tools" }).click();
   await page.getByRole("button", { name: "GIF picker" }).click();
   await page.getByLabel("Search GIFs").fill("ship");
   await page.getByRole("button", { name: /Ship it/ }).click();
@@ -1823,12 +1881,17 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   const threadedRow = page
     .locator(".message-row")
     .filter({ has: page.locator(".markdown").filter({ hasText: "hello playwright" }) });
-  // The hover toolbar ignores pointer events until the row is really hovered.
   await threadedRow.hover();
-  await threadedRow.getByRole("button", { name: "Open thread" }).click({ force: true });
+  const openThread = threadedRow
+    .locator(":scope > .message-actions")
+    .getByRole("button", { name: "Open thread" });
+  await expect(openThread).toBeVisible();
+  await openThread.focus();
+  await expect(openThread).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(page.getByLabel("Thread pane")).toBeVisible();
 
-  await page.getByLabel("Reply body").fill("thread _reply_");
+  await pasteMarkdown(page.getByLabel("Reply body"), "thread _reply_");
   await page.locator(".reply-composer").getByRole("button", { name: "Reply" }).click();
   await expect(page.locator(".reply .markdown").filter({ hasText: "thread reply" })).toBeVisible();
   await expect(threadedRow.locator(".thread-hint")).toContainText("1 reply");

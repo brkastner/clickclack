@@ -312,11 +312,11 @@
 
 .desktop-titlebar-leading {
   display: flex;
-  flex: 0 1 auto;
+  flex: 0 1 430px;
   align-items: center;
   gap: 9px;
   min-width: 0;
-  max-width: calc(50% - 350px);
+  max-width: 45%;
   -webkit-app-region: no-drag;
 }
 
@@ -369,7 +369,7 @@
 }
 
 .desktop-titlebar-channel {
-  flex: 0 1 auto;
+  flex: 1 1 120px;
   margin: 0;
   min-width: 0;
   overflow: hidden;
@@ -445,14 +445,14 @@
 }
 
 .desktop-titlebar-search.search {
-  position: absolute;
-  left: 50%;
-  width: 520px;
-  min-width: 96px;
-  max-width: calc(100% - 24px);
+  position: static;
+  flex: 1 1 320px;
+  width: auto;
+  min-width: 160px;
+  max-width: 520px;
   height: 32px;
   margin: 0;
-  transform: translateX(-50%);
+  transform: none;
   border-color: var(--line-strong);
   background: color-mix(in srgb, var(--panel-2) 84%, transparent);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035) inset;
@@ -467,11 +467,12 @@
 
 @media (max-width: 1100px) {
   .desktop-titlebar-leading {
-    max-width: calc(50% - 180px);
+    flex-basis: 320px;
+    max-width: 40%;
   }
 
   .desktop-titlebar-search.search {
-    width: 180px;
+    flex-basis: 240px;
   }
 }
 

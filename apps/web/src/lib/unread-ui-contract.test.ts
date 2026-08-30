@@ -30,10 +30,10 @@ test("marks the channel read after successfully navigating to a topic", () => {
 
   assert.match(
     setTopicFilter,
-    /await loadLatestMessages\(\);[\s\S]*?markActiveViewRead\(\{ all: true \}\);/u,
+    /await loadLatestMessages\(\);[\s\S]*?markActiveViewRead\(\{ all: true, allowTopicFilter: true \}\);/u,
   );
   assert.match(
     markActiveViewRead,
-    /if \(\s*!options\.all\s*&&\s*activeTopicFilterID[\s\S]*?\) \{\s*return;\s*\}/u,
+    /if \(\s*!options\.allowTopicFilter\s*&&\s*activeTopicFilterID[\s\S]*?\) \{\s*return;\s*\}/u,
   );
 });

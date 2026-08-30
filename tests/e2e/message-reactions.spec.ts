@@ -131,7 +131,7 @@ test("reaction mutations are accessible, authoritative, persistent, and realtime
   expect(messageRefreshes).toBe(0);
 });
 
-test("desktop message actions overlay without reflowing message text", async ({ page }) => {
+test("desktop message actions stay in flow without reflowing message text", async ({ page }) => {
   const { suffix } = await openReactionChannel(page);
   const previousRow = await sendMessage(page, `Desktop action neighbor ${suffix}`);
   const row = await sendMessage(
@@ -159,7 +159,8 @@ test("desktop message actions overlay without reflowing message text", async ({ 
       return rects;
     });
 
-  // At rest the toolbar is a hidden overlay that cannot intercept the pointer.
+  // At rest the toolbar keeps its stable in-flow slot but cannot intercept the pointer.
+  await expect(toolbar).toHaveCSS("position", "static");
   await expect(toolbar).toHaveCSS("opacity", "0");
   await expect(toolbar).toHaveCSS("pointer-events", "none");
   const restingRects = await textRects();
@@ -172,27 +173,26 @@ test("desktop message actions overlay without reflowing message text", async ({ 
   // Revealing the toolbar must not reflow, narrow, or move the message text.
   expect(await textRects()).toEqual(restingRects);
 
-  // The toolbar straddles the row's top edge (Slack model): it never reaches
-  // the next message below and never escapes the row's right edge.
+  // The accepted message layout keeps controls below the message content and
+  // entirely inside the row rather than overlaying neighboring text.
   const geometry = await row.evaluate((element) => {
+    const content = element.querySelector<HTMLElement>(".message-content");
     const actions = element.querySelector<HTMLElement>(".message-actions");
-    if (!actions) throw new Error("message actions missing");
+    if (!content || !actions) throw new Error("message content or actions missing");
     const rowRect = element.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
     const actionsRect = actions.getBoundingClientRect();
     return {
-      rowTop: rowRect.top,
       rowRight: rowRect.right,
       rowBottom: rowRect.bottom,
+      contentBottom: contentRect.bottom,
       actionsTop: actionsRect.top,
       actionsBottom: actionsRect.bottom,
       actionsRight: actionsRect.right,
     };
   });
-  expect(geometry.actionsTop).toBeLessThan(geometry.rowTop);
-  // Slack placement: most of the toolbar hangs above the row; only its lower
-  // third dips in, so it can only ever clip the tail of the first line.
-  expect((geometry.actionsTop + geometry.actionsBottom) / 2).toBeLessThan(geometry.rowTop);
-  expect(geometry.actionsBottom).toBeLessThan(geometry.rowBottom);
+  expect(geometry.actionsTop).toBeGreaterThanOrEqual(geometry.contentBottom - 0.5);
+  expect(geometry.actionsBottom).toBeLessThanOrEqual(geometry.rowBottom + 0.5);
   expect(geometry.actionsRight).toBeLessThanOrEqual(geometry.rowRight + 0.5);
 
   // Hovering the straddle zone keeps this row's toolbar active instead of
@@ -230,8 +230,8 @@ test("hover toolbar stays inside the scrollport for a row at the top edge", asyn
   const toolbar = target.locator(".message-actions");
   await expect(toolbar).toHaveCSS("opacity", "1");
 
-  // The entire toolbar must remain inside the scrollport: with no headroom
-  // above, the straddle flips to the row's bottom edge instead of clipping.
+  // The in-flow toolbar remains inside the scrollport even when its row is at
+  // the top edge.
   const geometry = await target.evaluate((element) => {
     const scroller = element.closest(".messages-scroll");
     const actions = element.querySelector(".message-actions");
@@ -246,8 +246,8 @@ test("hover toolbar stays inside the scrollport for a row at the top edge", asyn
   expect(geometry.topInset).toBeGreaterThanOrEqual(0);
   expect(geometry.bottomInset).toBeGreaterThanOrEqual(0);
 
-  // The flipped toolbar is still fully interactive.
-  await target.getByRole("button", { name: "React with 👍" }).click();
+  // The toolbar is still fully interactive.
+  await pickReaction(target, "👍");
   await expect(target.getByRole("button", { name: "👍 — 1 reaction" })).toBeVisible();
 });
 
@@ -318,16 +318,16 @@ test("touch long-press opens a message action sheet", async ({ browser, page }) 
         persistentActionsHidden: persistentActions.every(
           (action) => getComputedStyle(action).display === "none",
         ),
-        triggerVisuallyHidden:
+        triggerVisible:
           Boolean(trigger) &&
-          trigger!.getBoundingClientRect().width <= 1 &&
-          trigger!.getBoundingClientRect().height <= 1,
+          trigger!.getBoundingClientRect().width > 1 &&
+          trigger!.getBoundingClientRect().height > 1,
         scrollWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
       };
     });
     expect(geometry.persistentActionsHidden).toBe(true);
-    expect(geometry.triggerVisuallyHidden).toBe(true);
+    expect(geometry.triggerVisible).toBe(true);
     expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.viewportWidth);
   }
 
@@ -383,8 +383,9 @@ test("touch long-press opens a message action sheet", async ({ browser, page }) 
   await expect(sheet).toBeHidden();
   await expect(row.getByRole("button", { name: "👍 — 1 reaction" })).toBeVisible();
 
-  // A quick tap (no hold) still opens the thread instead of the sheet.
-  await content.click();
+  // Opening a thread on touch uses the explicit action-sheet control.
+  await touchLongPress(content);
+  await sheet.getByRole("button", { name: "Open thread" }).click();
   await expect(mobilePage.locator(".thread-root .markdown")).toContainText(body);
   await expect(sheet).toBeHidden();
 
@@ -397,8 +398,10 @@ test("touch holds work on hybrid devices without hijacking mouse input or inline
 }) => {
   const { suffix, workspace, channel } = await openReactionChannel(page);
   const body = `Hybrid touch action ${suffix} ![Inline proof](/favicon.svg)`;
-  // The markdown image renders as an <img>, so match on the leading text only.
-  await sendMessage(page, body, `Hybrid touch action ${suffix}`);
+  const messageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body },
+  });
+  expect(messageResponse.ok()).toBe(true);
 
   const hybridContext = await browser.newContext({
     baseURL: new URL(page.url()).origin,
@@ -725,7 +728,8 @@ test("thread roots and replies share reaction controls and realtime state", asyn
   expect(replyResponse.ok()).toBe(true);
   const { message: reply } = (await replyResponse.json()) as { message: { id: string } };
 
-  await rootRow.click();
+  await rootRow.hover();
+  await rootRow.getByRole("button", { name: "Open thread" }).click();
   const thread = page.locator(".thread.open");
   await expect(thread).toBeVisible();
   const threadRoot = thread.locator(".thread-root");
@@ -769,7 +773,10 @@ test("touch thread messages use accessible action sheets instead of persistent c
   const mobilePage = await mobileContext.newPage();
   await mobilePage.goto(`/app/${workspace.route_id}/${channel.route_id}`);
   await waitForAppReady(mobilePage);
-  await mobilePage.locator(".message-row:not(.is-pending)", { hasText: rootBody }).click();
+  const channelRootRow = mobilePage.locator(".message-row:not(.is-pending)", {
+    hasText: rootBody,
+  });
+  await channelRootRow.locator(".thread-hint").click();
 
   const thread = mobilePage.locator(".thread.open");
   const threadRoot = thread.locator(`[data-message-id="${rootID}"]`);
@@ -790,6 +797,7 @@ test("touch thread messages use accessible action sheets instead of persistent c
   expect(hiddenGeometry.height).toBeLessThanOrEqual(1);
 
   await rootMore.focus();
+  await expect(rootMore).toBeFocused();
   await mobilePage.keyboard.press("Enter");
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole("button", { name: "Open thread" })).toHaveCount(0);

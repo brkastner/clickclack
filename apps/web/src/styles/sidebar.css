@@ -388,7 +388,8 @@
 }
 
 .workspace-switcher--titlebar {
-  flex: 0 1 190px;
+  flex: 0 1 160px;
+  max-width: 200px;
 }
 
 .workspace-switcher--titlebar .workspace-switcher-trigger {
@@ -402,8 +403,15 @@
   font-size: 9px;
 }
 
+.workspace-switcher--titlebar .workspace-switcher-label {
+  display: flex;
+  height: 100%;
+  align-items: center;
+}
+
 .workspace-switcher--titlebar .workspace-switcher-label strong {
   font-size: 12px;
+  line-height: 1;
 }
 
 .nav-section + .nav-section {

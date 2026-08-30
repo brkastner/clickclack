@@ -1566,7 +1566,7 @@
     white-space: nowrap;
   }
 
-  .message-actions .message-actions-trigger:focus-visible {
+  .message-actions .message-actions-trigger:focus {
     right: 0;
     top: 0;
     width: 36px;
@@ -1580,7 +1580,7 @@
     box-shadow: var(--shadow);
   }
 
-  .message-row:has(.message-actions-trigger:focus-visible) .message-content {
+  .message-row:has(.message-actions-trigger:focus) .message-content {
     padding-right: 44px;
   }
 }
@@ -3149,6 +3149,39 @@
   text-align: left;
 }
 
+/* The accepted message pass defaults self messages to the right, but the
+   account setting must still be able to move them back to the left. */
+:root[data-user-align="left"] .message-group.is-self {
+  grid-template-columns: 80px minmax(0, 1fr);
+}
+
+:root[data-user-align="left"] .message-group.is-self::after {
+  right: auto;
+  left: 57px;
+}
+
+:root[data-user-align="left"] .message-group.is-self > .avatar {
+  grid-column: 1;
+  justify-self: start;
+}
+
+:root[data-user-align="left"] .message-group.is-self > .group-body {
+  grid-column: 2;
+}
+
+:root[data-user-align="left"] .message-group.is-self .group-body > header {
+  justify-content: flex-start;
+}
+
+:root[data-user-align="left"] .message-group.is-self .message-content {
+  margin-right: auto;
+  margin-left: 0;
+}
+
+:root[data-user-align="left"] .message-group.is-self .message-actions {
+  justify-content: flex-start;
+}
+
 .message-group.is-agent .message-row:not(.is-preamble) .message-content {
   padding-block: 1px;
 }
@@ -3190,7 +3223,7 @@
   border-bottom-right-radius: var(--radius-lg);
 }
 
-.message-group.is-agent .message-row.after-preamble .row-stamp {
+:root[data-other-align="right"] .message-group.is-agent .message-row.after-preamble .row-stamp {
   right: 0;
   left: auto;
 }
@@ -3218,7 +3251,6 @@
   background: transparent;
   box-shadow: none;
   opacity: 0;
-  visibility: hidden;
   pointer-events: none;
   transition: opacity 110ms ease;
 }
@@ -3228,12 +3260,28 @@
 .message-row.selected .message-actions,
 .message-row.menu-open .message-actions {
   opacity: 1;
-  visibility: visible;
   pointer-events: auto;
 }
 
-.message-group.is-self .message-actions {
+:root[data-user-align="right"] .message-group.is-self .message-actions,
+:root[data-other-align="right"] .message-group:not(.is-self) .message-actions {
   justify-content: flex-end;
+}
+
+:root[data-user-align="left"] .message-group.is-self .message-actions,
+:root[data-other-align="left"] .message-group:not(.is-self) .message-actions {
+  justify-content: flex-start;
+}
+
+/* Keep reaction pickers inside the message viewport when their row is aligned
+   to the left. Right-aligned rows retain the picker's right-edge anchoring. */
+:root[data-user-align="left"] .message-group.is-self .picker-wrapper .emoji-grid,
+:root[data-other-align="left"]
+  .message-group:not(.is-self)
+  .picker-wrapper
+  .emoji-grid {
+  right: auto;
+  left: 0;
 }
 
 .message-row.actions-flip .message-actions {

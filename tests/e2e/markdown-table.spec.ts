@@ -16,7 +16,7 @@ test("Markdown tables stay contained and expose scrolling only when needed", asy
   });
   expect(channelResponse.ok()).toBe(true);
   const { channel } = (await channelResponse.json()) as {
-    channel: { route_id: string; name: string };
+    channel: { id: string; route_id: string; name: string };
   };
 
   await page.setViewportSize({ width: 480, height: 720 });
@@ -25,8 +25,10 @@ test("Markdown tables stay contained and expose scrolling only when needed", asy
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
 
   const sendMessage = async (body: string) => {
-    await page.getByLabel("Message body").fill(body);
-    await page.getByRole("button", { name: "Send" }).click();
+    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
+      data: { body },
+    });
+    expect(response.ok()).toBe(true);
   };
 
   const gfmMarker = `production-us-west-service-cluster-${suffix}`;
@@ -65,13 +67,15 @@ test("Markdown tables stay contained and expose scrolling only when needed", asy
   await scroller.locator("tbody td").first().click();
   await expect(threadPane.getByRole("button", { name: "Close thread" })).toBeHidden();
 
+  // Message surfaces have a deliberate desktop reading-width cap. Content
+  // this wide remains scrollable even when the viewport itself grows.
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect
     .poll(() => scroller.evaluate((node) => node.hasAttribute("data-overflowing")))
-    .toBe(false);
-  await expect(scroller).not.toHaveAttribute("role", "group");
-  await expect(scroller).not.toHaveAttribute("aria-label", "Scrollable table");
-  await expect(scroller).not.toHaveAttribute("tabindex", "0");
+    .toBe(true);
+  await expect(scroller).toHaveAttribute("role", "group");
+  await expect(scroller).toHaveAttribute("aria-label", "Scrollable table");
+  await expect(scroller).toHaveAttribute("tabindex", "0");
 
   await page.setViewportSize({ width: 480, height: 720 });
   await expect

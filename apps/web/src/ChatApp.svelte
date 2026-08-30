@@ -1742,7 +1742,7 @@
       ) {
         return;
       }
-      if (topicID) markActiveViewRead({ all: true });
+      if (topicID) markActiveViewRead({ all: true, allowTopicFilter: true });
     } catch (error) {
       if (
         currentConversationKey() !== conversationKey ||
@@ -2232,12 +2232,14 @@
     return 0;
   }
 
-  function markActiveViewRead(options: { all?: boolean; seq?: number } = {}) {
+  function markActiveViewRead(
+    options: { all?: boolean; seq?: number; allowTopicFilter?: boolean } = {},
+  ) {
     if (!options.all && Date.now() < suppressAutoReadUntil) return;
     const key = currentConversationKey() || viewKey;
     if (!key) return;
     if (
-      !options.all &&
+      !options.allowTopicFilter &&
       activeTopicFilterID &&
       channels.some((channel) => channel.id === key)
     ) {

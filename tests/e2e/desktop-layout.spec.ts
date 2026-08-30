@@ -68,6 +68,7 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     const channelLabel = document.querySelector<HTMLElement>(".desktop-titlebar-channel");
     const channelGlyph = channelLabel?.querySelector<HTMLElement>(".title-glyph");
     const search = document.querySelector<HTMLElement>(".desktop-titlebar-search");
+    const actions = document.querySelector<HTMLElement>(".desktop-titlebar-actions");
     const safeArea = document.querySelector<HTMLElement>(".desktop-titlebar-safe-area");
 
     if (
@@ -100,12 +101,16 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
         titleColor: getComputedStyle(channelLabel).color,
       },
       search: {
-        centerX: searchRect.left + searchRect.width / 2,
-        safeAreaCenterX: safeAreaRect.left + safeAreaRect.width / 2,
         width: searchRect.width,
+        rightGap: (actions?.getBoundingClientRect().left ?? safeAreaRect.right) - searchRect.right,
       },
       titlebarOverlap: searchRect.left - Math.max(switcherRect.right, channelRect.right),
       workspaceLabel: workspaceLabel.textContent,
+      workspaceLabelCenterOffset: Math.abs(
+        workspaceLabel.getBoundingClientRect().top +
+          workspaceLabel.getBoundingClientRect().height / 2 -
+          (switcherRect.top + switcherRect.height / 2),
+      ),
       footer: {
         x: userCardRect.x,
         width: userCardRect.width,
@@ -123,10 +128,11 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   expect(geometry.channelWidth).toBeGreaterThan(0);
   expect(geometry.channelGlyph.text).toBe("#");
   expect(geometry.channelGlyph.color).not.toBe(geometry.channelGlyph.titleColor);
-  expect(geometry.search.width).toBeGreaterThan(0);
+  expect(geometry.search.width).toBeGreaterThanOrEqual(200);
   expect(geometry.search.width).toBeLessThanOrEqual(520);
-  expect(geometry.search.centerX).toBeCloseTo(geometry.search.safeAreaCenterX, 0);
+  expect(geometry.search.rightGap).toBeGreaterThanOrEqual(0);
   expect(geometry.titlebarOverlap).toBeGreaterThanOrEqual(0);
+  expect(geometry.workspaceLabelCenterOffset).toBeLessThanOrEqual(1);
   expect(geometry.footer.x).toBeCloseTo(geometry.footer.sidebarX, 0);
   expect(geometry.footer.width).toBeCloseTo(geometry.footer.sidebarWidth, 0);
 });
