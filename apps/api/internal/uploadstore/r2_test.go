@@ -124,13 +124,6 @@ func TestR2ConfigValidation(t *testing.T) {
 	if store.httpClient == nil || store.httpClient.Timeout != 0 {
 		t.Fatalf("expected streaming-safe client timeout, got %#v", store.httpClient)
 	}
-	transport, ok := store.httpClient.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("expected default transport, got %#v", store.httpClient.Transport)
-	}
-	if transport.ResponseHeaderTimeout != defaultR2ResponseHeaderTimeout {
-		t.Fatalf("expected response header timeout %s, got %s", defaultR2ResponseHeaderTimeout, transport.ResponseHeaderTimeout)
-	}
 	customClient := &http.Client{}
 	store, err = NewR2(R2Config{AccountID: "account", AccessKeyID: "access", SecretAccessKey: "secret", Bucket: "bucket", HTTPClient: customClient})
 	if err != nil {

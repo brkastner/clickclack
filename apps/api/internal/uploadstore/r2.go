@@ -84,13 +84,7 @@ func NewR2(cfg R2Config) (*R2, error) {
 }
 
 func defaultR2HTTPClient() *http.Client {
-	transport, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		return &http.Client{}
-	}
-	cloned := transport.Clone()
-	cloned.ResponseHeaderTimeout = defaultR2ResponseHeaderTimeout
-	return &http.Client{Transport: cloned}
+	return &http.Client{Transport: r2Transport{}}
 }
 
 func (s *R2) Save(ctx context.Context, body io.Reader, options SaveOptions) (SavedObject, error) {

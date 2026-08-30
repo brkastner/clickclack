@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed R2 header stalls while preserving configured HTTP transport wrappers. Thanks @SebTardif.
 - Fixed member-directory pagination loops across chat, embeds, and workspace settings, and restored loading newer embedded channel messages. Thanks @SebTardif.
 - Fixed profile saves for provisioned workspaces retaining their reserved slug. Thanks @sercada.
 - Fixed embedded channel formatting, GIF, profile, and image controls by sharing working composer behavior across views.
