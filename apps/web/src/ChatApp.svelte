@@ -52,7 +52,7 @@
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
-  import { listWorkspaceMembersPage } from "./lib/workspace-members";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
 
@@ -206,6 +206,8 @@
   let directConversationsLoadSerial = 0;
   let moderationMembersLoadSerial = 0;
   let workspaceMembersLoadSerial = 0;
+  let workspaceMembersAbort: AbortController | null = null;
+  let workspaceMembersError = "";
   let slashCommandsLoadSerial = 0;
   let botCommandsLoadSerial = 0;
   let channelNotifLoadSerial = 0;
@@ -464,6 +466,8 @@
   }
 
   onDestroy(() => {
+    workspaceMembersLoadSerial += 1;
+    workspaceMembersAbort?.abort();
     socket?.close();
     socket = null;
     connected = false;
@@ -770,6 +774,8 @@
       slashCommandsLoadSerial += 1;
       botCommandsLoadSerial += 1;
       workspaceMembersLoadSerial += 1;
+      workspaceMembersAbort?.abort();
+      workspaceMembersError = "";
       slashCommands = [];
       botCommands = [];
       topics = [];
@@ -1093,27 +1099,22 @@
 
   async function loadWorkspaceMembers(workspaceID = selectedWorkspaceID) {
     const serial = ++workspaceMembersLoadSerial;
+    workspaceMembersAbort?.abort();
+    const controller = new AbortController();
+    workspaceMembersAbort = controller;
+    workspaceMembersError = "";
     if (!workspaceID) {
       workspaceMemberUsers = [];
       return;
     }
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({
-          workspaceID,
-          cursor,
-          limit: 100,
-        });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
       if (serial !== workspaceMembersLoadSerial || workspaceID !== selectedWorkspaceID) return;
-      workspaceMemberUsers = members;
-    } catch {
-      if (serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
+      workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
         workspaceMemberUsers = [];
+        workspaceMembersError = memberLoadErrorMessage(error);
       }
     }
   }
@@ -4281,6 +4282,10 @@
       active={agentResponding && selectedThread === null}
       agentNames={activeRespondingAgentNames}
     />
+
+    {#if workspaceMembersError}
+      <p class="composer-notice composer-notice--error" role="status">Mentions unavailable: {workspaceMembersError}</p>
+    {/if}
 
     {#if composerNotice}
       <div

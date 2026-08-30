@@ -8,7 +8,7 @@
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
-  import { listWorkspaceMembersPage } from "../../lib/workspace-members";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "../../lib/workspace-members";
   import {
     MessageEditController,
     type MessageEditSession,
@@ -68,6 +68,9 @@
   let failedSubmission: MessageSubmission | null = null;
   let workspaceMemberUsers = $state<User[]>([]);
   let memberLoadSerial = 0;
+  let memberLoadAbort: AbortController | null = null;
+  let memberLoadError = $state("");
+  let loadingNewerSerial: number | null = null;
 
   const mentionPeople = $derived.by(() => {
     const people = new Map<string, User>();
@@ -85,18 +88,19 @@
 
   async function loadWorkspaceMembers(workspaceID: string) {
     const serial = ++memberLoadSerial;
+    memberLoadAbort?.abort();
+    const controller = new AbortController();
+    memberLoadAbort = controller;
+    memberLoadError = "";
     workspaceMemberUsers = [];
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({ workspaceID, cursor, limit: 100 });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
-      if (serial === memberLoadSerial) workspaceMemberUsers = members;
-    } catch {
-      if (serial === memberLoadSerial) workspaceMemberUsers = [];
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
+      if (serial === memberLoadSerial) workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === memberLoadSerial) {
+        workspaceMemberUsers = [];
+        memberLoadError = memberLoadErrorMessage(error);
+      }
     }
   }
 
@@ -155,6 +159,8 @@
   }
 
   function clearChannel() {
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     socket = null;
     route = null;
@@ -245,6 +251,19 @@
       sendError = readableAPIError(error, "Could not load older messages.");
     } finally {
       loadingOlder = false;
+    }
+  }
+
+  async function loadNewerMessages() {
+    const serial = loadSerial;
+    if (loadingNewerSerial === serial || !hasNewer) return;
+    loadingNewerSerial = serial;
+    try {
+      await syncNewMessages(() => serial === loadSerial);
+    } catch (error) {
+      if (serial === loadSerial) reportRealtimeError(error);
+    } finally {
+      if (loadingNewerSerial === serial) loadingNewerSerial = null;
     }
   }
 
@@ -506,6 +525,8 @@
 
   onDestroy(() => {
     loadSerial += 1;
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     window.removeEventListener("focus", retryAuthOnFocus);
     document.removeEventListener("visibilitychange", retryAuthOnFocus);
@@ -549,9 +570,10 @@
       onOpenImage={(url, title) => (selectedImage = { url, title })}
       onOpenArtifact={openArtifact}
       onLoadOlder={() => void loadOlderMessages()}
-      onLoadNewer={() => queueMessageSync()}
+      onLoadNewer={() => void loadNewerMessages()}
     />
     <div class="embed-channel-composer-dock">
+      {#if memberLoadError}<p class="embed-notice" role="status">Mentions unavailable: {memberLoadError}</p>{/if}
       {#if sendError}<p class="embed-notice" role="status">{sendError}</p>{/if}
       <ChatComposer
         value={messageBody}
@@ -713,12 +735,7 @@
   }
 
   .embed-notice {
-    position: absolute;
-    right: 14px;
-    bottom: calc(100% - 2px);
-    left: 14px;
-    z-index: 2;
-    margin: 0;
+    margin: 6px 14px 0;
     padding: 9px 11px;
     border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line));
     border-radius: var(--radius);

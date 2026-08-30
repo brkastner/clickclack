@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed member-directory pagination loops across chat, embeds, and workspace settings, and restored loading newer embedded channel messages. Thanks @SebTardif.
 - Fixed profile saves for provisioned workspaces retaining their reserved slug. Thanks @sercada.
 - Fixed embedded channel formatting, GIF, profile, and image controls by sharing working composer behavior across views.
 - Added explicit OpenClaw profile identity synchronization for existing ClickClack users, preserving message authors and custom avatars while reusing OpenClaw names and avatar URLs.
