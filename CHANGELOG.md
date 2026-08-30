@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed profile saves for provisioned workspaces retaining their reserved slug. Thanks @sercada.
 - Fixed embedded channel formatting, GIF, profile, and image controls by sharing working composer behavior across views.
 - Added explicit OpenClaw profile identity synchronization for existing ClickClack users, preserving message authors and custom avatars while reusing OpenClaw names and avatar URLs.
 - Updated Go, SQLite, web, Electron 43, pnpm, lint/format, Cloudflare, container-base, and CI tooling dependencies while preserving macOS 12 desktop support.
