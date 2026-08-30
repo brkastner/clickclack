@@ -198,10 +198,10 @@
   // Default: show both. Persisted in localStorage like other client prefs.
   let hideCommentary = false;
   let hideToolCalls = false;
-  // Self-message alignment: "left" (default, matches the legacy layout) or
-  // "right". Persisted client-side and applied as a root data attribute so the
-  // messages.css mirror rules can flip the self group without prop drilling.
-  let userAlign: "left" | "right" = "left";
+  // Self-message alignment defaults to the accepted right-side layout. An
+  // explicit left preference remains persisted client-side and applied as a
+  // root data attribute so messages.css can flip the group without prop drilling.
+  let userAlign: "left" | "right" = "right";
   let otherAlign: "left" | "right" = "left";
   let status = "loading";
   let authRequired = false;
@@ -738,12 +738,12 @@
       const legacyHidden = window.localStorage.getItem(SHOW_AGENT_ACTIVITY_STORAGE_KEY) === "0";
       hideCommentary = window.localStorage.getItem(HIDE_COMMENTARY_STORAGE_KEY) === "1" || legacyHidden;
       hideToolCalls = window.localStorage.getItem(HIDE_TOOL_CALLS_STORAGE_KEY) === "1" || legacyHidden;
-      userAlign = window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
+      userAlign = window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "left" ? "left" : "right";
       otherAlign = window.localStorage.getItem(OTHER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
     } catch {
       hideCommentary = false;
       hideToolCalls = false;
-      userAlign = "left";
+      userAlign = "right";
       otherAlign = "left";
     }
     applyMessageAlignments();

@@ -260,6 +260,12 @@ test("product website links to app and docs", async ({ page }) => {
   await expect(page.getByText("Open source · MIT · Single Go binary")).toBeVisible();
 });
 
+test("defaults the current user's messages to right alignment", async ({ page }) => {
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+});
+
 test("self-hosted product website links stay on the local app route", async ({ page }) => {
   await page.goto("http://selfhost.localhost:18082/");
   await expect(page.getByRole("heading", { name: /Team chat for humans/ })).toBeVisible();
