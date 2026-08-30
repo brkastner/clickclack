@@ -636,9 +636,8 @@
 }
 
 .profile-channel-group .channel-subgroup-toggle {
-  /* Profile headers are parents: keep the disclosure in the outer gutter so
-     the avatar shares the account/DM alignment line and child hashes remain
-     visibly nested one level deeper. */
+  /* Keep profile avatars and their channel hashes on one shared alignment
+     line. Disclosure and reorder controls live in the outer gutter. */
   position: relative;
   padding-left: 4px;
 }
@@ -648,10 +647,30 @@
   left: -6px;
 }
 
-/* A navigating profile header keeps its avatar on the shared alignment line
-   while the separate caret button occupies the outer gutter. */
-.profile-channel-group .profile-subgroup-header .channel-subgroup-toggle {
+.profile-subgroup-header {
+  position: relative;
+}
+
+.profile-subgroup-header .channel-subgroup-caret {
+  position: absolute;
+  z-index: 2;
+  inset-block: 0;
+  left: -10px;
+  width: 14px;
+  margin-left: 0;
+}
+
+.profile-channel-group .profile-subgroup-header .channel-subgroup-toggle,
+.profile-channel-group .channel-row.reorderable .nav-item {
   padding-left: 4px;
+}
+
+.profile-channel-group .channel-row.reorderable .channel-drag-handle {
+  position: absolute;
+  z-index: 2;
+  inset-block: 0;
+  left: -10px;
+  width: 14px;
 }
 
 .profile-drop-target {

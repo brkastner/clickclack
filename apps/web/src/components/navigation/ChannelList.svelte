@@ -562,6 +562,7 @@
 {#snippet channelSubgroup(group: ChannelGroup, domID: string, subdued: boolean)}
   {@const groupIsExpanded = groupExpanded(group.key)}
   {@const visibleChannels = visibleGroupChannels(group)}
+  {@const hasNestedChannels = group.channels.length > 0}
   <section
     class="channel-subgroup"
     role="group"
@@ -595,22 +596,22 @@
     }}
   >
     <div class="channel-subgroup-header" class:profile-subgroup-header={Boolean(group.sourceChannel)}>
-    {#if group.sourceChannel}
-      <button
-        type="button"
-        class="channel-subgroup-caret"
-        aria-expanded={groupIsExpanded}
-        aria-controls={domID}
-        aria-label={`${groupIsExpanded ? "Collapse" : "Expand"} ${group.label}`}
-        onclick={() => {
-          if (dragGestureActive) return;
-          toggleGroup(group.key);
-        }}
-      >
-        <span class="caret" aria-hidden="true">▾</span>
-      </button>
-    {/if}
-    <svelte:element
+      {#if group.sourceChannel && hasNestedChannels}
+        <button
+          type="button"
+          class="channel-subgroup-caret"
+          aria-expanded={groupIsExpanded}
+          aria-controls={domID}
+          aria-label={`${groupIsExpanded ? "Collapse" : "Expand"} ${group.label}`}
+          onclick={() => {
+            if (dragGestureActive) return;
+            toggleGroup(group.key);
+          }}
+        >
+          <span class="caret" aria-hidden="true">▾</span>
+        </button>
+      {/if}
+      <svelte:element
       this={group.sourceChannel ? "a" : "button"}
       role={group.sourceChannel ? undefined : "button"}
       href={group.sourceChannel ? headerHref(group) : undefined}
@@ -651,7 +652,7 @@
         toggleGroup(group.key);
       }}
     >
-      {#if !group.sourceChannel}
+      {#if !group.sourceChannel && hasNestedChannels}
         <span class="caret" aria-hidden="true">▾</span>
       {/if}
       {#if group.profile}
