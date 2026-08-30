@@ -12,11 +12,39 @@ test("keeps the recent-people shelf to one two-by-two page", () => {
   assert.match(sidebar, /displayedRecentPeople[\s\S]*?\.slice\(0, 4\)/u);
 });
 
-test("spaces the two-by-two avatar grid evenly from itself and its edges", () => {
+test("fills the two-by-two shelf with larger avatars and compact spacing", () => {
   const shelfStyles = sidebarStyles.match(/\.sidebar-people-row\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
-  assert.match(shelfStyles, /display:\s*grid/u);
-  assert.match(shelfStyles, /grid-template-columns:\s*repeat\(2, 50px\)/u);
-  assert.match(shelfStyles, /grid-template-rows:\s*repeat\(2, 50px\)/u);
-  assert.match(shelfStyles, /place-content:\s*space-evenly/u);
-  assert.match(shelfStyles, /min-height:\s*160px/u);
+  const personStyles = sidebarStyles.match(/\.sidebar-person\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
+  const avatarStyles =
+    sidebarStyles.match(/\.sidebar-person > \.avatar\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
+
+  assert.match(shelfStyles, /grid-template-columns:\s*repeat\(2, 72px\)/u);
+  assert.match(shelfStyles, /grid-template-rows:\s*repeat\(2, 72px\)/u);
+  assert.match(shelfStyles, /min-height:\s*174px/u);
+  assert.match(shelfStyles, /margin:\s*0 0 8px/u);
+  assert.match(personStyles, /width:\s*72px/u);
+  assert.match(personStyles, /height:\s*72px/u);
+  assert.match(avatarStyles, /width:\s*70px/u);
+  assert.match(avatarStyles, /height:\s*70px/u);
+});
+
+test("sizes profile, channel, and direct-message navigation up", () => {
+  const profileToggleStyles =
+    sidebarStyles.match(
+      /\.sidebar-profile-groups \.channel-subgroup-toggle\s*\{([\s\S]*?)\}/u,
+    )?.[1] ?? "";
+  const profileAvatarStyles =
+    [...sidebarStyles.matchAll(/\.channel-profile-avatar\s*\{([\s\S]*?)\}/gu)].find((rule) =>
+      /width:\s*26px/u.test(rule[1] ?? ""),
+    )?.[1] ?? "";
+  const navItemStyles = sidebarStyles.match(/(?:^|\n)\.nav-item\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
+  const navLabelStyles = sidebarStyles.match(/(?:^|\n)\.nav-label\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
+
+  assert.match(profileToggleStyles, /min-height:\s*36px/u);
+  assert.match(profileToggleStyles, /font-size:\s*14px/u);
+  assert.match(profileAvatarStyles, /width:\s*26px/u);
+  assert.match(profileAvatarStyles, /height:\s*26px/u);
+  assert.match(navItemStyles, /min-height:\s*38px/u);
+  assert.match(navItemStyles, /padding:\s*6px 8px/u);
+  assert.match(navLabelStyles, /font-size:\s*15px/u);
 });

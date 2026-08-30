@@ -93,7 +93,7 @@
             id={dmUser?.id || conversation.id}
             name={dmUser?.display_name}
             src={isDeletedBot(dmUser) ? undefined : dmUser?.avatar_url}
-            size={22}
+            size={26}
           />
           <span class="nav-label">{dmTitle(conversation, currentUserID)}</span>
           {#if unread > 0 && !isActive}

@@ -128,11 +128,11 @@
 
 .sidebar-people-row {
   display: grid;
-  grid-template-columns: repeat(2, 50px);
-  grid-template-rows: repeat(2, 50px);
-  min-height: 160px;
+  grid-template-columns: repeat(2, 72px);
+  grid-template-rows: repeat(2, 72px);
+  min-height: 174px;
   place-content: space-evenly;
-  margin: 0 0 14px;
+  margin: 0 0 8px;
   padding: 0;
   border-bottom: 1px solid var(--line);
 }
@@ -140,20 +140,20 @@
 .sidebar-person {
   display: grid;
   flex: 0 0 auto;
-  width: 50px;
-  height: 50px;
+  width: 72px;
+  height: 72px;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 15px;
+  border-radius: 18px;
   color: inherit;
 }
 
 .sidebar-person > .avatar {
-  width: 48px;
-  height: 48px;
+  width: 70px;
+  height: 70px;
   margin: 0;
-  border-radius: 12px;
-  font-size: 16px;
+  border-radius: 16px;
+  font-size: 20px;
 }
 
 .sidebar-person:hover,
@@ -178,8 +178,8 @@
 
 .sidebar-profile-groups {
   display: grid;
-  gap: 1px;
-  margin-bottom: 12px;
+  gap: 2px;
+  margin-bottom: 10px;
 }
 
 .sidebar-profile-groups .channel-subgroup {
@@ -187,7 +187,10 @@
 }
 
 .sidebar-profile-groups .channel-subgroup-toggle {
-  font-size: 12px;
+  min-height: 36px;
+  gap: 8px;
+  padding: 4px 8px 4px 6px;
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
@@ -197,7 +200,7 @@
   background: hsl(var(--hue) 62% 48%);
   color: #fff;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -412,7 +415,7 @@
 }
 
 .nav-section + .nav-section {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .section-title {
@@ -422,7 +425,7 @@
   width: 100%;
   border: 0;
   background: transparent;
-  padding: 3px 4px;
+  padding: 2px 4px;
   border-radius: var(--radius-sm);
 }
 
@@ -445,10 +448,10 @@
   color: var(--muted);
   text-transform: uppercase;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.09em;
-  padding: 4px;
+  letter-spacing: 0.08em;
+  padding: 3px 4px;
   text-align: left;
 }
 
@@ -478,8 +481,8 @@
 
 .section-title .add-button {
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: 0;
   border-radius: 4px;
   display: grid;
@@ -505,8 +508,8 @@
 .nav-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-top: 5px;
+  gap: 2px;
+  margin-top: 4px;
 }
 
 .nav-list[hidden] {
@@ -516,22 +519,22 @@
 .channel-subgroup {
   display: grid;
   gap: 2px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .channel-subgroup-toggle {
   display: flex;
-  min-height: 32px;
+  min-height: 34px;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
-  padding: 4px 9px 4px 28px;
+  padding: 4px 8px 4px 26px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-align: left;
@@ -608,11 +611,11 @@
 }
 
 .channel-profile-avatar {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  flex: 0 0 22px;
+  flex: 0 0 26px;
   overflow: hidden;
   border-radius: 50%;
 }
@@ -879,8 +882,8 @@
   color: var(--muted);
   text-decoration: none;
   text-align: left;
-  padding: 8px 10px;
-  min-height: 36px;
+  padding: 6px 8px;
+  min-height: 38px;
   transition:
     background 100ms ease,
     color 100ms ease;
@@ -952,7 +955,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .dm-row {
@@ -1073,8 +1076,8 @@
 }
 
 .dm-avatar {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: grid;
   place-items: center;

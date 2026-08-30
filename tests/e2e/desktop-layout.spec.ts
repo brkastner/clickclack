@@ -157,8 +157,8 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   expect(geometry.topGap).toBeGreaterThanOrEqual(176);
   expect(geometry.topGap).toBeLessThanOrEqual(190);
   expect(geometry.peopleShelf.display).toBe("grid");
-  expect(geometry.peopleShelf.columns).toBe("50px 50px");
-  expect(geometry.peopleShelf.rows).toBe("50px 50px");
+  expect(geometry.peopleShelf.columns).toBe("72px 72px");
+  expect(geometry.peopleShelf.rows).toBe("72px 72px");
   for (const spacing of [geometry.peopleShelf.horizontal, geometry.peopleShelf.vertical]) {
     expect(Math.abs(spacing[0] - spacing[1])).toBeLessThanOrEqual(1);
     expect(Math.abs(spacing[1] - spacing[2])).toBeLessThanOrEqual(1);
