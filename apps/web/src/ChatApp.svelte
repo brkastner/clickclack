@@ -4030,6 +4030,14 @@
     await loadChannels(false, false, false);
   }
 
+  // Opens the channel a persona presents in, so the "appears as" chips work as
+  // navigation rather than decoration.
+  async function openPersonaLane(lane: ProfilePersonaLane) {
+    if (!lane.channel_id) return;
+    closeSidePanel();
+    await selectChannel(lane.channel_id);
+  }
+
   // Saves one channel-scoped persona. The underlying bot identity is untouched.
   async function savePersonaLane(
     botUserID: string,
@@ -5231,6 +5239,7 @@
         currentUserRole={currentWorkspaceRole}
         moderation={selectedProfileModeration}
         personaLanes={selectedProfileLanes}
+        onOpenPersona={(lane) => void openPersonaLane(lane)}
         onSaveBotProfile={saveBotProfile}
         onSavePersonaLane={savePersonaLane}
         onClose={closeSidePanel}

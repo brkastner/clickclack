@@ -33,8 +33,8 @@
   type StepID = "identity" | "personas";
   const steps = $derived.by<{ id: StepID; label: string }[]>(() => {
     const list: { id: StepID; label: string }[] = [];
-    if (canEditIdentity) list.push({ id: "identity", label: "Identity" });
-    if (canEditPersonas && personaLanes.length > 0) list.push({ id: "personas", label: "Personas" });
+    if (canEditIdentity) list.push({ id: "identity", label: "identity" });
+    if (canEditPersonas && personaLanes.length > 0) list.push({ id: "personas", label: "personas" });
     return list;
   });
 

@@ -393,9 +393,17 @@
   letter-spacing: 0;
 }
 
-.profile-pane-title span {
-  display: block;
-  margin-top: 3px;
+/* Handle and kind badge share one row under the name; the badge stacked above
+   the handle read as a floating label rather than metadata. */
+.profile-pane-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.profile-pane-subtitle > span {
   color: var(--muted);
   font-size: 13px;
 }
@@ -404,7 +412,6 @@
   display: inline-flex;
   align-items: center;
   min-height: 20px;
-  margin-top: 6px;
   padding: 0 8px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: 999px;
@@ -583,8 +590,21 @@
   padding: 5px 10px 5px 5px;
   border: 1px solid var(--line);
   border-radius: 999px;
+  background: transparent;
   color: var(--text);
+  font: inherit;
   font-size: 12px;
+  cursor: pointer;
+}
+
+.profile-lane-chip:hover {
+  border-color: var(--line-strong);
+  background: var(--hover);
+}
+
+.profile-lane-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
 }
 
 .profile-lane-chip > span {

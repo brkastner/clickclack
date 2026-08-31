@@ -21,6 +21,7 @@
     onBlock: (memberID: string) => void;
     onUnblock: (memberID: string) => void;
     onSetStatus: () => void;
+    onOpenPersona: (lane: ProfilePersonaLane) => void;
     onSaveBotProfile: (
       botUserID: string,
       patch: { display_name?: string; handle?: string; avatar_url?: string },
@@ -47,6 +48,7 @@
     onBlock,
     onUnblock,
     onSetStatus,
+    onOpenPersona,
     onSaveBotProfile,
     onSavePersonaLane,
   }: Props = $props();
@@ -125,8 +127,10 @@
     <div class="profile-pane-title">
       <div>
         <h2>{profile.display_name}</h2>
-        {#if botLabel}<span class="bot-badge">{botLabel}</span>{/if}
-        {#if profile.handle}<span>{handleLabel(profile.handle)}</span>{/if}
+        <div class="profile-pane-subtitle">
+          {#if profile.handle}<span>{handleLabel(profile.handle)}</span>{/if}
+          {#if botLabel}<span class="bot-badge">{botLabel}</span>{/if}
+        </div>
       </div>
       {#if currentUser?.id === profile.id}
         <button type="button" class="text-action" onclick={onEdit}>Edit</button>
@@ -154,7 +158,7 @@
     </div>
     <section class="profile-info">
       <header>
-        <strong>Contact information</strong>
+        <strong>contact information</strong>
         {#if currentUser?.id === profile.id}
           <button type="button" class="text-action" onclick={onEdit}>Edit</button>
         {/if}
@@ -207,22 +211,27 @@
     </section>
     <section class="profile-info">
       <header>
-        <strong>About</strong>
+        <strong>about</strong>
       </header>
       <p class="profile-note">Member of {workspaceName || "this workspace"}.</p>
     </section>
     {#if personaLanes.length > 0}
       <section class="profile-info">
         <header>
-          <strong>Appears as</strong>
+          <strong>appears as</strong>
           <span class="profile-lane-count">{personaLanes.length}</span>
         </header>
         <div class="profile-lane-strip">
           {#each personaLanes as lane (lane.channel_id)}
-            <span class="profile-lane-chip" title={`#${lane.channel_name}`}>
+            <button
+              type="button"
+              class="profile-lane-chip"
+              title={`Open #${lane.channel_name}`}
+              onclick={() => onOpenPersona(lane)}
+            >
               <Avatar id={lane.channel_id} name={lane.display_name} src={lane.avatar_url} size={24} />
               <span>{lane.display_name}</span>
-            </span>
+            </button>
           {/each}
         </div>
         <p class="profile-note">
@@ -234,7 +243,7 @@
     {#if canModerate && moderation}
       <section class="profile-info moderation-box">
         <header>
-          <strong>Moderation</strong>
+          <strong>moderation</strong>
           <span class="role-pill">{roleLabel}</span>
         </header>
         {#if moderation.role === "guest" && moderation.post_limit > 0}
