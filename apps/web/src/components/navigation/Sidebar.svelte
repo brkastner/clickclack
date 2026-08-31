@@ -20,6 +20,7 @@
     showHeader?: boolean;
     channels: Channel[];
     directConversations: DirectConversation[];
+    workingConversationIDs: Set<string>;
     recentPeople: User[];
     // Identity source for profile shortcuts; must match the list they were
     // built from so a profile's bot resolves consistently.
@@ -58,6 +59,7 @@
     showHeader = true,
     channels,
     directConversations,
+    workingConversationIDs,
     recentPeople,
     profilePeople,
     profileShortcuts,
@@ -299,6 +301,7 @@
       people={profilePeople}
       {selectedChannelID}
       {selectedDirectID}
+      {workingConversationIDs}
       {hrefForChannel}
       {hrefForDirect}
       {onSelectChannel}
@@ -314,6 +317,7 @@
       conversations={directConversations}
       currentUserID={currentUser?.id}
       {selectedDirectID}
+      {workingConversationIDs}
       {hrefForDirect}
       {onSelectDirect}
       {onCreateDirect}

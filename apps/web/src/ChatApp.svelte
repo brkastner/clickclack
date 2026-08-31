@@ -82,6 +82,14 @@
   import Topbar from "./components/topbar/Topbar.svelte";
   import { workspaceSettingsPath, type AccountSettingsSectionId } from "./lib/settings";
   import { agentProgressTurnKey, respondingAgentNames } from "./lib/agent-responding";
+  import {
+    agentProgressWorkingSignal,
+    isFinalAgentMessageEvent,
+    realtimeConversationID,
+    reduceConversationAgentWork,
+    type ConversationAgentWork,
+    type ConversationAgentWorkAction,
+  } from "./lib/agent-working";
   import { listWorkspaceMembersPage } from "./lib/workspace-members";
   import type { Channel, ChannelBotPresentation, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
@@ -261,6 +269,8 @@
   let typingSweeper: number | undefined;
   let agentProgressTurns: AgentProgressTurn[] = [];
   let agentProgressSweeper: number | undefined;
+  let conversationAgentWork = new Map<string, ConversationAgentWork>();
+  let workingConversationIDs = new Set<string>();
   let activityClock = Date.now();
   let activityClockSweeper: number | undefined;
   let appliedRouteKey = "";
@@ -2438,6 +2448,103 @@
     };
   }
 
+  function expectedAgentIDsForConversation(
+    conversationID: string,
+    botCommandID?: string,
+    threadRoot?: Message | null,
+  ): string[] {
+    const direct = directConversations.find((conversation) => conversation.id === conversationID);
+    if (direct) {
+      return direct.members
+        .filter((member) => member.kind === "bot" && !member.deleted_at)
+        .map((member) => member.id);
+    }
+    const expected = new Set<string>();
+    const commandOwner = botCommandID
+      ? botCommands.find((command) => command.id === botCommandID)?.bot
+      : undefined;
+    if (commandOwner) expected.add(commandOwner.id);
+    const channel = channels.find((candidate) => candidate.id === conversationID);
+    for (const presentation of channel?.bot_presentations ?? []) {
+      expected.add(presentation.bot_user_id);
+    }
+    if (threadRoot?.author?.kind === "bot" && !threadRoot.author.deleted_at) {
+      expected.add(threadRoot.author.id);
+    }
+    return [...expected];
+  }
+
+  function requestDefinitelyRejected(error: unknown): boolean {
+    return error instanceof APIError && error.status >= 400 && error.status < 500;
+  }
+
+  function updateConversationAgentWork(
+    conversationID: string,
+    action: ConversationAgentWorkAction,
+  ) {
+    if (!conversationID) return;
+    const nextWork = reduceConversationAgentWork(conversationAgentWork.get(conversationID), action);
+    const next = new Map(conversationAgentWork);
+    if (nextWork) next.set(conversationID, nextWork);
+    else next.delete(conversationID);
+    conversationAgentWork = next;
+    workingConversationIDs = new Set(
+      [...next.entries()]
+        .filter(([, work]) => work.pendingSends.length > 0 || work.turns.length > 0)
+        .map(([id]) => id),
+    );
+  }
+
+  async function updateConversationWorkingFromEvent(event: RealtimeEvent) {
+    let conversationID = realtimeConversationID(event);
+    if (!conversationID) return;
+    const payload = event.payload as Record<string, unknown>;
+    const progressSignal = agentProgressWorkingSignal(event);
+    if (progressSignal) {
+      const turnID = typeof payload.turn_id === "string" ? payload.turn_id : "";
+      const userID = typeof payload.user_id === "string" ? payload.user_id : "";
+      if (!turnID) return;
+      updateConversationAgentWork(conversationID, {
+        type: progressSignal === "start" ? "progress.start" : "progress.stop",
+        turn: {
+          key: agentProgressTurnKey(userID, turnID),
+          turnID,
+          userID,
+        },
+      });
+      return;
+    }
+    if (event.type !== "message.created" && event.type !== "thread.reply_created") return;
+
+    let authorID = typeof payload.author_id === "string" ? payload.author_id : "";
+    let author = lookupUser(authorID);
+    let turnID = typeof payload.turn_id === "string" ? payload.turn_id : "";
+    if (!author && !turnID) {
+      const messageID = typeof payload.message_id === "string" ? payload.message_id : "";
+      if (!messageID) return;
+      try {
+        const data = await api<{ message: Message }>(`/api/messages/${messageID}`);
+        authorID = data.message.author_id;
+        author = data.message.author ?? lookupUser(authorID);
+        turnID = data.message.turn_id || turnID;
+        conversationID =
+          data.message.direct_conversation_id || data.message.channel_id || conversationID;
+      } catch (err) {
+        // Realtime delivery is cursor-based. A transient hydration failure must
+        // fail this handler so the event is replayed rather than acknowledged
+        // without applying legacy completion.
+        throw err;
+      }
+    }
+    if (isFinalAgentMessageEvent(event, author)) {
+      updateConversationAgentWork(conversationID, {
+        type: "response.final",
+        turnID: turnID || undefined,
+        userID: authorID,
+      });
+    }
+  }
+
   async function notificationPreferenceForChannel(channelID: string): Promise<ChannelNotificationPreference | null> {
     try {
       const data = await api<{ preference: ChannelNotificationPreference }>(
@@ -2825,7 +2932,13 @@
       const slash = splitSlashDraft(body);
       const registered = slash ? findRegisteredCommand(slashCommands, slash.command) : undefined;
       if (slash && registered) {
+        const sendID = `slash:${dispatchGeneration}`;
         messageBody = "";
+        updateConversationAgentWork(conversationKey, {
+          type: "pending.start",
+          sendID,
+          agentIDs: [registered.bot_user_id],
+        });
         await dispatchRegisteredCommand(
           selectedChannelID,
           slash.command,
@@ -2833,6 +2946,7 @@
           body,
           conversationKey,
           dispatchGeneration,
+          sendID,
         );
         return;
       }
@@ -2864,9 +2978,13 @@
     draftBody: string,
     conversationKey: string,
     dispatchGeneration: number,
+    sendID: string,
   ) {
     try {
       const result = await dispatchSlashCommand(channelID, command, text);
+      // The hook response is terminal for both ephemeral and in-channel modes;
+      // in-channel text has already been persisted before this resolves.
+      updateConversationAgentWork(conversationKey, { type: "pending.fail", sendID });
       if (
         dispatchGeneration !== slashDispatchGeneration ||
         currentConversationKey() !== conversationKey
@@ -2880,6 +2998,12 @@
       }
     } catch (err) {
       console.warn("slash dispatch failed", err);
+      if (
+        requestDefinitelyRejected(err) ||
+        (err instanceof APIError && err.status === 502)
+      ) {
+        updateConversationAgentWork(conversationKey, { type: "pending.fail", sendID });
+      }
       if (
         dispatchGeneration !== slashDispatchGeneration ||
         currentConversationKey() !== conversationKey
@@ -3007,6 +3131,14 @@
     const shouldRevealSentMessage =
       !existingNonce && currentConversationKey() === draft.viewKey && matchesTopicFilter;
     const shouldRefreshLatestAfterSend = shouldRevealSentMessage && activeHasNewer;
+    const expectedAgentIDs = expectedAgentIDsForConversation(draft.viewKey, draft.botCommandID);
+    if (expectedAgentIDs.length > 0) {
+      updateConversationAgentWork(draft.viewKey, {
+        type: "pending.start",
+        sendID: nonce,
+        agentIDs: expectedAgentIDs,
+      });
+    }
     pendingDrafts.set(nonce, draft);
     const placeholder = buildOptimisticMessage(nonce, draft, localID);
     if (existingNonce) rememberRecoverableDraft(draft.viewKey, placeholder);
@@ -3029,6 +3161,11 @@
         body: JSON.stringify(payload),
       });
       let message = data.message;
+      updateConversationAgentWork(draft.viewKey, {
+        type: "pending.replace",
+        sendID: nonce,
+        replacementID: message.id,
+      });
       const attachedUploadIDs = new Set([
         ...(draft.attachedUploadIDs || []),
         ...(message.attachments || []).map((upload) => upload.id),
@@ -3093,6 +3230,9 @@
       }
     } catch (err) {
       console.warn("send failed", err);
+      if (requestDefinitelyRejected(err)) {
+        updateConversationAgentWork(draft.viewKey, { type: "pending.fail", sendID: nonce });
+      }
       await revealFailedDraft(
         draft,
         { ...placeholder, status: "failed", delivery_failure: "message" },
@@ -3266,19 +3406,49 @@
       status = "This direct message has no active recipient";
       return;
     }
+    const conversationID = currentConversationKey();
+    const nonce = newNonce();
     const quote = replyTarget && replyContext === "thread" ? replyTarget : null;
     replyBody = "";
-    const payload: Record<string, unknown> = { body, nonce: newNonce() };
-    if (quote) payload.quoted_message_id = quote.id;
-    const data = await api<{ message: Message; thread_state: ThreadState }>(`/api/messages/${selectedThread.id}/thread/replies`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-    if (quote) clearReplyTarget();
-    if (!replies.some((reply) => reply.id === data.message.id)) {
-      replies = [...replies, data.message];
+    const expectedAgentIDs = expectedAgentIDsForConversation(
+      conversationID,
+      undefined,
+      selectedThread,
+    );
+    if (expectedAgentIDs.length > 0) {
+      updateConversationAgentWork(conversationID, {
+        type: "pending.start",
+        sendID: nonce,
+        agentIDs: expectedAgentIDs,
+      });
     }
-    selectedThreadState = data.thread_state;
+    const payload: Record<string, unknown> = { body, nonce };
+    if (quote) payload.quoted_message_id = quote.id;
+    try {
+      const data = await api<{ message: Message; thread_state: ThreadState }>(
+        `/api/messages/${selectedThread.id}/thread/replies`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      updateConversationAgentWork(conversationID, {
+        type: "pending.replace",
+        sendID: nonce,
+        replacementID: data.message.id,
+      });
+      if (quote) clearReplyTarget();
+      if (!replies.some((reply) => reply.id === data.message.id)) {
+        replies = [...replies, data.message];
+      }
+      selectedThreadState = data.thread_state;
+    } catch (error) {
+      if (requestDefinitelyRejected(error)) {
+        updateConversationAgentWork(conversationID, { type: "pending.fail", sendID: nonce });
+      }
+      status = error instanceof Error ? error.message : "Could not send reply";
+      if (!replyBody.trim()) replyBody = body;
+    }
   }
 
   function setReplyTarget(message: Message, context: "channel" | "dm" | "thread") {
@@ -3893,6 +4063,7 @@
   }
 
   async function handleEvent(event: RealtimeEvent) {
+    await updateConversationWorkingFromEvent(event);
     if (
       (event.type === "pin.added" || event.type === "pin.removed") &&
       event.channel_id === selectedChannelID &&
@@ -4958,6 +5129,7 @@
     showHeader={!integratedTitleBar}
     {channels}
     {directConversations}
+    {workingConversationIDs}
     {recentPeople}
     profilePeople={mentionPeople}
     {profileShortcuts}

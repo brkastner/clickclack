@@ -62,6 +62,21 @@ func TestAgentActivityMessageKindRoundTrip(t *testing.T) {
 		}
 	}
 
+	// A bot-authored final reply uses the ordinary message kind while preserving
+	// source-message correlation through the thread create path.
+	reply, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
+		RootMessageID: plain.ID,
+		AuthorID:      owner.ID,
+		Body:          "correlated final reply",
+		TurnID:        plain.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply.Kind != store.MessageKindMessage || reply.TurnID != plain.ID {
+		t.Fatalf("expected correlated ordinary reply, got %#v", reply)
+	}
+
 	// Unknown kinds are rejected.
 	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "bad", Kind: "bogus"}); err != store.ErrInvalidMessageKind {
 		t.Fatalf("expected ErrInvalidMessageKind for unknown kind, got %v", err)

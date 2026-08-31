@@ -20,6 +20,7 @@
     people: User[];
     selectedChannelID: string;
     selectedDirectID: string;
+    workingConversationIDs: Set<string>;
     hrefForChannel: (channelID: string) => string;
     hrefForDirect: (conversationID: string) => string;
     onSelectChannel: (channelID: string) => void;
@@ -49,6 +50,7 @@
     people,
     selectedChannelID,
     selectedDirectID,
+    workingConversationIDs,
     hrefForChannel,
     hrefForDirect,
     onSelectChannel,
@@ -124,7 +126,8 @@
       (channel) =>
         !channel.sidebar_section?.startsWith("profile:") &&
         ((channel.id === selectedChannelID && !selectedDirectID) ||
-          (channel.unread_count || 0) > 0),
+          (channel.unread_count || 0) > 0 ||
+          workingConversationIDs.has(channel.id)),
     ),
   );
 
@@ -191,7 +194,8 @@
       : group.channels.filter(
           (channel) =>
             (channel.id === selectedChannelID && !selectedDirectID) ||
-            (channel.unread_count || 0) > 0,
+            (channel.unread_count || 0) > 0 ||
+            workingConversationIDs.has(channel.id),
         );
   }
 
@@ -432,6 +436,7 @@
 
 {#snippet channelRow(channel: Channel, scopeChannels: Channel[], groupKey: string, subdued: boolean, reorderable: boolean)}
   {@const unread = channel.unread_count || 0}
+  {@const working = workingConversationIDs.has(channel.id)}
   {@const channelIndex = scopeChannels.findIndex((candidate) => candidate.id === channel.id)}
   {@const isProfileSource = profiles.some((profile) => profile.channel_id === channel.id)}
   <div
@@ -546,6 +551,14 @@
     >
       <span class="hash">#</span>
       <span class="nav-label">{channelDisplayTitle(channel)}</span>
+      {#if working}
+        <span
+          class="sidebar-working-indicator"
+          role="status"
+          aria-label={`Agent is working in #${channelDisplayTitle(channel)}`}
+          title="Agent is working"
+        ></span>
+      {/if}
       {#if channel.external_managed}
         <span class="managed-channel-marker" title="Externally managed" aria-label="Externally managed">
           <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
@@ -564,6 +577,11 @@
   {@const groupIsExpanded = groupExpanded(group.key)}
   {@const visibleChannels = visibleGroupChannels(group)}
   {@const hasNestedChannels = group.channels.length > 0}
+  {@const target = headerTarget(group)}
+  {@const groupWorking = Boolean(
+    (target && workingConversationIDs.has(target.id)) ||
+      (group.sourceChannel && workingConversationIDs.has(group.sourceChannel.id)),
+  )}
   <section
     class="channel-subgroup"
     role="group"
@@ -668,11 +686,19 @@
         />
       {/if}
       <span>{group.label}</span>
+      {#if groupWorking}
+        <span
+          class="sidebar-working-indicator"
+          role="status"
+          aria-label={`Agent is working in ${group.label}`}
+          title="Agent is working"
+        ></span>
+      {/if}
       {#if groupUnreadCount(group) > 0}
         <span class="unread-badge" aria-label={`${groupUnreadCount(group)} unread`}>
           {groupUnreadCount(group) > 99 ? "99+" : groupUnreadCount(group)}
         </span>
-      {:else}
+      {:else if !groupWorking}
         <span class="channel-subgroup-count">{group.channels.length}</span>
       {/if}
     </svelte:element>

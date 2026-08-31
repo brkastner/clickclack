@@ -304,7 +304,7 @@ type MessageInputBase = {
 
 export type MessageInput = MessageInputBase &
   (
-    | { kind?: "message"; turn_id?: never; bot_command_id?: string }
+    | { kind?: "message"; turn_id?: string; bot_command_id?: string }
     | {
         kind: "agent_commentary" | "agent_tool";
         turn_id?: string;
@@ -1183,7 +1183,7 @@ export class ClickClackClient {
     },
     reply: async (
       messageId: string,
-      input: { body: string; quoted_message_id?: string; nonce?: string },
+      input: { body: string; quoted_message_id?: string; nonce?: string; turn_id?: string },
     ): Promise<Message> => {
       const data = await this.request<{ message: Message }>(
         `/api/messages/${messageId}/thread/replies`,

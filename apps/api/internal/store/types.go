@@ -92,13 +92,10 @@ var (
 // is not one of the recognised values. HTTP callers surface it as a 400.
 var ErrInvalidMessageKind = errors.New("invalid message kind")
 
-// ErrTurnIDNotAllowed is returned when an ordinary ('message') row is created
-// with a non-empty turn_id. turn_id correlates a sequence of agent activity
-// rows belonging to one turn; an ordinary message carrying one contradicts the
-// documented "must be empty for ordinary messages" contract. HTTP callers surface it as
-// a 400 so a client bug fails closed instead of silently persisting a
-// contradictory turn_id.
-var ErrTurnIDNotAllowed = errors.New("turn_id is only valid for agent activity messages")
+// ErrTurnIDNotAllowed is returned when a human session sets turn_id on an
+// ordinary message. Bot-authored final messages may carry the source-message ID
+// so clients can correlate the response with one specific agent turn.
+var ErrTurnIDNotAllowed = errors.New("turn_id on ordinary messages requires bot authentication")
 
 // Message kinds. 'message' is an ordinary human/bot message and is the default
 // for any row created before this column existed. The agent_* kinds are
@@ -321,11 +318,8 @@ type Message struct {
 	// Kind discriminates ordinary messages from durable agent activity rows.
 	// Empty in JSON means the default 'message'.
 	Kind string `json:"kind,omitempty"`
-	// TurnID correlates a sequence of agent activity rows belonging to one
-	// agent turn. It must be empty for ordinary messages (kind="message"): the
-	// create path enforces this and rejects a non-empty turn_id on a 'message'
-	// kind with a 400 ErrTurnIDNotAllowed. It is optional for agent activity
-	// kinds (agent_commentary/agent_tool), which may carry one.
+	// TurnID correlates agent activity and the bot-authored final response with
+	// their source message. Human-authored ordinary messages may not set it.
 	TurnID             string       `json:"turn_id,omitempty"`
 	Author             *User        `json:"author,omitempty"`
 	Attachments        []Upload     `json:"attachments,omitempty"`
@@ -947,6 +941,7 @@ type CreateThreadReplyInput struct {
 	Body            string
 	QuotedMessageID *string
 	Nonce           string
+	TurnID          string
 }
 
 type CreateReactionInput struct {

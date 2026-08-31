@@ -1071,9 +1071,8 @@ func (s *Server) resolveBotCommand(ctx context.Context, channelID, requesterID, 
 //
 //   - an empty/'message' kind is always allowed and returned as 'message',
 //   - an unknown kind is a 400,
-//   - an ordinary 'message' MUST NOT carry a turn_id (400); turn_id correlates
-//     agent activity rows only, so a non-empty value on an ordinary message is
-//     a client contract violation and fails closed,
+//   - an ordinary bot 'message' may carry a turn_id to correlate the final
+//     response with its source message; human sessions may not set it (400),
 //   - an activity kind (agent_commentary/agent_tool) requires a BOT token that
 //     carries agent_activity:write; a human session always gets 403 and a bot
 //     without the scope gets 403, and may carry a turn_id.
@@ -1088,11 +1087,11 @@ func (s *Server) resolveMessageKind(w http.ResponseWriter, act actor, rawKind, r
 		return "", "", false
 	}
 	if !store.IsActivityMessageKind(kind) {
-		if rawTurnID != "" {
+		if rawTurnID != "" && act.botTokenID == "" {
 			writeError(w, http.StatusBadRequest, store.ErrTurnIDNotAllowed)
 			return "", "", false
 		}
-		return kind, "", true
+		return kind, rawTurnID, true
 	}
 	if act.botTokenID == "" {
 		writeError(w, http.StatusForbidden, errors.New("agent activity messages require a bot token"))
@@ -1240,15 +1239,20 @@ func (s *Server) createThreadReply(w http.ResponseWriter, r *http.Request) {
 		Body            string `json:"body"`
 		QuotedMessageID string `json:"quoted_message_id"`
 		Nonce           string `json:"nonce"`
+		TurnID          string `json:"turn_id"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	_, turnID, ok := s.resolveMessageKind(w, act, store.MessageKindMessage, body.TurnID)
+	if !ok {
+		return
+	}
 	if _, ok := s.requireBotMessageResource(w, r, act, chi.URLParam(r, "message_id"), "dms:write"); !ok {
 		return
 	}
-	message, state, events, err := s.store.CreateThreadReply(r.Context(), store.CreateThreadReplyInput{RootMessageID: chi.URLParam(r, "message_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce})
+	message, state, events, err := s.store.CreateThreadReply(r.Context(), store.CreateThreadReplyInput{RootMessageID: chi.URLParam(r, "message_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TurnID: turnID})
 	if err == nil && len(events) > 0 {
 		s.publishEvents(r.Context(), events)
 		s.notifyMessageCreated(r.Context(), message, messageEventMentionedUserIDs(events))

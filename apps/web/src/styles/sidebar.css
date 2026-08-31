@@ -889,6 +889,10 @@
   .channel-subgroup-toggle .caret {
     transition: none;
   }
+
+  .sidebar-working-indicator {
+    animation: none;
+  }
 }
 
 .nav-item {
@@ -942,6 +946,22 @@
 
 .nav-item.has-unread .hash {
   color: var(--text-strong);
+}
+
+.sidebar-working-indicator {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: sidebar-working-spin 800ms linear infinite;
+}
+
+@keyframes sidebar-working-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .unread-badge {

@@ -2797,8 +2797,8 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 }
 
 const insertThreadReply = `-- name: InsertThreadReply :exec
-INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, 'markdown', ?10, ?11, ?12, ?13, ?14)
+INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, turn_id)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, 'markdown', ?10, ?11, ?12, ?13, ?14, ?15)
 `
 
 type InsertThreadReplyParams struct {
@@ -2816,6 +2816,7 @@ type InsertThreadReplyParams struct {
 	QuotedBodySnapshot   string         `json:"quoted_body_snapshot"`
 	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
 	ClientNonce          string         `json:"client_nonce"`
+	TurnID               sql.NullString `json:"turn_id"`
 }
 
 func (q *Queries) InsertThreadReply(ctx context.Context, arg InsertThreadReplyParams) error {
@@ -2834,6 +2835,7 @@ func (q *Queries) InsertThreadReply(ctx context.Context, arg InsertThreadReplyPa
 		arg.QuotedBodySnapshot,
 		arg.QuotedAuthorID,
 		arg.ClientNonce,
+		arg.TurnID,
 	)
 	return err
 }

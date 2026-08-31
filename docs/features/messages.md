@@ -102,9 +102,10 @@ search.
 
 Publishing activity requires bot-token authentication plus the explicit
 `agent_activity:write` scope, which is intentionally excluded from every
-`bot:*` bundle. Ordinary messages default to `kind: "message"` and reject a
-`turn_id`; human sessions cannot publish either activity kind. Create an
-activity-capable bot token with a scope list such as
+`bot:*` bundle. Ordinary messages default to `kind: "message"`. A bot-authored
+final message may carry the source message's `turn_id` for exact turn
+correlation; human-authored ordinary messages reject it. Human sessions cannot
+publish either activity kind. Create an activity-capable bot token with a scope list such as
 `bot:write,agent_activity:write`.
 
 ## Conversation organization and attention
