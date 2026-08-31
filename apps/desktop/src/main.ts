@@ -279,7 +279,18 @@ function configureWebContents(window: BrowserWindow) {
         { role: "selectAll" },
       );
     } else if (params.selectionText) {
-      template.push({ role: "copy" }, { role: "selectAll" });
+      // The native copy role writes both text/plain and text/html flavors, so a
+      // pasted message arrives with the rendered markup translated back into
+      // markdown: backticks around code spans and percent-encoded href values
+      // instead of the link text. Write the plain selection ourselves so the
+      // clipboard carries exactly what is on screen.
+      template.push(
+        {
+          label: "Copy",
+          click: () => clipboard.writeText(params.selectionText),
+        },
+        { role: "selectAll" },
+      );
     }
     if (params.linkURL && isExternalURL(params.linkURL)) {
       if (template.length > 0) template.push({ type: "separator" });
