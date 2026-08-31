@@ -345,6 +345,11 @@
   /* Overlay keeps the woodblock's light/dark structure visible through the
      tint; a flat normal wash at this alpha erased the texture entirely. */
   background-blend-mode: normal, overlay, normal, normal;
+  /* Layers are sized to the origin box but painted across the border box by
+     default, so the cover and its tints stopped at the padding edge while the
+     untinted fallback gradient bled through the 1px border as a bright line.
+     Sizing against the border box makes every layer cover the same area. */
+  background-origin: border-box;
   border-bottom: 1px solid var(--line);
 }
 
