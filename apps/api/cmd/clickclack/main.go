@@ -397,6 +397,12 @@ func admin(args []string) error {
 		fmt.Printf("%s\n", invite.Token)
 		return nil
 	case "bot":
+		if len(args) >= 2 && args[1] == "token" {
+			if len(args) < 3 || args[2] != "create" {
+				return fmt.Errorf("usage: clickclack admin bot token create --workspace WORKSPACE_ID --bot BOT_USER_ID --created-by USER_ID [--name default] [--scopes bot:write] [--plain]")
+			}
+			return adminBotTokenCreate(args[3:])
+		}
 		if len(args) < 2 || args[1] != "create" {
 			return fmt.Errorf("usage: clickclack admin bot create --workspace WORKSPACE_ID --created-by USER_ID --name NAME [--owner USER_ID] [--scopes bot:write]")
 		}
@@ -539,6 +545,58 @@ func admin(args []string) error {
 	default:
 		return fmt.Errorf("unknown admin subcommand %q", args[0])
 	}
+}
+
+func adminBotTokenCreate(args []string) error {
+	flags := flag.NewFlagSet("admin bot token create", flag.ExitOnError)
+	data := flags.String("data", defaultData(), "data directory")
+	dbURL := flags.String("db", defaultDB(), "database URL")
+	workspaceID := flags.String("workspace", "", "workspace id")
+	botUserID := flags.String("bot", "", "bot user id")
+	createdBy := flags.String("created-by", "", "human creator user id")
+	name := flags.String("name", "default", "bot token label")
+	scopes := flags.String("scopes", "bot:write", "comma-separated scopes or bundle")
+	plain := flags.Bool("plain", false, "print only the raw bot token")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	*workspaceID = strings.TrimSpace(*workspaceID)
+	*botUserID = strings.TrimSpace(*botUserID)
+	*createdBy = strings.TrimSpace(*createdBy)
+	*name = strings.TrimSpace(*name)
+	if *workspaceID == "" {
+		return fmt.Errorf("--workspace is required")
+	}
+	if *botUserID == "" {
+		return fmt.Errorf("--bot is required")
+	}
+	if *createdBy == "" {
+		return fmt.Errorf("--created-by is required")
+	}
+	st, err := openStore(resolveDB(*data, *dbURL))
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	ctx := context.Background()
+	if err := st.Migrate(ctx); err != nil {
+		return err
+	}
+	token, err := st.CreateBotToken(ctx, store.CreateBotTokenInput{
+		WorkspaceID: *workspaceID,
+		BotUserID:   *botUserID,
+		Name:        *name,
+		Scopes:      strings.Split(*scopes, ","),
+		CreatedBy:   *createdBy,
+	})
+	if err != nil {
+		return err
+	}
+	if *plain {
+		fmt.Printf("%s\n", token.Token)
+		return nil
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"bot_token": token, "token": token.Token})
 }
 
 func backup(args []string) error {

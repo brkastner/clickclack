@@ -185,6 +185,24 @@ For a user-owned bot, it must match `--owner`. JSON output includes
 `{bot, bot_token, token}`. See
 [features/bots.md](features/bots.md) and [bot-installs.md](bot-installs.md).
 
+### `admin bot token create`
+
+```sh
+clickclack admin bot token create \
+  --workspace wsp_... \
+  --bot usr_bot \
+  --created-by usr_manager \
+  --name pi-clickclack \
+  --scopes bot:write,agent_activity:write \
+  --plain
+```
+
+Mints another token for an existing bot without changing or revoking its current
+tokens. `--created-by` must identify the bot's human owner or a manager allowed
+to manage the service bot. The default token name is `default`, and the default
+scope bundle is `bot:write`. Plain output prints only the new raw token. JSON
+output includes `{bot_token, token}`.
+
 ### `admin magic-link create`
 
 ```sh
