@@ -53,8 +53,25 @@ export function apiURL(path: string): string {
   return base ? `${base}${path.startsWith("/") ? path : `/${path}`}` : path;
 }
 
+// Server-stored resource URLs (avatars, workspace icons, uploads) can be
+// absolute and point at whichever origin minted them, such as a tailnet host.
+// Loading the app from a different origin then sends credentialed image
+// requests cross-origin, where the session cookie does not apply and the API
+// answers 401. Re-point any API resource path at the origin the app is
+// currently talking to and keep genuinely external URLs untouched.
 export function apiResourceURL(value: string): string {
-  return value.startsWith("/api/") ? apiURL(value) : value;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("/api/")) return apiURL(trimmed);
+  if (!/^https?:\/\//i.test(trimmed)) return trimmed;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return trimmed;
+  }
+  if (!parsed.pathname.startsWith("/api/")) return trimmed;
+  return apiURL(`${parsed.pathname}${parsed.search}`);
 }
 
 export const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
