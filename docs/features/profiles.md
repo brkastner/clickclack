@@ -58,5 +58,24 @@ Clicking a message avatar or author name opens a Slack-style profile pane in
 the right rail. The pane shows the user's avatar, display name, handle,
 presence, user ID, and a Message action for starting or jumping to a DM.
 
+A bot profile also lists the channel personas wrapping that bot under "Appears
+as". Viewers who can edit the profile get an Edit profile action that replaces
+the pane with an editor; the current user's own profile keeps routing to account
+settings, which still owns notification and conversation display preferences.
+
+The editor has up to two steps, each shown only when the viewer has that
+permission:
+
+- Identity edits the bot's own `display_name`, `handle`, and `avatar_url`
+  through `PATCH /api/bots/{bot_user_id}`. A user-owned bot is editable only by
+  its owner; a service bot is editable by workspace managers.
+- Personas edits one channel-scoped presentation at a time through
+  `PUT /api/channels/{channel_id}/bot-presentations/{bot_user_id}`. Managers
+  edit personas regardless of bot ownership, because a presentation is channel
+  configuration rather than identity.
+
+Renaming a bot whose canonical persona matches its display name also renames
+that sidebar group, so the editor says so before saving.
+
 Message lists, search results, threads, DMs, and the profile control all hydrate
 avatars from the user attached to each message or conversation member.

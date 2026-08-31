@@ -286,6 +286,25 @@ export async function removeBotFromWorkspace(
   });
 }
 
+export type BotProfilePatch = {
+  display_name?: string;
+  handle?: string;
+  avatar_url?: string;
+};
+
+/**
+ * Edits a bot's underlying identity. Omitted fields are left unchanged. The
+ * server allows a user-owned bot's owner, or a manager of every workspace a
+ * service bot still operates in.
+ */
+export async function updateBotProfile(botUserID: string, patch: BotProfilePatch): Promise<User> {
+  const data = await api<{ bot: User }>(`/api/bots/${botUserID}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return data.bot;
+}
+
 export async function deleteBot(botUserID: string): Promise<DeletedBot> {
   const data = await api<{ deleted_bot: DeletedBot }>(`/api/bots/${botUserID}`, {
     method: "DELETE",

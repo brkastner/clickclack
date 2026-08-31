@@ -32,12 +32,15 @@
     type MessageWindowDirection,
   } from "./lib/chat/messageWindow";
   import {
+    collectBotPersonaLanes,
     collectChannelProfileShortcuts,
     collectMentionPeople,
     collectRecentPeople,
     dmTitle,
     type ChannelProfileShortcut,
+    type ProfilePersonaLane,
   } from "./lib/chat/people";
+  import { updateBotProfile } from "./lib/bots";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
   import { channelDisplayTitle } from "./lib/chat/channels";
   import {
@@ -496,6 +499,15 @@
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, workspaceMemberUsers, selectedDirect);
   $: profileShortcuts = collectChannelProfileShortcuts(channels, mentionPeople);
+  $: selectedProfileLanes =
+    selectedProfile?.kind === "bot"
+      ? collectBotPersonaLanes(
+          profileShortcuts,
+          selectedProfile.id,
+          mentionPeople,
+          channels.map((channel) => channel.id),
+        )
+      : ([] as ProfilePersonaLane[]);
   $: mentionAttentionUserID =
     user?.id &&
     (selectedDirectID ||
@@ -3861,6 +3873,10 @@
       }
       return;
     }
+    if (event.type === "bot.updated") {
+      if (event.workspace_id === selectedWorkspaceID) await handleBotUpdatedEvent(event);
+      return;
+    }
     if (event.type === "bot.deleted") {
       if (event.workspace_id === selectedWorkspaceID) await handleBotDeletedEvent(event);
       return;
@@ -3978,6 +3994,65 @@
     } else if (event.type !== "thread.reply_created" && selectedThread && rootID === selectedThread.id) {
       await refreshThread(selectedThread.id, selectedThread);
     }
+  }
+
+  // A bot's identity changed elsewhere. Reload the roster that hydrates avatars
+  // and names, and refresh the open profile pane from the new data.
+  async function handleBotUpdatedEvent(event: RealtimeEvent) {
+    const botUserID = event.payload.bot_user_id || "";
+    if (!botUserID) return;
+    await Promise.all([loadModerationMembers(), loadChannels(false, false, false)]);
+    if (selectedProfile?.id !== botUserID) return;
+    const refreshed = moderationMembers.find((member) => member.user.id === botUserID)?.user;
+    selectedProfile = refreshed ?? {
+      ...selectedProfile,
+      display_name: event.payload.display_name || selectedProfile.display_name,
+      handle: event.payload.handle ?? selectedProfile.handle,
+      avatar_url: event.payload.avatar_url ?? selectedProfile.avatar_url,
+    };
+  }
+
+  // Saves a bot's underlying identity, then reflects it locally so the pane and
+  // sidebar update without waiting for the realtime round trip.
+  async function saveBotProfile(
+    botUserID: string,
+    patch: { display_name?: string; handle?: string; avatar_url?: string },
+  ) {
+    const updated = await updateBotProfile(botUserID, patch);
+    if (selectedProfile?.id === botUserID) selectedProfile = updated;
+    moderationMembers = moderationMembers.map((member) =>
+      member.user.id === botUserID ? { ...member, user: updated } : member,
+    );
+    directConversations = directConversations.map((conversation) => ({
+      ...conversation,
+      members: conversation.members.map((member) => (member.id === botUserID ? updated : member)),
+    }));
+    await loadChannels(false, false, false);
+  }
+
+  // Saves one channel-scoped persona. The underlying bot identity is untouched.
+  async function savePersonaLane(
+    botUserID: string,
+    channelID: string,
+    presentation: { display_name: string; avatar_url: string },
+  ) {
+    const data = await api<{ presentation: ChannelBotPresentation }>(
+      `/api/channels/${channelID}/bot-presentations/${botUserID}`,
+      { method: "PUT", body: JSON.stringify(presentation) },
+    );
+    channels = channels.map((channel) =>
+      channel.id === channelID
+        ? {
+            ...channel,
+            bot_presentations: [
+              ...(channel.bot_presentations || []).filter(
+                (candidate) => candidate.bot_user_id !== botUserID,
+              ),
+              data.presentation,
+            ],
+          }
+        : channel,
+    );
   }
 
   async function handleBotDeletedEvent(event: RealtimeEvent) {
@@ -5155,6 +5230,9 @@
         workspaceName={selectedWorkspace?.name}
         currentUserRole={currentWorkspaceRole}
         moderation={selectedProfileModeration}
+        personaLanes={selectedProfileLanes}
+        onSaveBotProfile={saveBotProfile}
+        onSavePersonaLane={savePersonaLane}
         onClose={closeSidePanel}
         onEdit={openProfileSettings}
         onMessage={(memberID) => void startDirectWithUser(memberID)}

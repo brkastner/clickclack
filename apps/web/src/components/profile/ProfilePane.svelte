@@ -1,6 +1,9 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
+  import ProfileEditor from "./ProfileEditor.svelte";
   import { avatarHue, handleLabel } from "../../lib/chat/people";
+  import type { ProfilePersonaLane } from "../../lib/chat/people";
+  import { profileEditScope } from "../../lib/profile-editing";
   import type { MemberModeration, User, Workspace } from "../../lib/types";
 
   type Props = {
@@ -9,6 +12,7 @@
     workspaceName?: string;
     currentUserRole?: Workspace["role"] | "";
     moderation?: MemberModeration;
+    personaLanes?: ProfilePersonaLane[];
     onClose: () => void;
     onEdit: () => void;
     onMessage: (memberID: string) => void;
@@ -17,6 +21,15 @@
     onBlock: (memberID: string) => void;
     onUnblock: (memberID: string) => void;
     onSetStatus: () => void;
+    onSaveBotProfile: (
+      botUserID: string,
+      patch: { display_name?: string; handle?: string; avatar_url?: string },
+    ) => Promise<void>;
+    onSavePersonaLane: (
+      botUserID: string,
+      channelID: string,
+      presentation: { display_name: string; avatar_url: string },
+    ) => Promise<void>;
   };
 
   let {
@@ -25,6 +38,7 @@
     workspaceName,
     currentUserRole,
     moderation,
+    personaLanes = [],
     onClose,
     onEdit,
     onMessage,
@@ -33,6 +47,8 @@
     onBlock,
     onUnblock,
     onSetStatus,
+    onSaveBotProfile,
+    onSavePersonaLane,
   }: Props = $props();
 
   const botLabel = $derived(
@@ -49,6 +65,30 @@
   );
   const isBlocked = $derived(Boolean(moderation?.blocked_at));
   const roleLabel = $derived(targetRole);
+
+  const scope = $derived(profileEditScope(profile, currentUser, currentUserRole ?? ""));
+
+  let editing = $state(false);
+
+  // Selecting a different profile always returns to the read view, so an open
+  // editor can never point at the previous person.
+  let editingProfileID = $state("");
+  $effect(() => {
+    if (editingProfileID !== profile.id) {
+      editingProfileID = profile.id;
+      editing = false;
+    }
+  });
+
+  function startEditing() {
+    // The current user's own profile still owns preferences, so it keeps
+    // routing to account settings rather than the in-pane editor.
+    if (scope.isSelf) {
+      onEdit();
+      return;
+    }
+    editing = true;
+  }
 </script>
 
 <header>
@@ -58,6 +98,17 @@
   </div>
   <button class="close" aria-label="Close profile" onclick={onClose}>×</button>
 </header>
+{#if editing}
+  <ProfileEditor
+    {profile}
+    {personaLanes}
+    canEditIdentity={scope.canEditIdentity}
+    canEditPersonas={scope.canEditPersonas}
+    onBack={() => (editing = false)}
+    {onSaveBotProfile}
+    {onSavePersonaLane}
+  />
+{:else}
 <div class="profile-pane">
   <div class="profile-hero" style="--hue: {avatarHue(profile.id)}deg">
     <Avatar
@@ -91,9 +142,15 @@
           Message
         </button>
       {/if}
-      <button type="button" class="ghost-action" onclick={onSetStatus}>
-        Set a status
-      </button>
+      {#if scope.canEdit && !scope.isSelf}
+        <button type="button" class="ghost-action" onclick={startEditing}>
+          Edit profile
+        </button>
+      {:else}
+        <button type="button" class="ghost-action" onclick={onSetStatus}>
+          Set a status
+        </button>
+      {/if}
     </div>
     <section class="profile-info">
       <header>
@@ -154,6 +211,26 @@
       </header>
       <p class="profile-note">Member of {workspaceName || "this workspace"}.</p>
     </section>
+    {#if personaLanes.length > 0}
+      <section class="profile-info">
+        <header>
+          <strong>Appears as</strong>
+          <span class="profile-lane-count">{personaLanes.length}</span>
+        </header>
+        <div class="profile-lane-strip">
+          {#each personaLanes as lane (lane.channel_id)}
+            <span class="profile-lane-chip" title={`#${lane.channel_name}`}>
+              <Avatar id={lane.channel_id} name={lane.display_name} src={lane.avatar_url} size={24} />
+              <span>{lane.display_name}</span>
+            </span>
+          {/each}
+        </div>
+        <p class="profile-note">
+          Channel-scoped names and avatars for this bot. The underlying identity, mentions, and
+          permissions do not change.
+        </p>
+      </section>
+    {/if}
     {#if canModerate && moderation}
       <section class="profile-info moderation-box">
         <header>
@@ -184,3 +261,4 @@
     {/if}
   </section>
 </div>
+{/if}

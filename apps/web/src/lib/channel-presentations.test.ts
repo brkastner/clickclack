@@ -3,6 +3,7 @@ import test from "node:test";
 import type { Channel, DirectConversation, Message, User } from "./types.ts";
 import {
   type ChannelProfileShortcut,
+  collectBotPersonaLanes,
   collectChannelProfileShortcuts,
   collectSidebarPeopleShelf,
   moveChannelInOrder,
@@ -125,6 +126,48 @@ test("profile shortcuts omit missing and deleted bot identities", () => {
   assert.deepEqual(
     collectChannelProfileShortcuts([channel], [{ ...bot, deleted_at: "2026-01-02T00:00:00Z" }]),
     [],
+  );
+});
+
+test("persona lanes collect every profile wrapping one bot, in channel order", () => {
+  const lanes = collectBotPersonaLanes(
+    [shortcut("chn_liz", "лиза"), shortcut("chn_kai", "кай"), shortcut("chn_rec", "рекрутер")],
+    bot.id,
+    [bot],
+    ["chn_kai", "chn_rec", "chn_liz"],
+  );
+  assert.deepEqual(
+    lanes.map((lane) => lane.display_name),
+    ["кай", "рекрутер", "лиза"],
+  );
+  // Only the lane matching the bot's own display name is canonical.
+  assert.deepEqual(
+    lanes.map((lane) => lane.is_canonical),
+    [true, false, false],
+  );
+});
+
+test("persona lanes ignore other bots and an empty bot id", () => {
+  const other: ChannelProfileShortcut = {
+    ...shortcut("chn_other", "другой"),
+    bot_user_id: "usr_other",
+  };
+  assert.deepEqual(
+    collectBotPersonaLanes([shortcut("chn_liz", "лиза"), other], bot.id, [bot]).map(
+      (lane) => lane.channel_id,
+    ),
+    ["chn_liz"],
+  );
+  assert.deepEqual(collectBotPersonaLanes([shortcut("chn_liz", "лиза")], "", [bot]), []);
+});
+
+test("a deleted bot has no canonical persona lane", () => {
+  const lanes = collectBotPersonaLanes([shortcut("chn_kai", "кай")], bot.id, [
+    { ...bot, deleted_at: "2026-01-02T00:00:00Z" },
+  ]);
+  assert.deepEqual(
+    lanes.map((lane) => lane.is_canonical),
+    [false],
   );
 });
 

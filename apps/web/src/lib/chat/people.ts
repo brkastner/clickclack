@@ -193,6 +193,37 @@ export function orderProfileShortcuts(
     .map((entry) => entry.profile);
 }
 
+// One channel-scoped face for a bot, as shown in the profile editor. A lane's
+// `is_canonical` marks the profile whose label already matches the bot's own
+// display name, so the editor can warn that renaming the bot also renames it.
+export type ProfilePersonaLane = {
+  channel_id: string;
+  channel_name: string;
+  display_name: string;
+  avatar_url: string;
+  is_canonical: boolean;
+};
+
+// Collects the persona lanes wrapping one bot, ordered by the viewer's channel
+// order so the editor matches the sidebar. Only self-referential profile
+// sections are lanes; copied presentations on assigned channels are not.
+export function collectBotPersonaLanes(
+  profiles: ChannelProfileShortcut[],
+  botUserID: string,
+  people: User[],
+  channelIDs: string[] = [],
+): ProfilePersonaLane[] {
+  if (!botUserID) return [];
+  const owned = profiles.filter((profile) => profile.bot_user_id === botUserID);
+  return orderProfileShortcuts(owned, channelIDs).map((profile) => ({
+    channel_id: profile.channel_id,
+    channel_name: profile.channel_name,
+    display_name: profile.display_name,
+    avatar_url: profile.avatar_url,
+    is_canonical: profileIsCanonicalIdentity(profile, people),
+  }));
+}
+
 // Moves one channel ID within a viewer order, landing before or after the
 // target. Returns the original order when either ID is absent.
 export function moveChannelInOrder(
