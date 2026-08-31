@@ -152,17 +152,25 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     };
   });
 
-  // The recent-people shelf forms a true 2×2 grid: every row/column gap is
-  // distributed evenly with the corresponding outer edges.
+  // The recent-people shelf forms a true 2×2 grid. Vertical spacing stays
+  // even, while the horizontal middle gap is twice either outer edge.
   expect(geometry.topGap).toBeGreaterThanOrEqual(216);
   expect(geometry.topGap).toBeLessThanOrEqual(230);
   expect(geometry.peopleShelf.display).toBe("grid");
   expect(geometry.peopleShelf.columns).toBe("92px 92px");
   expect(geometry.peopleShelf.rows).toBe("92px 92px");
-  for (const spacing of [geometry.peopleShelf.horizontal, geometry.peopleShelf.vertical]) {
-    expect(Math.abs(spacing[0] - spacing[1])).toBeLessThanOrEqual(1);
-    expect(Math.abs(spacing[1] - spacing[2])).toBeLessThanOrEqual(1);
-  }
+  expect(
+    Math.abs(geometry.peopleShelf.horizontal[0] - geometry.peopleShelf.horizontal[2]),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(geometry.peopleShelf.horizontal[1] - geometry.peopleShelf.horizontal[0] * 2),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(geometry.peopleShelf.vertical[0] - geometry.peopleShelf.vertical[1]),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(geometry.peopleShelf.vertical[1] - geometry.peopleShelf.vertical[2]),
+  ).toBeLessThanOrEqual(1);
   expect(geometry.workspaceLabel).toContain("Workspace");
   expect(geometry.channelWidth).toBeGreaterThan(0);
   expect(geometry.channelGlyph.text).toBe("#");

@@ -131,7 +131,8 @@
   grid-template-columns: repeat(2, 92px);
   grid-template-rows: repeat(2, 92px);
   min-height: 214px;
-  place-content: space-evenly;
+  align-content: space-evenly;
+  justify-content: space-around;
   margin: 0 0 8px;
   padding: 0;
   border-bottom: 1px solid var(--line);

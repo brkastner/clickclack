@@ -1,6 +1,7 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
   import {
+    collectSidebarPeopleShelf,
     directConversationForUser,
     handleLabel,
     type ChannelProfileShortcut,
@@ -85,7 +86,10 @@
   }: Props = $props();
 
   const displayedRecentPeople = $derived(
-    recentPeople.slice(1).concat(recentPeople.slice(0, 1)).slice(0, 4),
+    collectSidebarPeopleShelf(recentPeople, profileShortcuts, {
+      personName: "нудз",
+      profileName: "рекрутер",
+    }),
   );
 
   type SectionState = { channels: boolean; directMessages: boolean };
@@ -223,34 +227,57 @@
 
   <div class="sidebar-scroll">
     <section class="sidebar-people-row" aria-label="Recent people">
-      {#each displayedRecentPeople as person (person.id)}
-        {@const conversation = directConversationForUser(directConversations, person.id)}
-        <a
-          href={conversation ? hrefForDirect(conversation.id) : "#"}
-          class="sidebar-person"
-          class:active={conversation?.id === selectedDirectID || selectedProfile?.id === person.id}
-          title={person.display_name}
-          aria-label={person.display_name}
-          onclick={(event) => {
-            if (conversation) {
+      {#each displayedRecentPeople as entry (entry.kind === "profile" ? entry.profile.id : entry.person.id)}
+        {#if entry.kind === "profile"}
+          <a
+            href={hrefForChannel(entry.profile.channel_id)}
+            class="sidebar-person"
+            class:active={entry.profile.channel_id === selectedChannelID}
+            title={entry.profile.display_name}
+            aria-label={entry.profile.display_name}
+            onclick={(event) => {
               if (!shouldHandleClientNavigation(event)) return;
               event.preventDefault();
-              onSelectDirect(conversation.id);
-            } else {
-              event.preventDefault();
-              onOpenProfile(person);
-            }
-          }}
-        >
-          <Avatar
-            id={person.id}
-            name={person.display_name}
-            src={person.avatar_url}
-            size={90}
-          />
-        </a>
+              onSelectChannel(entry.profile.channel_id);
+            }}
+          >
+            <Avatar
+              id={entry.profile.id}
+              name={entry.profile.display_name}
+              src={entry.profile.avatar_url}
+              size={90}
+            />
+          </a>
+        {:else}
+          {@const person = entry.person}
+          {@const conversation = directConversationForUser(directConversations, person.id)}
+          <a
+            href={conversation ? hrefForDirect(conversation.id) : "#"}
+            class="sidebar-person"
+            class:active={conversation?.id === selectedDirectID || selectedProfile?.id === person.id}
+            title={person.display_name}
+            aria-label={person.display_name}
+            onclick={(event) => {
+              if (conversation) {
+                if (!shouldHandleClientNavigation(event)) return;
+                event.preventDefault();
+                onSelectDirect(conversation.id);
+              } else {
+                event.preventDefault();
+                onOpenProfile(person);
+              }
+            }}
+          >
+            <Avatar
+              id={person.id}
+              name={person.display_name}
+              src={person.avatar_url}
+              size={90}
+            />
+          </a>
+        {/if}
       {/each}
-      {#if recentPeople.length === 0}
+      {#if displayedRecentPeople.length === 0}
         <span class="sidebar-people-empty">No recent people</span>
       {/if}
     </section>

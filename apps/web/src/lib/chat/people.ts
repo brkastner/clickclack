@@ -11,6 +11,15 @@ export type ChannelProfileShortcut = {
   unread_count: number;
 };
 
+export type SidebarPeopleShelfEntry =
+  | { kind: "person"; person: User }
+  | { kind: "profile"; profile: ChannelProfileShortcut };
+
+export type SidebarPeopleShelfReplacement = {
+  personName: string;
+  profileName: string;
+};
+
 export function workspaceInitial(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "?";
@@ -105,6 +114,29 @@ export function collectRecentPeople(
     }
   }
   return [...people.values()].slice(0, 12);
+}
+
+export function collectSidebarPeopleShelf(
+  recentPeople: User[],
+  profiles: ChannelProfileShortcut[],
+  replacement: SidebarPeopleShelfReplacement,
+  limit = 4,
+): SidebarPeopleShelfEntry[] {
+  const people = recentPeople.slice(1).concat(recentPeople.slice(0, 1)).slice(0, limit);
+  const entries: SidebarPeopleShelfEntry[] = people.map((person) => ({
+    kind: "person",
+    person,
+  }));
+  const normalizedPersonName = replacement.personName.trim().toLocaleLowerCase();
+  const normalizedProfileName = replacement.profileName.trim().toLocaleLowerCase();
+  const personIndex = people.findIndex(
+    (person) => person.display_name.trim().toLocaleLowerCase() === normalizedPersonName,
+  );
+  const profile = profiles.find(
+    (candidate) => candidate.display_name.trim().toLocaleLowerCase() === normalizedProfileName,
+  );
+  if (personIndex >= 0 && profile) entries[personIndex] = { kind: "profile", profile };
+  return entries;
 }
 
 export function collectChannelProfileShortcuts(

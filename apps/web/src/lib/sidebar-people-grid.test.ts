@@ -8,8 +8,10 @@ const sidebar = readFileSync(
 );
 const sidebarStyles = readFileSync(new URL("../styles/sidebar.css", import.meta.url), "utf8");
 
-test("keeps the recent-people shelf to one two-by-two page", () => {
-  assert.match(sidebar, /displayedRecentPeople[\s\S]*?\.slice\(0, 4\)/u);
+test("keeps the recent-people shelf to one curated two-by-two page", () => {
+  assert.match(sidebar, /collectSidebarPeopleShelf\(recentPeople, profileShortcuts/u);
+  assert.match(sidebar, /personName:\s*"нудз"/u);
+  assert.match(sidebar, /profileName:\s*"рекрутер"/u);
 });
 
 test("fills the two-by-two shelf with larger avatars and compact spacing", () => {
@@ -21,6 +23,8 @@ test("fills the two-by-two shelf with larger avatars and compact spacing", () =>
   assert.match(shelfStyles, /grid-template-columns:\s*repeat\(2, 92px\)/u);
   assert.match(shelfStyles, /grid-template-rows:\s*repeat\(2, 92px\)/u);
   assert.match(shelfStyles, /min-height:\s*214px/u);
+  assert.match(shelfStyles, /align-content:\s*space-evenly/u);
+  assert.match(shelfStyles, /justify-content:\s*space-around/u);
   assert.match(shelfStyles, /margin:\s*0 0 8px/u);
   assert.match(personStyles, /width:\s*92px/u);
   assert.match(personStyles, /height:\s*92px/u);

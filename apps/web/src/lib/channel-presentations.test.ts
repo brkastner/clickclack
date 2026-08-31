@@ -4,6 +4,7 @@ import type { Channel, DirectConversation, Message, User } from "./types.ts";
 import {
   type ChannelProfileShortcut,
   collectChannelProfileShortcuts,
+  collectSidebarPeopleShelf,
   moveChannelInOrder,
   orderProfileShortcuts,
   profileHeaderTarget,
@@ -139,6 +140,29 @@ function shortcut(channelID: string, name: string): ChannelProfileShortcut {
     unread_count: 0,
   };
 }
+
+test("the sidebar shelf can replace a recent person with a profile shortcut", () => {
+  const people = [
+    { ...bot, id: "usr_pi", display_name: "пи" },
+    { ...bot, id: "usr_claw", display_name: "клешня" },
+    { ...bot, id: "usr_nudz", display_name: "нудз" },
+    { ...bot, id: "usr_kai", display_name: "кай" },
+  ];
+  const recruiter = shortcut("chn_career", "рекрутер");
+  const shelf = collectSidebarPeopleShelf(people, [recruiter], {
+    personName: "нудз",
+    profileName: "рекрутер",
+  });
+
+  assert.deepEqual(
+    shelf.map((entry) =>
+      entry.kind === "person" ? entry.person.display_name : entry.profile.display_name,
+    ),
+    ["клешня", "рекрутер", "кай", "пи"],
+  );
+  assert.equal(shelf[1]?.kind, "profile");
+  assert.equal(shelf[1]?.kind === "profile" ? shelf[1].profile.channel_id : "", "chn_career");
+});
 
 test("profile groups follow the viewer channel order", () => {
   const profiles = [
