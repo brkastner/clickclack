@@ -10,6 +10,7 @@ import {
   voiceKeyboardShortcut,
   voiceResponsePlaybackEnabled,
   VoiceDraftAccumulator,
+  type VoiceDelegation,
   type VoiceState,
   type VoiceTranscript,
 } from "./voice.ts";
@@ -329,6 +330,8 @@ test("connects microphone audio through kassette SmallWebRTC signaling", async (
   const audio = new FakeAudio();
   const states: VoiceState[] = [];
   const transcripts: VoiceTranscript[] = [];
+  const delegations: VoiceDelegation[] = [];
+  let interruptions = 0;
   const inputStreams: Array<MediaStream | null> = [];
   const remoteStreams: Array<MediaStream | null> = [];
   let requestedURL = "";
@@ -337,6 +340,8 @@ test("connects microphone audio through kassette SmallWebRTC signaling", async (
     baseURL: "http://127.0.0.1:7860/",
     onState: (state) => states.push(state),
     onTranscript: (transcript) => transcripts.push(transcript),
+    onDelegation: (delegation) => delegations.push(delegation),
+    onInterrupted: () => (interruptions += 1),
     onInputStream: (stream) => inputStreams.push(stream),
     onRemoteAudio: (stream) => remoteStreams.push(stream),
     dependencies: {
@@ -429,6 +434,42 @@ test("connects microphone audio through kassette SmallWebRTC signaling", async (
     type: "tts.speak",
     data: { text: "That is done. See the details." },
   });
+
+  peer.dataChannel.emit({
+    label: "kassette",
+    type: "provider.active",
+    data: {
+      session_id: "voice-1",
+      provider_id: "quicksilver",
+      state: "listening",
+      capabilities: { mode: "native" },
+      sequence: 4,
+    },
+  });
+  assert.equal(session.currentState().providerMode, "native");
+  peer.dataChannel.emit({
+    label: "kassette",
+    type: "delegation.requested",
+    data: {
+      session_id: "voice-1",
+      delegation_id: "delegation-1",
+      text: "ask the openclaw agent",
+      sequence: 5,
+    },
+  });
+  assert.deepEqual(delegations, [{ delegationID: "delegation-1", text: "ask the openclaw agent" }]);
+  assert.equal(session.completeDelegation("delegation-1", "agent response"), true);
+  assert.deepEqual(JSON.parse(peer.dataChannel.sent[4]), {
+    label: "kassette",
+    type: "delegation.complete",
+    data: { delegation_id: "delegation-1", text: "agent response" },
+  });
+  peer.dataChannel.emit({
+    label: "kassette",
+    type: "session.interrupted",
+    data: { session_id: "voice-1", sequence: 6 },
+  });
+  assert.equal(interruptions, 1);
   assert.deepEqual(inputStreams, [input as unknown as MediaStream]);
   const output = new FakeStream();
   peer.emitTrack(output);

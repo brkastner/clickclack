@@ -94,6 +94,7 @@
     voiceKeyboardShortcut,
     voiceResponsePlaybackEnabled,
     VoiceDraftAccumulator,
+    type VoiceDelegation,
     type VoiceState,
     type VoiceTranscript,
   } from "./lib/voice";
@@ -181,6 +182,7 @@
   let voiceDestination: OutgoingDraft | null = null;
   let voiceStartedAt = 0;
   let awaitingVoiceResponses = 0;
+  let pendingVoiceDelegations: string[] = [];
   let voiceThinking = false;
   let voiceFillerTimer: ReturnType<typeof setTimeout> | undefined;
   let voiceFillerIndex = 0;
@@ -433,11 +435,21 @@
     );
     if (candidates.length === 0) return;
     let spoke = false;
-    for (const candidate of candidates) {
-      if (!voiceSession.speak(candidate.body)) continue;
-      activeVoiceResponseText = candidate.body;
-      spokenVoiceMessageIDs.add(candidate.id);
+    if (voiceState.providerMode === "native") {
+      const delegationID = pendingVoiceDelegations[0];
+      const response = candidates.map((candidate) => candidate.body.trim()).filter(Boolean).join("\n\n");
+      if (!delegationID || !voiceSession.completeDelegation(delegationID, response)) return;
+      activeVoiceResponseText = response;
+      for (const candidate of candidates) spokenVoiceMessageIDs.add(candidate.id);
+      pendingVoiceDelegations = pendingVoiceDelegations.slice(1);
       spoke = true;
+    } else {
+      for (const candidate of candidates) {
+        if (!voiceSession.speak(candidate.body)) continue;
+        activeVoiceResponseText = candidate.body;
+        spokenVoiceMessageIDs.add(candidate.id);
+        spoke = true;
+      }
     }
     if (!spoke) return;
     cancelVoiceFiller();
@@ -535,6 +547,8 @@
       baseURL: voiceBaseURL(),
       onState: handleVoiceState,
       onTranscript: handleVoiceTranscript,
+      onDelegation: handleVoiceDelegation,
+      onInterrupted: handleVoiceInterruption,
       onInputStream: (stream) => (voiceInputStream = stream),
       onRemoteAudio: (stream) => (remoteVoiceStream = stream),
     });
@@ -564,7 +578,10 @@
   });
 
   function handleVoiceState(state: VoiceState) {
+    const leftNativeProvider =
+      voiceState.providerMode === "native" && state.providerMode !== "native";
     voiceState = state;
+    if (leftNativeProvider) handleVoiceInterruption();
     if (state.status === "idle" || state.status === "failed") {
       cancelVoiceFiller();
       voiceDraft.clear();
@@ -574,8 +591,34 @@
       voiceAutoSend = true;
       voiceDestination = null;
       awaitingVoiceResponses = 0;
+      pendingVoiceDelegations = [];
       voiceThinking = false;
     }
+  }
+
+  async function handleVoiceDelegation(delegation: VoiceDelegation) {
+    if (!voiceDestination || pendingVoiceDelegations.includes(delegation.delegationID)) return;
+    voiceStartedAt = Date.now();
+    activeVoiceTranscript = null;
+    activeVoiceResponseText = "";
+    pendingVoiceDelegations = [...pendingVoiceDelegations, delegation.delegationID];
+    awaitingVoiceResponses += 1;
+    voiceThinking = true;
+    const nonceKey = delegation.delegationID.replace(/[^a-zA-Z0-9]/g, "");
+    await dispatchDraft({
+      ...voiceDestination,
+      body: delegation.text,
+      uploads: [],
+      nonce: `voice${nonceKey}`.slice(0, 96),
+    });
+  }
+
+  function handleVoiceInterruption() {
+    pendingVoiceDelegations = [];
+    awaitingVoiceResponses = 0;
+    activeVoiceResponseText = "";
+    voiceThinking = false;
+    cancelVoiceFiller();
   }
 
   function handleVoiceTranscript(transcript: VoiceTranscript) {
@@ -614,6 +657,7 @@
 
   function scheduleVoiceFiller() {
     cancelVoiceFiller();
+    if (voiceState.providerMode === "native") return;
     voiceFillerTimer = window.setTimeout(() => {
       voiceFillerTimer = undefined;
       if (!voiceSession || !voiceThinking || awaitingVoiceResponses <= 0) return;
@@ -669,6 +713,7 @@
     voiceStartedAt = Date.now();
     activeVoiceResponseText = "";
     awaitingVoiceResponses = 0;
+    pendingVoiceDelegations = [];
     voiceThinking = false;
     cancelVoiceFiller();
   }
@@ -713,6 +758,7 @@
     voiceAutoSend = true;
     voiceSession.setOutputMuted(false);
     awaitingVoiceResponses = 0;
+    pendingVoiceDelegations = [];
     voiceThinking = false;
     committedVoiceTurnIDs = new Set();
     spokenVoiceMessageIDs = new Set();
@@ -730,7 +776,7 @@
   }
 
   function toggleVoiceAutoSend() {
-    voiceAutoSend = !voiceAutoSend;
+    if (voiceState.providerMode !== "native") voiceAutoSend = !voiceAutoSend;
   }
 
   function sendVoiceDraft() {

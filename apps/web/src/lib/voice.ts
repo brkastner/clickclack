@@ -1,5 +1,6 @@
 export type VoiceStatus = "idle" | "connecting" | "listening" | "speaking" | "failed";
 export type VoiceInputStatus = "live" | "pausing" | "paused" | "resuming";
+export type VoiceProviderMode = "cascaded" | "native";
 
 export type VoiceFocus = {
   workspaceID: string;
@@ -127,6 +128,7 @@ export function prepareTextForSpeech(markdown: string): string {
 export type VoiceState = {
   status: VoiceStatus;
   inputStatus?: VoiceInputStatus;
+  providerMode?: VoiceProviderMode;
   error?: string;
 };
 
@@ -143,6 +145,11 @@ export type VoiceTranscript = {
   text: string;
   final: boolean;
   sequence: number;
+};
+
+export type VoiceDelegation = {
+  delegationID: string;
+  text: string;
 };
 
 export type VoiceDraft = {
@@ -190,6 +197,8 @@ type VoiceSessionOptions = {
   baseURL: string;
   onState: (state: VoiceState) => void;
   onTranscript?: (transcript: VoiceTranscript) => void;
+  onDelegation?: (delegation: VoiceDelegation) => void;
+  onInterrupted?: () => void;
   onInputStream?: (stream: MediaStream | null) => void;
   onRemoteAudio?: (stream: MediaStream | null) => void;
   dependencies?: VoiceSessionDependencies;
@@ -205,6 +214,8 @@ export class BrowserVoiceSession {
   private readonly baseURL: string;
   private readonly onState: (state: VoiceState) => void;
   private readonly onTranscript: (transcript: VoiceTranscript) => void;
+  private readonly onDelegation: (delegation: VoiceDelegation) => void;
+  private readonly onInterrupted: () => void;
   private readonly onInputStream: (stream: MediaStream | null) => void;
   private readonly onRemoteAudio: (stream: MediaStream | null) => void;
   private readonly createPeerConnection: () => RTCPeerConnection;
@@ -224,6 +235,8 @@ export class BrowserVoiceSession {
     this.baseURL = options.baseURL.replace(/\/+$/u, "");
     this.onState = options.onState;
     this.onTranscript = options.onTranscript ?? (() => undefined);
+    this.onDelegation = options.onDelegation ?? (() => undefined);
+    this.onInterrupted = options.onInterrupted ?? (() => undefined);
     this.onInputStream = options.onInputStream ?? (() => undefined);
     this.onRemoteAudio = options.onRemoteAudio ?? (() => undefined);
     this.createPeerConnection =
@@ -328,6 +341,26 @@ export class BrowserVoiceSession {
     this.audio.muted = muted;
   }
 
+  completeDelegation(delegationID: string, text: string): boolean {
+    const response = text.trim().slice(0, 32_000);
+    if (
+      this.state.providerMode !== "native" ||
+      !delegationID ||
+      !response ||
+      this.dataChannel?.readyState !== "open"
+    ) {
+      return false;
+    }
+    this.dataChannel.send(
+      JSON.stringify({
+        label: "kassette",
+        type: "delegation.complete",
+        data: { delegation_id: delegationID, text: response },
+      }),
+    );
+    return true;
+  }
+
   speak(text: string): boolean {
     const speech = prepareTextForSpeech(text);
     if (!speech || this.dataChannel?.readyState !== "open") return false;
@@ -404,14 +437,48 @@ export class BrowserVoiceSession {
   private handleServerMessage(value: unknown): void {
     const message = parseServerMessage(value);
     if (!message) return;
+    if (message.type === "provider.active") {
+      const capabilities = message.data.capabilities;
+      const mode =
+        capabilities && typeof capabilities === "object" && !Array.isArray(capabilities)
+          ? (capabilities as Record<string, unknown>).mode
+          : undefined;
+      if (mode !== "native" && mode !== "cascaded") return;
+      const state = message.data.state;
+      this.publish({
+        ...this.state,
+        status: state === "listening" || state === "speaking" ? state : this.state.status,
+        inputStatus: this.state.inputStatus ?? "live",
+        providerMode: mode,
+      });
+      return;
+    }
     if (message.type === "session.state_changed") {
       const state = message.data.state;
       if (state === "listening" || state === "speaking") {
         this.publish({
           status: state,
           inputStatus: this.state.inputStatus ?? "live",
+          providerMode: this.state.providerMode,
         });
       }
+      return;
+    }
+    if (message.type === "delegation.requested") {
+      const delegationID = message.data.delegation_id;
+      const text = message.data.text;
+      if (
+        this.state.providerMode === "native" &&
+        typeof delegationID === "string" &&
+        typeof text === "string" &&
+        text.trim()
+      ) {
+        this.onDelegation({ delegationID, text: text.trim() });
+      }
+      return;
+    }
+    if (message.type === "session.interrupted") {
+      this.onInterrupted();
       return;
     }
     if (message.type === "input.state_changed") {
@@ -453,6 +520,7 @@ export class BrowserVoiceSession {
     if (
       this.state.status === state.status &&
       this.state.inputStatus === state.inputStatus &&
+      this.state.providerMode === state.providerMode &&
       this.state.error === state.error
     ) {
       return;
