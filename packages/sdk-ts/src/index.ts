@@ -509,6 +509,13 @@ export type Thread = {
   thread_state: ThreadState;
 };
 
+export type ThreadPage = Thread & {
+  oldest_seq: number;
+  newest_seq: number;
+  has_older: boolean;
+  has_newer: boolean;
+};
+
 export type ClickClackClientOptions = {
   baseUrl: string;
   userId?: string;
@@ -1155,13 +1162,22 @@ export class ClickClackClient {
   threads = {
     get: async (
       messageId: string,
-      options: { limit?: number; latest?: boolean } = {},
-    ): Promise<Thread> => {
+      options: {
+        limit?: number;
+        latest?: boolean;
+        before_seq?: number;
+        after_seq?: number;
+        around_seq?: number;
+      } = {},
+    ): Promise<ThreadPage> => {
       const params = new URLSearchParams();
       if (options.limit !== undefined) params.set("limit", String(options.limit));
       if (options.latest !== undefined) params.set("latest", String(options.latest));
+      for (const key of ["before_seq", "after_seq", "around_seq"] as const) {
+        if (options[key] !== undefined) params.set(key, String(options[key]));
+      }
       const query = params.size > 0 ? `?${params.toString()}` : "";
-      return this.request<Thread>(`/api/messages/${messageId}/thread${query}`);
+      return this.request<ThreadPage>(`/api/messages/${messageId}/thread${query}`);
     },
     reply: async (
       messageId: string,
