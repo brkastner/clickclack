@@ -23,7 +23,8 @@ import (
 //     bot:write token MUST NOT inherit it (403, no bundle inheritance),
 //   - an unknown kind is a 400,
 //   - a scoped bot can create both activity kinds (success),
-//   - an ordinary message is unaffected for any caller with messages:write.
+//   - an ordinary message is unaffected for any caller with messages:write,
+//   - only bot-authored ordinary messages may carry turn_id correlation.
 func TestAgentActivityMessageAuthz(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -50,6 +51,14 @@ func TestAgentActivityMessageAuthz(t *testing.T) {
 		t.Fatal(err)
 	}
 	channel := channels[0]
+	threadRoot, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
+		ChannelID: channel.ID,
+		AuthorID:  owner.ID,
+		Body:      "thread root",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A bridge bot WITH the explicit activity scope.
 	activityBot, activityToken, err := st.CreateBot(ctx, store.CreateBotInput{
@@ -90,6 +99,7 @@ func TestAgentActivityMessageAuthz(t *testing.T) {
 	toolFrame := `{"body":"ran bash","kind":"agent_tool","turn_id":"t1"}`
 	unknownKind := `{"body":"nope","kind":"agent_bogus"}`
 	ordinary := `{"body":"hello channel"}`
+	correlatedFinal := `{"body":"finished","turn_id":"source-message-1"}`
 
 	// 1. Human (dev-auth) session cannot create an activity-kind message.
 	expectStatusAsUser(t, owner.ID, http.MethodPost, endpoint, strings.NewReader(commentary), http.StatusForbidden)
@@ -107,6 +117,15 @@ func TestAgentActivityMessageAuthz(t *testing.T) {
 	// 5. Ordinary messages are unaffected for any messages:write caller.
 	expectStatusAsUser(t, owner.ID, http.MethodPost, endpoint, strings.NewReader(ordinary), http.StatusCreated)
 	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, endpoint, strings.NewReader(ordinary), http.StatusCreated)
+
+	// 6. Final-response correlation is bot-only; it does not require the
+	// activity scope because the row remains an ordinary message.
+	expectStatusAsUser(t, owner.ID, http.MethodPost, endpoint, strings.NewReader(correlatedFinal), http.StatusBadRequest)
+	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, endpoint, strings.NewReader(correlatedFinal), http.StatusCreated)
+
+	threadEndpoint := server.URL + "/api/messages/" + threadRoot.ID + "/thread/replies"
+	expectStatusAsUser(t, owner.ID, http.MethodPost, threadEndpoint, strings.NewReader(correlatedFinal), http.StatusBadRequest)
+	expectStatusWithBearer(t, writeToken.Token, http.MethodPost, threadEndpoint, strings.NewReader(correlatedFinal), http.StatusCreated)
 }
 
 // TestAgentActivityMessagePrivacy proves a durable activity message inherits the

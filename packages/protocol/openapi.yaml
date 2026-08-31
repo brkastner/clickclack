@@ -2883,8 +2883,9 @@ components:
         turn_id:
           type: string
           description: |
-            Optional agent-turn correlation ID. Allowed only with
-            agent_commentary or agent_tool; ordinary messages reject it.
+            Optional agent-turn correlation ID. Agent activity rows and
+            bot-authored final messages may set it; human-authored ordinary
+            messages reject it.
     CreateThreadReplyRequest:
       type: object
       required: [body]
@@ -2896,6 +2897,9 @@ components:
         nonce:
           type: string
           maxLength: 128
+        turn_id:
+          type: string
+          description: Optional source-message correlation ID for a bot-authored final reply; human replies reject it.
     UpdateMessageRequest:
       type: object
       required: [body]
@@ -3322,7 +3326,7 @@ components:
           description: Defaults to message for ordinary human and bot messages.
         turn_id:
           type: string
-          description: Correlates durable agent activity rows from one agent turn.
+          description: Correlates agent activity and a bot-authored final response with one source message.
         author:
           $ref: "#/components/schemas/User"
         quoted_message_id:

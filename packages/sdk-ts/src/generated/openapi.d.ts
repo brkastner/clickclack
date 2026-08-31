@@ -1767,8 +1767,9 @@ export interface components {
        */
       kind?: "message" | "agent_commentary" | "agent_tool";
       /**
-       * @description Optional agent-turn correlation ID. Allowed only with
-       *     agent_commentary or agent_tool; ordinary messages reject it.
+       * @description Optional agent-turn correlation ID. Agent activity rows and
+       *     bot-authored final messages may set it; human-authored ordinary
+       *     messages reject it.
        */
       turn_id?: string;
     };
@@ -1776,6 +1777,8 @@ export interface components {
       body: string;
       quoted_message_id?: string;
       nonce?: string;
+      /** @description Optional source-message correlation ID for a bot-authored final reply; human replies reject it. */
+      turn_id?: string;
     };
     UpdateMessageRequest: {
       body: string;
@@ -2008,7 +2011,7 @@ export interface components {
        * @enum {string}
        */
       kind?: "message" | "agent_commentary" | "agent_tool";
-      /** @description Correlates durable agent activity rows from one agent turn. */
+      /** @description Correlates agent activity and a bot-authored final response with one source message. */
       turn_id?: string;
       author?: components["schemas"]["User"];
       quoted_message_id?: string;

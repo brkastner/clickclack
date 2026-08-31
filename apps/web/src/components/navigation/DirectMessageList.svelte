@@ -8,6 +8,7 @@
     conversations: DirectConversation[];
     currentUserID?: string;
     selectedDirectID: string;
+    workingConversationIDs: Set<string>;
     hrefForDirect: (conversationID: string) => string;
     onSelectDirect: (conversationID: string) => void;
     onCreateDirect: () => void;
@@ -22,6 +23,7 @@
     conversations,
     currentUserID,
     selectedDirectID,
+    workingConversationIDs,
     hrefForDirect,
     onSelectDirect,
     onCreateDirect,
@@ -37,7 +39,9 @@
       ? conversations
       : conversations.filter(
           (conversation) =>
-            conversation.id === selectedDirectID || (conversation.unread_count || 0) > 0,
+            conversation.id === selectedDirectID ||
+            (conversation.unread_count || 0) > 0 ||
+            workingConversationIDs.has(conversation.id),
         ),
   );
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
@@ -76,6 +80,7 @@
       {@const dmUser = dmAvatarUser(conversation, currentUserID)}
       {@const unread = conversation.unread_count || 0}
       {@const isActive = conversation.id === selectedDirectID}
+      {@const working = workingConversationIDs.has(conversation.id)}
       <div class="dm-row" class:active={isActive}>
         <a
           href={hrefForDirect(conversation.id)}
@@ -96,9 +101,17 @@
             size={26}
           />
           <span class="nav-label">{dmTitle(conversation, currentUserID)}</span>
+          {#if working}
+            <span
+              class="sidebar-working-indicator"
+              role="status"
+              aria-label={`Agent is working in ${dmTitle(conversation, currentUserID)}`}
+              title="Agent is working"
+            ></span>
+          {/if}
           {#if unread > 0 && !isActive}
             <span class="unread-badge" aria-label={`${unread} unread`}>{unread > 99 ? "99+" : unread}</span>
-          {:else}
+          {:else if !working}
             <span class="presence-dot" aria-hidden="true"></span>
           {/if}
         </a>

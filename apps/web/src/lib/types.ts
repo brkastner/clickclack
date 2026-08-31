@@ -135,7 +135,7 @@ export type Message = {
   // Message kind. Absent/"message" is an ordinary message. The agent_* kinds
   // are durable agent activity rows rendered inline with an accent + badge.
   kind?: "message" | "agent_commentary" | "agent_tool";
-  // Correlates a sequence of agent activity rows within one agent turn.
+  // Correlates agent activity and a bot-authored final response with one source message.
   turn_id?: string;
   // Client-only: a synthetic row for one consecutive run of agent_tool rows
   // carries its collapsed block here. Never sent by the server.

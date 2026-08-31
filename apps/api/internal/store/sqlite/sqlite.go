@@ -946,7 +946,7 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 		quotedID = strings.TrimSpace(*input.QuotedMessageID)
 	}
 	if existing, err := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); err == nil {
-		if existing.ThreadRootID != root.ID || existing.ParentMessageID == nil || *existing.ParentMessageID != root.ID || existing.Body != body || !sameQuotedMessageID(existing, quotedID) {
+		if existing.ThreadRootID != root.ID || existing.ParentMessageID == nil || *existing.ParentMessageID != root.ID || existing.Body != body || existing.TurnID != input.TurnID || !sameQuotedMessageID(existing, quotedID) {
 			return store.Message{}, store.ThreadState{}, nil, store.ErrClientNonceConflict
 		}
 		stateRow, err := qtx.GetThreadState(ctx, root.ID)
@@ -997,9 +997,10 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 		QuotedBodySnapshot:   quotedSnapshot,
 		QuotedAuthorID:       sqlOptionalText(quotedAuthorID),
 		ClientNonce:          nonce,
+		TurnID:               sqlOptionalText(input.TurnID),
 	}); err != nil {
 		if existing, lookupErr := getMessageByClientNonceTx(ctx, tx, input.AuthorID, nonce); lookupErr == nil {
-			if existing.ThreadRootID == root.ID && existing.ParentMessageID != nil && *existing.ParentMessageID == root.ID && existing.Body == body && sameQuotedMessageID(existing, quotedID) {
+			if existing.ThreadRootID == root.ID && existing.ParentMessageID != nil && *existing.ParentMessageID == root.ID && existing.Body == body && existing.TurnID == input.TurnID && sameQuotedMessageID(existing, quotedID) {
 				stateRow, stateErr := qtx.GetThreadState(ctx, root.ID)
 				if stateErr != nil {
 					return store.Message{}, store.ThreadState{}, nil, stateErr
@@ -1014,10 +1015,15 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if err != nil {
 		return store.Message{}, store.ThreadState{}, nil, err
 	}
-	replyPayload := eventPayload(ctx, map[string]string{
+	replyFields := map[string]string{
 		"message_id":      id,
 		"root_message_id": root.ID,
-	}, nonce)
+	}
+	if input.TurnID != "" {
+		replyFields["turn_id"] = input.TurnID
+		replyFields["author_id"] = input.AuthorID
+	}
+	replyPayload := eventPayload(ctx, replyFields, nonce)
 	statePayload := map[string]string{"root_message_id": root.ID}
 	var recipients []string
 	if root.DirectConversationID != "" {
