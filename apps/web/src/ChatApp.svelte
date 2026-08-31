@@ -1,6 +1,12 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
+  import {
+    DEFAULT_HOME_LINK,
+    homeLinkTitle,
+    loadHomeLink,
+    type HomeLink,
+  } from "./lib/home-link";
   import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
@@ -68,6 +74,7 @@
   const OTHER_ALIGN_STORAGE_KEY = "clickclack:other-align:v1";
   const appSessionStartedAt = Date.now();
   const integratedTitleBar = desktop?.integratedTitleBar === true;
+  let homeLink: HomeLink = DEFAULT_HOME_LINK;
 
   export let routeWorkspaceID = "";
   export let routeTargetID = "";
@@ -356,6 +363,9 @@
 
   onMount(() => {
     loadActivityPrefs();
+    void loadHomeLink((path) => api<unknown>(path)).then((link) => {
+      homeLink = link;
+    });
     activityClockSweeper = window.setInterval(() => {
       activityClock = Date.now();
     }, 30_000);
@@ -4137,7 +4147,9 @@
 
   <GuildRail
     {workspaces}
-    homeHref={integratedTitleBar ? "/app" : "/"}
+    homeHref={integratedTitleBar && homeLink.url === "/" ? "/app" : homeLink.url}
+    homeLabel={homeLink.label}
+    homeTitle={homeLinkTitle(homeLink)}
     {selectedWorkspaceID}
     {workspaceName}
     {showWorkspaceCreate}

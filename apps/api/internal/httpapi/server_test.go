@@ -3979,3 +3979,42 @@ func expectHTTPExactSeqs(t *testing.T, messages []store.Message, want ...int64) 
 		}
 	}
 }
+
+func TestHomeLinkEndpoint(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		options   Options
+		wantURL   string
+		wantLabel string
+	}{
+		{name: "defaults to the landing page", wantURL: "/", wantLabel: "cc"},
+		{name: "configured product link", options: Options{HomeLink: HomeLinkConfig{URL: "https://mfs.example.com/", Label: "MFS"}}, wantURL: "https://mfs.example.com/", wantLabel: "MFS"},
+		{name: "URL only", options: Options{HomeLink: HomeLinkConfig{URL: "/portal"}}, wantURL: "/portal", wantLabel: "cc"},
+		{name: "label only", options: Options{HomeLink: HomeLinkConfig{Label: "Portal"}}, wantURL: "/", wantLabel: "Portal"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.options.DisableDevAuth = true
+			server := httptest.NewServer(New(nil, nil, tc.options).Handler())
+			t.Cleanup(server.Close)
+			// Public: no cookie, no bearer token.
+			response, err := http.Get(server.URL + "/api/home-link")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", response.StatusCode)
+			}
+			var payload struct {
+				URL   string `json:"url"`
+				Label string `json:"label"`
+			}
+			if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.URL != tc.wantURL || payload.Label != tc.wantLabel {
+				t.Fatalf("got %+v, want url=%q label=%q", payload, tc.wantURL, tc.wantLabel)
+			}
+		})
+	}
+}

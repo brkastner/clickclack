@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added configurable workspace home destinations and labels, preserving desktop home navigation and keeping long labels within the badge. Thanks @sercada.
+
 - Fixed background message ingestion, live scrolling as same-author groups grow, and channel navigation during startup, including stale route failures after revisiting a channel.
 - Fixed stalled R2 response reads and truncated downloads without interrupting progressing streams. Thanks @SebTardif.
 - Fixed R2 header stalls while preserving configured HTTP transport wrappers. Thanks @SebTardif.
