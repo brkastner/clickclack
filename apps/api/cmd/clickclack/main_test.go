@@ -194,6 +194,102 @@ func TestAdminBotCreateUsesExplicitAuthorizedActor(t *testing.T) {
 	}
 }
 
+func TestAdminBotTokenCreateValidatesRequiredFlagsBeforeOpeningDatabase(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "workspace", args: []string{"--bot", "usr_bot", "--created-by", "usr_owner"}, wantErr: "--workspace is required"},
+		{name: "bot", args: []string{"--workspace", "wsp_missing", "--created-by", "usr_owner"}, wantErr: "--bot is required"},
+		{name: "actor", args: []string{"--workspace", "wsp_missing", "--bot", "usr_bot"}, wantErr: "--created-by is required"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dbPath := filepath.Join(t.TempDir(), "missing.db")
+			args := append([]string{"bot", "token", "create", "--db", "sqlite://" + dbPath}, test.args...)
+			err := admin(args)
+			if err == nil || err.Error() != test.wantErr {
+				t.Fatalf("expected %q, got %v", test.wantErr, err)
+			}
+			if _, statErr := os.Stat(dbPath); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("validation opened the database before rejecting the command: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestAdminBotTokenCreateMintsTokenForExistingBot(t *testing.T) {
+	ctx := context.Background()
+	dbURL := "sqlite://" + filepath.Join(t.TempDir(), "clickclack.db")
+	st, err := sqlitestore.Open(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Owner", Email: "token-cli-owner@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Token CLI", Slug: "token-cli"}, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Existing Bot",
+		Handle:      "existing-token-bot",
+		TokenName:   "initial",
+		Scopes:      []string{"bot:write"},
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureStdout(t, func() error {
+		return admin([]string{
+			"bot", "token", "create",
+			"--db", dbURL,
+			"--workspace", workspace.ID,
+			"--bot", bot.ID,
+			"--created-by", owner.ID,
+			"--name", "pi-clickclack",
+			"--scopes", "bot:write,agent_activity:write",
+			"--plain",
+		})
+	})
+	rawToken := strings.TrimSpace(output)
+	if !strings.HasPrefix(rawToken, "ccb_") {
+		t.Fatalf("expected raw bot token, got %q", output)
+	}
+
+	st, err = sqlitestore.Open(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	auth, err := st.GetBotTokenAuth(ctx, rawToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if auth.User.ID != bot.ID || auth.WorkspaceID != workspace.ID {
+		t.Fatalf("unexpected token identity: %#v", auth)
+	}
+	scopes := make(map[string]bool, len(auth.Scopes))
+	for _, scope := range auth.Scopes {
+		scopes[scope] = true
+	}
+	if !scopes[store.BotCommandsWriteScope] || !scopes[store.AgentActivityWriteScope] {
+		t.Fatalf("expected bot and agent activity write scopes, got %v", auth.Scopes)
+	}
+}
+
 func TestAdminMemberAddAddsExistingUserToSecondWorkspace(t *testing.T) {
 	fixture := setupAdminMemberTest(t)
 

@@ -83,6 +83,25 @@ docker exec clickclack clickclack admin bot create \
 the target runtime secret store, and do not paste it into docs, tickets, chat,
 or logs.
 
+## Mint a replacement token
+
+Mint another token for an existing bot when its runtime needs different scopes:
+
+```sh
+clickclack admin bot token create \
+  --data /var/lib/clickclack \
+  --workspace wsp_... \
+  --bot usr_bot \
+  --created-by usr_manager \
+  --name pi-clickclack \
+  --scopes bot:write,agent_activity:write \
+  --plain
+```
+
+The command does not revoke existing tokens. Move the new token into the target
+runtime, verify it, and then revoke the old token. The actor named by
+`--created-by` must be allowed to manage the bot.
+
 ## Create a user-owned bot
 
 Pass the human owner's user ID:
