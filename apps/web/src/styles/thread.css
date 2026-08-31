@@ -318,18 +318,33 @@
   overflow-y: auto;
 }
 
+/* A shared ukiyo-e cover sits under the avatar, tinted by the profile's own
+   hue so people stay visually distinct. The tint is a blended gradient rather
+   than a flat wash, so the woodblock texture still reads through it. The
+   gradient is also the fallback wherever the image cannot load. */
 .profile-hero {
   min-height: 210px;
   display: grid;
   place-items: end center;
   padding: 28px 20px;
   background:
-    linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.24)),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.46)),
+    linear-gradient(
+      135deg,
+      hsl(var(--hue, 220deg) 72% 50% / 0.58),
+      hsl(calc(var(--hue, 220deg) + 54deg) 70% 34% / 0.66)
+    ),
+    /* Anchored right of center so the wave crest reads in the open left area
+       instead of sitting behind the avatar. */
+    url("/profile-cover.webp") 72% center / cover no-repeat,
     linear-gradient(
       135deg,
       hsl(var(--hue, 220deg) 76% 58%),
       hsl(calc(var(--hue, 220deg) + 54deg) 74% 38%)
     );
+  /* Overlay keeps the woodblock's light/dark structure visible through the
+     tint; a flat normal wash at this alpha erased the texture entirely. */
+  background-blend-mode: normal, overlay, normal, normal;
   border-bottom: 1px solid var(--line);
 }
 
