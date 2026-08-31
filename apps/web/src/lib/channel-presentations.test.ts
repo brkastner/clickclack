@@ -145,6 +145,37 @@ test("persona lanes collect every profile wrapping one bot, in channel order", (
     lanes.map((lane) => lane.is_canonical),
     [true, false, false],
   );
+  // Lanes carry the bot id so a caller can resolve a DM target from one.
+  assert.deepEqual(new Set(lanes.map((lane) => lane.bot_user_id)), new Set([bot.id]));
+});
+
+test("a canonical persona lane resolves to the bot's DM, personas to their channel", () => {
+  const lanes = collectBotPersonaLanes(
+    [shortcut("chn_kai", "кай"), shortcut("chn_rec", "рекрутер")],
+    bot.id,
+    [bot],
+  );
+  const conversations: DirectConversation[] = [
+    {
+      id: "dm_kai",
+      workspace_id: "wsp_1",
+      created_at: "2026-01-01T00:00:00Z",
+      members: [bot],
+    },
+  ];
+  assert.deepEqual(profileHeaderTarget(lanes[0]!, [bot], conversations), {
+    kind: "direct",
+    id: "dm_kai",
+  });
+  assert.deepEqual(profileHeaderTarget(lanes[1]!, [bot], conversations), {
+    kind: "channel",
+    id: "chn_rec",
+  });
+  // Without a DM the canonical lane falls back to its own channel.
+  assert.deepEqual(profileHeaderTarget(lanes[0]!, [bot], []), {
+    kind: "channel",
+    id: "chn_kai",
+  });
 });
 
 test("persona lanes ignore other bots and an empty bot id", () => {

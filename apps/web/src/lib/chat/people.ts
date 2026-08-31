@@ -199,6 +199,7 @@ export function orderProfileShortcuts(
 export type ProfilePersonaLane = {
   channel_id: string;
   channel_name: string;
+  bot_user_id: string;
   display_name: string;
   avatar_url: string;
   is_canonical: boolean;
@@ -218,6 +219,7 @@ export function collectBotPersonaLanes(
   return orderProfileShortcuts(owned, channelIDs).map((profile) => ({
     channel_id: profile.channel_id,
     channel_name: profile.channel_name,
+    bot_user_id: profile.bot_user_id,
     display_name: profile.display_name,
     avatar_url: profile.avatar_url,
     is_canonical: profileIsCanonicalIdentity(profile, people),

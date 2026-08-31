@@ -37,6 +37,7 @@
     collectMentionPeople,
     collectRecentPeople,
     dmTitle,
+    profileHeaderTarget,
     type ChannelProfileShortcut,
     type ProfilePersonaLane,
   } from "./lib/chat/people";
@@ -4034,8 +4035,16 @@
   // navigation rather than decoration.
   async function openPersonaLane(lane: ProfilePersonaLane) {
     if (!lane.channel_id) return;
+    // Canonical lanes stand for the bot itself, so they open its DM; personas
+    // are wrappers and open the channel they present in. Same rule the sidebar
+    // profile headers follow.
+    const target = profileHeaderTarget(lane, mentionPeople, directConversations);
     closeSidePanel();
-    await selectChannel(lane.channel_id);
+    if (target.kind === "direct") {
+      await selectDirectConversation(target.id);
+      return;
+    }
+    await selectChannel(target.id);
   }
 
   // Saves one channel-scoped persona. The underlying bot identity is untouched.
