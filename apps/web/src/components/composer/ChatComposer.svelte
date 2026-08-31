@@ -1026,9 +1026,9 @@
             type="button"
             class="composer-live-voice__control composer-live-voice__control--auto-send"
             class:is-manual={!voiceAutoSend}
-            title={`${voiceAutoSend ? "Disable" : "Enable"} VAD auto-send (Shift+Space)`}
+            title={`${voiceAutoSend ? "Disable" : "Enable"} VAD auto-send (A)`}
             aria-label={`${voiceAutoSend ? "Disable" : "Enable"} VAD auto-send`}
-            aria-keyshortcuts="Shift+Space"
+            aria-keyshortcuts="A"
             aria-pressed={voiceAutoSend}
             disabled={voiceStatus === "connecting"}
             onclick={onToggleVoiceAutoSend}

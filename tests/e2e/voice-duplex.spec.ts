@@ -188,7 +188,7 @@ test("keeps live transcription visible while response audio plays", async ({ con
   expect(await sentMessages()).toHaveLength(sentBeforeEditableSpace);
   await page.locator("#voice-shortcut-editable").evaluate((element) => element.remove());
 
-  await page.keyboard.press("Shift+Space");
+  await page.keyboard.press("a");
   await expect(page.getByRole("button", { name: "Enable VAD auto-send" })).toBeVisible();
   await emit("transcript.final", {
     session_id: "voice-test",
@@ -209,4 +209,44 @@ test("keeps live transcription visible while response audio plays", async ({ con
   await expect(
     page.locator(".message-row:not(.is-voice)", { hasText: "held for manual send" }),
   ).toBeVisible();
+
+  await emit("provider.active", {
+    session_id: "voice-test",
+    provider_id: "quicksilver",
+    state: "listening",
+    capabilities: { mode: "native" },
+    sequence: 8,
+  });
+  await emit("transcript.delta", {
+    session_id: "voice-test",
+    turn_id: "voice-test:native:2",
+    role: "user",
+    text: "native live preview",
+    final: false,
+    sequence: 9,
+  });
+  await expect(preview).toContainText("native live preview");
+
+  await emit("delegation.requested", {
+    session_id: "voice-test",
+    delegation_id: "delegation-native-2",
+    text: "native durable message",
+    sequence: 10,
+  });
+  const nativeDurableMessageCount = async () => {
+    const response = await page.request.get(`/api/channels/${channel.id}/messages`);
+    const payload = (await response.json()) as { messages: Array<{ body: string }> };
+    return payload.messages.filter((message) => message.body === "native durable message").length;
+  };
+  await expect.poll(nativeDurableMessageCount).toBe(1);
+
+  await emit("transcript.final", {
+    session_id: "voice-test",
+    turn_id: "voice-test:native:2",
+    role: "user",
+    text: "native durable message",
+    final: true,
+    sequence: 11,
+  });
+  await expect.poll(nativeDurableMessageCount).toBe(1);
 });

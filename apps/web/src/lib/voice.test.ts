@@ -213,7 +213,7 @@ test("speaks responses only while the focused conversation is awaiting one", () 
   assert.equal(voiceResponsePlaybackEnabled("speaking", 1), true);
 });
 
-test("maps live voice space shortcuts without stealing editable input", () => {
+test("maps live voice shortcuts without stealing editable input", () => {
   const base = {
     status: "listening" as const,
     code: "Space",
@@ -228,7 +228,8 @@ test("maps live voice space shortcuts without stealing editable input", () => {
   };
 
   assert.equal(voiceKeyboardShortcut(base), "toggle-input");
-  assert.equal(voiceKeyboardShortcut({ ...base, shiftKey: true }), "toggle-auto-send");
+  assert.equal(voiceKeyboardShortcut({ ...base, shiftKey: true }), null);
+  assert.equal(voiceKeyboardShortcut({ ...base, code: "KeyA", key: "a" }), "toggle-auto-send");
   assert.equal(voiceKeyboardShortcut({ ...base, status: "idle" }), null);
   assert.equal(voiceKeyboardShortcut({ ...base, editable: true }), null);
   assert.equal(voiceKeyboardShortcut({ ...base, repeat: true }), null);
@@ -278,6 +279,31 @@ test("preserves and combines transcript segments across microphone pauses", () =
     turnIDs: ["voice-1:1", "voice-1:2"],
   });
   assert.equal(draft.snapshot(), null);
+});
+
+test("discards an interrupted native turn before cascaded dictation", () => {
+  const draft = new VoiceDraftAccumulator();
+  draft.update({
+    sessionID: "voice-1",
+    turnID: "voice-1:native:1",
+    text: "abandoned native preview",
+    final: false,
+    sequence: 1,
+  });
+
+  draft.discardInterruptedTurn();
+  draft.update({
+    sessionID: "voice-1",
+    turnID: "voice-1:2",
+    text: "clean cascade dictation",
+    final: true,
+    sequence: 2,
+  });
+
+  assert.deepEqual(draft.snapshot(), {
+    text: "clean cascade dictation",
+    turnIDs: ["voice-1:2"],
+  });
 });
 
 test("returns every new bot response block in message order", () => {
@@ -447,6 +473,24 @@ test("connects microphone audio through kassette SmallWebRTC signaling", async (
     },
   });
   assert.equal(session.currentState().providerMode, "native");
+  peer.dataChannel.emit({
+    label: "kassette",
+    type: "transcript.delta",
+    data: {
+      session_id: "voice-1",
+      turn_id: "voice-1:native:2",
+      role: "user",
+      text: "native preview",
+      sequence: 5,
+    },
+  });
+  assert.deepEqual(transcripts.at(-1), {
+    sessionID: "voice-1",
+    turnID: "voice-1:native:2",
+    text: "native preview",
+    final: false,
+    sequence: 5,
+  });
   peer.dataChannel.emit({
     label: "kassette",
     type: "delegation.requested",

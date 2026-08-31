@@ -63,6 +63,7 @@ it for anything that isn't a local clone.
 | Profile settings, handles, avatars | [Profiles](features/profiles.md) |
 | Magic-link auth, GitHub OAuth, dev fallback | [Auth](features/auth.md) |
 | Native macOS, Windows, and Linux clients | [Desktop apps](desktop.md) |
+| Local OpenClaw voice through Kassette | [Voice assistant](features/voice.md) |
 | Guest waiting-room roles, approvals, timeouts, blocks | [Moderation](features/moderation.md) |
 | Mattermost-shaped webhooks and slash commands | [Integrations](features/integrations.md) |
 | TypeScript SDK + bot example | [SDK](sdk.md) |
@@ -96,7 +97,9 @@ it for anything that isn't a local clone.
 V1 is in flight. The vertical slice — workspaces, channels, Markdown messages,
 threads, realtime, reactions, search, uploads, DMs, magic-link auth, GitHub
 OAuth, guest-room moderation, Postgres, R2 uploads, and Docker — is
-implemented. Multi-node websocket fanout, federation, voice/video, and full
-Mattermost compatibility are intentionally out of scope.
+implemented. Multi-node websocket fanout, federation, peer-to-peer voice or
+video calling, and full Mattermost compatibility are intentionally out of
+scope. The local Kassette integration is a voice interface to the active
+OpenClaw conversation, not a calling system.
 
 Made with ✦ and a little brine. The lobster is on duty.

@@ -599,6 +599,9 @@
   async function handleVoiceDelegation(delegation: VoiceDelegation) {
     if (!voiceDestination || pendingVoiceDelegations.includes(delegation.delegationID)) return;
     voiceStartedAt = Date.now();
+    const preview = voiceDraft.consume();
+    for (const turnID of preview?.turnIDs ?? []) committedVoiceTurnIDs.add(turnID);
+    committedVoiceTurnIDs = new Set(committedVoiceTurnIDs);
     activeVoiceTranscript = null;
     activeVoiceResponseText = "";
     pendingVoiceDelegations = [...pendingVoiceDelegations, delegation.delegationID];
@@ -616,6 +619,8 @@
   function handleVoiceInterruption() {
     pendingVoiceDelegations = [];
     awaitingVoiceResponses = 0;
+    voiceDraft.discardInterruptedTurn();
+    activeVoiceTranscript = null;
     activeVoiceResponseText = "";
     voiceThinking = false;
     cancelVoiceFiller();
@@ -628,7 +633,7 @@
     const draft = voiceDraft.snapshot();
     if (!draft) return;
     activeVoiceTranscript = { ...transcript, text: draft.text, final: false };
-    if (transcript.final && voiceAutoSend) {
+    if (transcript.final && voiceAutoSend && voiceState.providerMode !== "native") {
       void commitVoiceDraft();
       return;
     }
@@ -780,6 +785,7 @@
   }
 
   function sendVoiceDraft() {
+    if (voiceState.providerMode === "native") return;
     void commitVoiceDraft();
   }
 
@@ -5150,7 +5156,9 @@
       voiceInputStatus={voiceState.inputStatus}
       voiceError={voiceState.error}
       voiceWaiting={voiceThinking}
-      voiceDraftAvailable={Boolean(activeVoiceTranscript?.text.trim())}
+      voiceDraftAvailable={
+        voiceState.providerMode !== "native" && Boolean(activeVoiceTranscript?.text.trim())
+      }
       voiceTranscript={activeVoiceTranscript?.text || ""}
       voiceResponseText={activeVoiceResponseText}
       {voiceOutputMuted}

@@ -61,7 +61,6 @@ export type VoiceKeyboardInput = {
 export function voiceKeyboardShortcut(input: VoiceKeyboardInput): VoiceKeyboardShortcut | null {
   if (
     (input.status !== "listening" && input.status !== "speaking") ||
-    (input.code !== "Space" && input.key !== " ") ||
     input.ctrlKey ||
     input.metaKey ||
     input.altKey ||
@@ -71,7 +70,13 @@ export function voiceKeyboardShortcut(input: VoiceKeyboardInput): VoiceKeyboardS
   ) {
     return null;
   }
-  return input.shiftKey ? "toggle-auto-send" : "toggle-input";
+  if ((input.code === "Space" || input.key === " ") && !input.shiftKey) {
+    return "toggle-input";
+  }
+  if (input.code === "KeyA" || input.key.toLowerCase() === "a") {
+    return "toggle-auto-send";
+  }
+  return null;
 }
 
 type VoiceResponseCandidate = {
@@ -190,6 +195,10 @@ export class VoiceDraftAccumulator {
   clear(): void {
     this.segments.clear();
     this.turnIDs.length = 0;
+  }
+
+  discardInterruptedTurn(): void {
+    this.clear();
   }
 }
 
