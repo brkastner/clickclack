@@ -112,7 +112,6 @@
   let activeTopicFilterID = "";
   let topicFilterGeneration = 0;
   let topicConversationKey = "";
-  let topicFilterLoading = false;
   let recoverableDraftMessages = new Map<string, Message[]>();
   let selectedProfile: User | null = null;
   let pinnedPanelOpen = false;
@@ -322,7 +321,6 @@
   function resetTopicStateForConversation(conversationKey: string) {
     if (conversationKey === topicConversationKey) return;
     topicConversationKey = conversationKey;
-    topicFilterLoading = false;
     selectedComposerTopicID = "";
     updateActiveTopicFilter("");
   }
@@ -496,6 +494,7 @@
     clearPendingUpload();
     thread.close();
     routeApplySerial += 1;
+    messageLoadGeneration += 1;
     workspaceMembersLoadSerial += 1;
     workspaceMembersAbort?.abort();
     socket?.close();
@@ -1334,50 +1333,40 @@
     }
   }
 
-  function isCurrentMessageLoad(generation: number, targetKey: string): boolean {
-    return generation === messageLoadGeneration && currentConversationKey() === targetKey;
+  function beginMessageLoad(loading = false): () => boolean {
+    messagesLoading = loading;
+    const generation = ++messageLoadGeneration;
+    const scopeKey = activeMessageScopeKey();
+    return () => generation === messageLoadGeneration && activeMessageScopeKey() === scopeKey;
+  }
+
+  async function replaceMessageWindow(query: string, direction: MessageWindowDirection = "replace", isCurrent = beginMessageLoad()) {
+    const targetKey = currentConversationKey();
+    resetHistoryPaging();
+    if (targetKey !== viewKey) messagesLoading = true;
+    try {
+      const data = targetKey
+        ? await api<MessagePage>(messagePagePath(query))
+        : { messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false };
+      if (isCurrent()) commitMessageWindow(targetKey, pageToWindow(data), direction);
+    } catch (error) {
+      if (isCurrent()) throw error;
+    } finally {
+      if (isCurrent()) messagesLoading = false;
+    }
   }
 
   async function loadMessages(preserveScroll = true) {
     if (preserveScroll) captureScrollMemory();
-    const targetKey = currentConversationKey();
-    const generation = ++messageLoadGeneration;
-    const isSwitching = targetKey !== viewKey;
-    resetHistoryPaging();
-    if (isSwitching) {
-      messagesLoading = true;
-    }
-    try {
-      if (!selectedDirectID && !selectedChannelID) {
-        commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
-        return;
-      }
-      const data = await api<MessagePage>(messagePagePath(initialMessagePageQuery()));
-      if (!isCurrentMessageLoad(generation, targetKey)) return;
-      commitMessageWindow(targetKey, pageToWindow(data), "replace");
-    } finally {
-      if (isCurrentMessageLoad(generation, targetKey)) {
-        messagesLoading = false;
-      }
-    }
+    return replaceMessageWindow(initialMessagePageQuery());
   }
 
-  async function loadLatestMessages() {
+  async function loadLatestMessages(isCurrent = beginMessageLoad()) {
     const targetKey = currentConversationKey();
     if (!targetKey) return;
-    const generation = ++messageLoadGeneration;
-    resetHistoryPaging();
     messagesLoading = true;
     scrollMemory.set(targetKey, { atBottom: true });
-    try {
-      const data = await api<MessagePage>(messagePagePath(`limit=${INITIAL_MESSAGE_LIMIT}`));
-      if (!isCurrentMessageLoad(generation, targetKey)) return;
-      commitMessageWindow(targetKey, pageToWindow(data), "replace");
-    } finally {
-      if (isCurrentMessageLoad(generation, targetKey)) {
-        messagesLoading = false;
-      }
-    }
+    return replaceMessageWindow(`limit=${INITIAL_MESSAGE_LIMIT}`, "replace", isCurrent);
   }
 
   function initialMessagePageQuery(): string {
@@ -1411,13 +1400,12 @@
   }
 
   async function setTopicFilter(topicID: string) {
-    if (!selectedChannelID || topicID === activeTopicFilterID || topicFilterLoading) return;
+    if (!selectedChannelID || topicID === activeTopicFilterID) return;
     const conversationKey = currentConversationKey();
     const previousTopicID = activeTopicFilterID;
     const previousComposerTopicID = selectedComposerTopicID;
     const previousWindow = messageWindows.get(conversationKey);
     const previousScroll = scrollMemory.get(conversationKey);
-    topicFilterLoading = true;
     updateActiveTopicFilter(topicID);
     const generation = topicFilterGeneration;
     if (topicID) selectedComposerTopicID = topicID;
@@ -1425,12 +1413,6 @@
     messageWindows.delete(conversationKey);
     try {
       await loadLatestMessages();
-      if (
-        currentConversationKey() !== conversationKey ||
-        topicFilterGeneration !== generation
-      ) {
-        return;
-      }
     } catch (error) {
       if (
         currentConversationKey() !== conversationKey ||
@@ -1482,8 +1464,6 @@
             ? `Topic could not change: ${error.message}`
             : "Topic could not change",
       };
-    } finally {
-      topicFilterLoading = false;
     }
   }
 
@@ -2302,9 +2282,9 @@
     return message.channel_id === key || message.direct_conversation_id === key;
   }
 
-  async function scrollMessagesToBottom() {
+  async function scrollMessagesToBottom(isCurrent: () => boolean = () => true) {
     await tick();
-    await messageList?.scrollToBottom();
+    if (isCurrent()) await messageList?.scrollToBottom();
   }
 
   function isAtLiveEdge(): boolean {
@@ -2316,13 +2296,16 @@
   }
 
   async function jumpToLiveChat() {
+    const reload = messagesLoading || activeHasNewer || activeUnreadCount > 0;
+    const isCurrent = beginMessageLoad();
     try {
-      if (activeHasNewer || activeUnreadCount > 0) await loadLatestMessages();
-      await scrollMessagesToBottom();
+      if (reload) await loadLatestMessages(isCurrent);
+      await scrollMessagesToBottom(isCurrent);
+      if (!isCurrent()) return;
       markActiveViewRead({ all: true });
-      await scrollMessagesToBottom();
+      await scrollMessagesToBottom(isCurrent);
     } catch (error) {
-      status = error instanceof Error ? error.message : "Could not jump to latest messages";
+      if (isCurrent()) status = error instanceof Error ? error.message : "Could not jump to latest messages";
     }
   }
 
@@ -2834,17 +2817,19 @@
       await thread.target({ messageID: targetID });
       return;
     }
+    const isCurrent = beginMessageLoad();
     const scrolled = messageList?.scrollToMessage(targetID) ?? false;
     if (scrolled) {
-      await highlightMessage(targetID);
+      await highlightMessage(targetID, isCurrent);
       return;
     }
     const data = await api<{ message: Message }>(`/api/messages/${targetID}`);
-    if (!belongsToView(data.message, currentConversationKey())) return;
+    if (!isCurrent() || !belongsToView(data.message, currentConversationKey())) return;
     await loadMessagesAround(data.message);
   }
 
   async function jumpToUnreadBoundary() {
+    beginMessageLoad();
     suppressAutoReadUntil = Date.now() + 1200;
     if (activeUnreadBoundaryLoaded && messageList?.scrollToDivider(false)) return;
     await loadUnreadBoundaryAround();
@@ -2860,14 +2845,13 @@
     const seq = boundarySeq + 1;
     if (seq <= 0) return;
     await loadMessagesAroundSeq(seq);
-    await tick();
-    messageList?.scrollToDivider(false);
   }
 
-  async function highlightMessage(messageID: string) {
+  async function highlightMessage(messageID: string, isCurrent: () => boolean) {
     for (let attempt = 0; attempt < 16; attempt += 1) {
       await tick();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (!isCurrent()) return;
       const node = document.querySelector<HTMLElement>(
         `[data-message-id="${CSS.escape(messageID)}"]`,
       );
@@ -3063,31 +3047,23 @@
   async function loadMessagesAroundSeq(seq: number, targetMessageID = "") {
     const targetKey = currentConversationKey();
     if (!targetKey) return;
-    if (activeTopicFilterID) {
+    const clearingTopic = Boolean(activeTopicFilterID);
+    if (clearingTopic) {
       updateActiveTopicFilter("");
       messageWindows.delete(targetKey);
-      messagesLoading = true;
     }
-    const targetScopeKey = activeMessageScopeKey();
+    const isCurrent = beginMessageLoad(clearingTopic);
     if (targetMessageID) {
       scrollMemory.set(targetKey, { atBottom: false, anchorMessageID: targetMessageID, anchorPixelOffset: 0 });
     }
-    const isSwitching = targetKey !== viewKey;
-    resetHistoryPaging();
-    if (isSwitching) {
-      messagesLoading = true;
-    }
-    try {
-      const data = await api<MessagePage>(messagePagePath(`around_seq=${encodeURIComponent(String(seq))}&limit=${INITIAL_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== targetKey || activeMessageScopeKey() !== targetScopeKey) return;
-      commitMessageWindow(targetKey, pageToWindow(data), "around");
-      await tick();
-      if (targetMessageID) {
-        messageList?.scrollToMessage(targetMessageID);
-        await highlightMessage(targetMessageID);
-      }
-    } finally {
-      if (currentConversationKey() === targetKey) messagesLoading = false;
+    await replaceMessageWindow(`around_seq=${encodeURIComponent(String(seq))}&limit=${INITIAL_MESSAGE_LIMIT}`, "around", isCurrent);
+    await tick();
+    if (!isCurrent()) return;
+    if (targetMessageID) {
+      messageList?.scrollToMessage(targetMessageID);
+      await highlightMessage(targetMessageID, isCurrent);
+    } else {
+      messageList?.scrollToDivider(false);
     }
   }
 
