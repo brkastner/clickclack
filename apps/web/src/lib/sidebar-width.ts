@@ -1,5 +1,5 @@
 export const SIDEBAR_WIDTH_STORAGE_KEY = "clickclack:sidebar-width:v1";
-export const MIN_SIDEBAR_WIDTH = 240;
+export const MIN_SIDEBAR_WIDTH = 222;
 export const MAX_SIDEBAR_WIDTH = 420;
 export const DEFAULT_SIDEBAR_WIDTH = 280;
 export const SIDEBAR_WIDTH_STEP = 16;

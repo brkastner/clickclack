@@ -208,7 +208,7 @@ test("resizes and persists the desktop sidebar", async ({ page }) => {
 
   await resizeHandle.focus();
   await page.keyboard.press("Home");
-  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(240);
+  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(222);
 });
 
 test("accents only the explicit glyph in the web channel title", async ({ page }) => {

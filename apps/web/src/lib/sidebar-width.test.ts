@@ -9,6 +9,7 @@ import {
 } from "./sidebar-width.ts";
 
 test("parses persisted sidebar widths within the supported range", () => {
+  assert.equal(MIN_SIDEBAR_WIDTH, 222);
   assert.equal(parseSidebarWidth(null), DEFAULT_SIDEBAR_WIDTH);
   assert.equal(parseSidebarWidth("not-a-number"), DEFAULT_SIDEBAR_WIDTH);
   assert.equal(parseSidebarWidth("120"), MIN_SIDEBAR_WIDTH);
