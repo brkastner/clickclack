@@ -8,6 +8,7 @@ import {
   collectSidebarPeopleShelf,
   moveChannelInOrder,
   orderProfileShortcuts,
+  profileAvatarURL,
   profileHeaderTarget,
   profileIsCanonicalIdentity,
   presentChannelMessage,
@@ -238,7 +239,39 @@ test("the sidebar shelf can replace a recent person with a profile shortcut", ()
   assert.equal(shelf[1]?.kind === "profile" ? shelf[1].profile.channel_id : "", "chn_career");
 });
 
-test("profile groups follow the viewer channel order", () => {
+test("an explicit display order arranges the two-by-two shelf", () => {
+  const people = [
+    { ...bot, id: "usr_pi", display_name: "пи" },
+    { ...bot, id: "usr_claw", display_name: "клешня" },
+    { ...bot, id: "usr_nudz", display_name: "нудз" },
+    { ...bot, id: "usr_kai", display_name: "кай" },
+  ];
+  const recruiter = shortcut("chn_career", "рекрутер");
+
+  const shelf = collectSidebarPeopleShelf(
+    people,
+    [recruiter],
+    { personName: "нудз", profileName: "рекрутер" },
+    ["кай", "клешня", "рекрутер", "пи"],
+  );
+
+  // Top row is the first two entries, bottom row the last two.
+  assert.deepEqual(
+    shelf.map((entry) =>
+      entry.kind === "person" ? entry.person.display_name : entry.profile.display_name,
+    ),
+    ["кай", "клешня", "рекрутер", "пи"],
+  );
+  // The replaced profile keeps its channel target after reordering.
+  const recruiterEntry = shelf[2];
+  assert.equal(recruiterEntry?.kind, "profile");
+  assert.equal(
+    recruiterEntry?.kind === "profile" ? recruiterEntry.profile.channel_id : "",
+    "chn_career",
+  );
+});
+
+test("profile groups follow the viewer channel order with пи pinned last", () => {
   const profiles = [
     shortcut("chn_career", "рекрутер"),
     shortcut("chn_kai", "кай"),
@@ -247,11 +280,11 @@ test("profile groups follow the viewer channel order", () => {
   const ordered = orderProfileShortcuts(profiles, ["chn_pi", "chn_career", "chn_kai"]);
   assert.deepEqual(
     ordered.map((profile) => profile.display_name),
-    ["пи", "рекрутер", "кай"],
+    ["рекрутер", "кай", "пи"],
   );
 });
 
-test("profiles missing from the viewer order keep their relative tail position", () => {
+test("profiles missing from the viewer order keep their relative tail position before пи", () => {
   const profiles = [
     shortcut("chn_career", "рекрутер"),
     shortcut("chn_kai", "кай"),
@@ -260,8 +293,17 @@ test("profiles missing from the viewer order keep their relative tail position",
   const ordered = orderProfileShortcuts(profiles, ["chn_pi"]);
   assert.deepEqual(
     ordered.map((profile) => profile.display_name),
-    ["пи", "рекрутер", "кай"],
+    ["рекрутер", "кай", "пи"],
   );
+});
+
+test("canonical profile avatars follow the current bot avatar", () => {
+  const canonical = { ...shortcut("chn_kai", "кай"), avatar_url: "https://example.com/stale.webp" };
+  const updatedBot = { ...bot, avatar_url: "https://example.com/current.webp" };
+  assert.equal(profileAvatarURL(canonical, [updatedBot]), updatedBot.avatar_url);
+
+  const persona = { ...canonical, display_name: "девушки" };
+  assert.equal(profileAvatarURL(persona, [updatedBot]), persona.avatar_url);
 });
 
 test("moving a channel in the viewer order lands before or after the target", () => {

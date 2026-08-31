@@ -116,10 +116,38 @@ export function collectRecentPeople(
   return [...people.values()].slice(0, 12);
 }
 
+function shelfEntryLabel(entry: SidebarPeopleShelfEntry): string {
+  return entry.kind === "person" ? entry.person.display_name : entry.profile.display_name;
+}
+
+/**
+ * Sorts shelf entries into an explicit display order by name.
+ *
+ * The shelf renders as a two-by-two grid, so this sequence is read left to
+ * right, top row first. Names outside `displayOrder` keep their relative order
+ * after the named ones instead of disappearing.
+ */
+export function orderSidebarPeopleShelf(
+  entries: SidebarPeopleShelfEntry[],
+  displayOrder: readonly string[],
+): SidebarPeopleShelfEntry[] {
+  if (displayOrder.length === 0) return entries;
+  const ranked = displayOrder.map((name) => name.trim().toLocaleLowerCase());
+  const rankOf = (entry: SidebarPeopleShelfEntry) => {
+    const position = ranked.indexOf(shelfEntryLabel(entry).trim().toLocaleLowerCase());
+    return position === -1 ? Number.MAX_SAFE_INTEGER : position;
+  };
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((left, right) => rankOf(left.entry) - rankOf(right.entry) || left.index - right.index)
+    .map(({ entry }) => entry);
+}
+
 export function collectSidebarPeopleShelf(
   recentPeople: User[],
   profiles: ChannelProfileShortcut[],
   replacement: SidebarPeopleShelfReplacement,
+  displayOrder: readonly string[] = [],
   limit = 4,
 ): SidebarPeopleShelfEntry[] {
   const people = recentPeople.slice(1).concat(recentPeople.slice(0, 1)).slice(0, limit);
@@ -136,7 +164,9 @@ export function collectSidebarPeopleShelf(
     (candidate) => candidate.display_name.trim().toLocaleLowerCase() === normalizedProfileName,
   );
   if (personIndex >= 0 && profile) entries[personIndex] = { kind: "profile", profile };
-  return entries;
+  // Order last, after the profile replacement is placed by its position in
+  // `people`, so the replacement still lands on the entry it replaced.
+  return orderSidebarPeopleShelf(entries, displayOrder);
 }
 
 export function collectChannelProfileShortcuts(
@@ -186,11 +216,21 @@ export function orderProfileShortcuts(
   return profiles
     .map((profile, index) => ({ profile, index }))
     .sort((a, b) => {
+      const leftIsPi = a.profile.display_name.trim().toLocaleLowerCase() === "пи";
+      const rightIsPi = b.profile.display_name.trim().toLocaleLowerCase() === "пи";
+      if (leftIsPi !== rightIsPi) return leftIsPi ? 1 : -1;
       const left = rank.get(a.profile.channel_id) ?? Number.MAX_SAFE_INTEGER;
       const right = rank.get(b.profile.channel_id) ?? Number.MAX_SAFE_INTEGER;
       return left === right ? a.index - b.index : left - right;
     })
     .map((entry) => entry.profile);
+}
+
+export function profileAvatarURL(profile: ChannelProfileShortcut, people: User[]): string {
+  if (!profileIsCanonicalIdentity(profile, people)) return profile.avatar_url;
+  return (
+    people.find((person) => person.id === profile.bot_user_id)?.avatar_url || profile.avatar_url
+  );
 }
 
 // One channel-scoped face for a bot, as shown in the profile editor. A lane's

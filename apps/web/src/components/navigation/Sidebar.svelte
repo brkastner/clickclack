@@ -85,11 +85,19 @@
     onOpenWorkspaceSettings,
   }: Props = $props();
 
+  // Read left to right, top row first, in the two-by-two shelf.
+  const PEOPLE_SHELF_ORDER = ["кай", "клешня", "рекрутер", "пи"];
+
   const displayedRecentPeople = $derived(
-    collectSidebarPeopleShelf(recentPeople, profileShortcuts, {
-      personName: "нудз",
-      profileName: "рекрутер",
-    }),
+    collectSidebarPeopleShelf(
+      recentPeople,
+      profileShortcuts,
+      {
+        personName: "нудз",
+        profileName: "рекрутер",
+      },
+      PEOPLE_SHELF_ORDER,
+    ),
   );
 
   type SectionState = { channels: boolean; directMessages: boolean };

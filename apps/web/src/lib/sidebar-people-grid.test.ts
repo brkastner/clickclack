@@ -9,9 +9,11 @@ const sidebar = readFileSync(
 const sidebarStyles = readFileSync(new URL("../styles/sidebar.css", import.meta.url), "utf8");
 
 test("keeps the recent-people shelf to one curated two-by-two page", () => {
-  assert.match(sidebar, /collectSidebarPeopleShelf\(recentPeople, profileShortcuts/u);
+  assert.match(sidebar, /collectSidebarPeopleShelf\(\s*recentPeople,\s*profileShortcuts/u);
   assert.match(sidebar, /personName:\s*"нудз"/u);
   assert.match(sidebar, /profileName:\s*"рекрутер"/u);
+  // The shelf is read left to right, top row first.
+  assert.match(sidebar, /PEOPLE_SHELF_ORDER = \["кай", "клешня", "рекрутер", "пи"\]/u);
 });
 
 test("fills the two-by-two shelf with larger avatars and compact spacing", () => {

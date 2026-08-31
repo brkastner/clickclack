@@ -1097,7 +1097,7 @@ test("aligns self and other messages independently", async ({ page }) => {
   await otherAlign.selectOption("right");
   await expect(page.locator("html")).not.toHaveAttribute("data-message-layout");
   for (const body of [selfMessage, humanMessage, agentMessage]) {
-    await expect.poll(() => messageTextAlign(body)).toBe("right");
+    await expect.poll(() => messageTextAlign(body)).toMatch(/^(left|start)$/);
   }
   await page.evaluate(() => {
     localStorage.setItem("clickclack:message-layout:v1", "outlined");
@@ -1209,10 +1209,12 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expect.poll(() => messageSide(agentMessage)).toBe("right");
 });
 
-test("keeps Markdown lists and blockquotes inside right-aligned messages", async ({ page }) => {
-  const route = await createGeneralChannelRoute(page, "Right aligned Markdown", true);
+test("keeps Markdown lists and blockquotes left-aligned in right-side messages", async ({
+  page,
+}) => {
+  const route = await createGeneralChannelRoute(page, "Right side Markdown", true);
   const markdownBody = [
-    "Right-aligned Markdown:",
+    "Right-side Markdown:",
     "",
     "- Chat ID: `channel`",
     "  - Nested message ID: `message`",
@@ -1245,7 +1247,7 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
   await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
 
   const row = page.locator(".message-row", {
-    has: page.getByText("Right-aligned Markdown:", { exact: true }),
+    has: page.getByText("Right-side Markdown:", { exact: true }),
   });
   const group = row.locator(
     "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' message-group ')][1]",
@@ -1298,21 +1300,21 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
     };
   });
   expect(layout).toEqual({
-    textAlign: "right",
-    listPaddingLeft: "0px",
+    textAlign: "left",
+    listPaddingLeft: "22px",
     listPaddingRight: "0px",
-    listStylePosition: "inside",
-    nestedListPaddingRight: "22px",
-    nestedListStylePosition: "inside",
+    listStylePosition: "outside",
+    nestedListPaddingRight: "0px",
+    nestedListStylePosition: "outside",
     orderedListPaddingRight: "0px",
-    nestedOrderedListPaddingRight: "22px",
-    looseFirstParagraphDisplay: "inline",
+    nestedOrderedListPaddingRight: "0px",
+    looseFirstParagraphDisplay: "block",
     listRightInset: expect.any(Number),
     itemRightInset: 0,
-    quoteBorderLeft: "0px",
-    quoteBorderRight: "3px",
-    quotePaddingLeft: "0px",
-    quotePaddingRight: "12px",
+    quoteBorderLeft: "3px",
+    quoteBorderRight: "0px",
+    quotePaddingLeft: "12px",
+    quotePaddingRight: "0px",
   });
   expect(layout.listRightInset).toBeLessThanOrEqual(1);
   expect(layout.itemRightInset).toBe(0);

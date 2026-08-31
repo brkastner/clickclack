@@ -4,6 +4,7 @@
   import {
     moveChannelInOrder,
     orderProfileShortcuts,
+    profileAvatarURL,
     profileHeaderTarget,
     type ChannelProfileShortcut,
   } from "../../lib/chat/people";
@@ -660,7 +661,7 @@
           class="channel-profile-avatar"
           id={group.profile.id}
           name={group.profile.display_name}
-          src={group.profile.avatar_url}
+          src={profileAvatarURL(group.profile, people)}
           size={26}
           loading="eager"
           fetchPriority="auto"
