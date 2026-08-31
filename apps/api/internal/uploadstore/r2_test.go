@@ -23,6 +23,10 @@ func TestR2SaveServeAndDelete(t *testing.T) {
 		if !strings.HasPrefix(r.URL.Path, "/bucket/prefix/upload-") {
 			t.Fatalf("unexpected object path %q", r.URL.Path)
 		}
+		if strings.HasSuffix(r.URL.Path, "upload-missing") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		switch r.Method {
 		case http.MethodPut:
 			if r.ContentLength != 8 {
@@ -100,6 +104,13 @@ func TestR2SaveServeAndDelete(t *testing.T) {
 	}
 	if err := store.Delete(context.Background(), savedPath); err != nil {
 		t.Fatal(err)
+	}
+	recorder = httptest.NewRecorder()
+	if err := store.ServeHTTP(recorder, req, Object{Path: "prefix/upload-missing"}); !errors.Is(err, ErrNotFound) || recorder.Body.Len() != 0 {
+		t.Fatalf("missing object must fail before writing file bytes: %v", err)
+	}
+	if err := store.Delete(context.Background(), "prefix/upload-missing"); err != nil {
+		t.Fatalf("deleting a missing object must succeed: %v", err)
 	}
 }
 

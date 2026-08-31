@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const defaultR2ResponseBodyIdleTimeout = 30 * time.Second
+
 // r2Transport preserves the configured default transport and its trace hooks.
 // After-write timing requires a transport that emits Go's HTTP lifecycle hooks.
 type r2Transport struct{}
@@ -61,14 +63,19 @@ func (l *r2ResponseLifetime) wroteRequest(info httptrace.WroteRequestInfo) {
 	if l.phase != r2Headers || info.Err != nil {
 		return
 	}
+	l.armTimerLocked(defaultR2ResponseHeaderTimeout)
+}
+
+func (l *r2ResponseLifetime) armTimerLocked(timeout time.Duration) {
 	l.stopTimerLocked()
 	generation := l.generation
-	l.timer = time.AfterFunc(defaultR2ResponseHeaderTimeout, func() {
+	phase := l.phase
+	l.timer = time.AfterFunc(timeout, func() {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		// Stop does not join an already-started callback. Check and cancel
 		// under the same lock so it cannot cancel a later attempt or phase.
-		if l.phase == r2Headers && l.generation == generation {
+		if l.phase == phase && l.generation == generation {
 			l.cancel(context.DeadlineExceeded)
 		}
 	})
@@ -103,10 +110,21 @@ type r2ResponseBody struct {
 }
 
 func (b *r2ResponseBody) Read(p []byte) (int, error) {
-	n, err := b.body.Read(p)
-	if err != nil {
-		b.lifetime.close()
+	l := b.lifetime
+	l.mu.Lock()
+	if l.phase == r2Body {
+		l.armTimerLocked(defaultR2ResponseBodyIdleTimeout)
 	}
+	l.mu.Unlock()
+	n, err := b.body.Read(p)
+	l.mu.Lock()
+	// End the upstream wait before io.Copy writes to a potentially slow client.
+	l.stopTimerLocked()
+	if err != nil {
+		l.phase = r2Closed
+		l.cancel(nil)
+	}
+	l.mu.Unlock()
 	return n, err
 }
 
