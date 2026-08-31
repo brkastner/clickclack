@@ -639,7 +639,7 @@
 
 @media (max-width: 1180px) {
   .shell {
-    grid-template-columns: 240px minmax(0, 1fr) 0;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0;
   }
   .shell.sidebar-collapsed,
   .shell.sidebar-collapsed.thread-open,

@@ -128,9 +128,9 @@
 
 .sidebar-people-row {
   display: grid;
-  grid-template-columns: repeat(2, 72px);
-  grid-template-rows: repeat(2, 72px);
-  min-height: 174px;
+  grid-template-columns: repeat(2, 92px);
+  grid-template-rows: repeat(2, 92px);
+  min-height: 214px;
   place-content: space-evenly;
   margin: 0 0 8px;
   padding: 0;
@@ -140,20 +140,20 @@
 .sidebar-person {
   display: grid;
   flex: 0 0 auto;
-  width: 72px;
-  height: 72px;
+  width: 92px;
+  height: 92px;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 18px;
+  border-radius: 22px;
   color: inherit;
 }
 
 .sidebar-person > .avatar {
-  width: 70px;
-  height: 70px;
+  width: 90px;
+  height: 90px;
   margin: 0;
-  border-radius: 16px;
-  font-size: 20px;
+  border-radius: 20px;
+  font-size: 24px;
 }
 
 .sidebar-person:hover,

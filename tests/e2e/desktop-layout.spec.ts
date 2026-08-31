@@ -154,11 +154,11 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
 
   // The recent-people shelf forms a true 2×2 grid: every row/column gap is
   // distributed evenly with the corresponding outer edges.
-  expect(geometry.topGap).toBeGreaterThanOrEqual(176);
-  expect(geometry.topGap).toBeLessThanOrEqual(190);
+  expect(geometry.topGap).toBeGreaterThanOrEqual(216);
+  expect(geometry.topGap).toBeLessThanOrEqual(230);
   expect(geometry.peopleShelf.display).toBe("grid");
-  expect(geometry.peopleShelf.columns).toBe("72px 72px");
-  expect(geometry.peopleShelf.rows).toBe("72px 72px");
+  expect(geometry.peopleShelf.columns).toBe("92px 92px");
+  expect(geometry.peopleShelf.rows).toBe("92px 92px");
   for (const spacing of [geometry.peopleShelf.horizontal, geometry.peopleShelf.vertical]) {
     expect(Math.abs(spacing[0] - spacing[1])).toBeLessThanOrEqual(1);
     expect(Math.abs(spacing[1] - spacing[2])).toBeLessThanOrEqual(1);
@@ -174,6 +174,41 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   expect(geometry.workspaceLabelCenterOffset).toBeLessThanOrEqual(1);
   expect(geometry.footer.x).toBeCloseTo(geometry.footer.sidebarX, 0);
   expect(geometry.footer.width).toBeCloseTo(geometry.footer.sidebarWidth, 0);
+});
+
+test("resizes and persists the desktop sidebar", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 760 });
+  await installDesktopBridge(page);
+
+  const workspace = await createWorkspace(page, Date.now());
+  const channel = await createChannel(page, workspace.id);
+  await page.goto(`/app/${workspace.route_id}/${channel.id}`);
+  await waitForAppReady(page);
+
+  const sidebar = page.locator(".sidebar");
+  const resizeHandle = page.locator(".sidebar-resize-handle");
+  await expect(resizeHandle).toBeVisible();
+  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(280);
+
+  const handleBox = await resizeHandle.boundingBox();
+  if (!handleBox) throw new Error("sidebar resize handle did not render");
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + 120);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 60, handleBox.y + 120);
+  await page.mouse.up();
+
+  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(340);
+  await expect
+    .poll(() => page.evaluate(() => window.localStorage.getItem("clickclack:sidebar-width:v1")))
+    .toBe("340");
+
+  await page.reload();
+  await waitForAppReady(page);
+  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(340);
+
+  await resizeHandle.focus();
+  await page.keyboard.press("Home");
+  await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(240);
 });
 
 test("accents only the explicit glyph in the web channel title", async ({ page }) => {

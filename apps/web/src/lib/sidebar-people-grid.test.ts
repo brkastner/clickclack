@@ -18,14 +18,14 @@ test("fills the two-by-two shelf with larger avatars and compact spacing", () =>
   const avatarStyles =
     sidebarStyles.match(/\.sidebar-person > \.avatar\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
 
-  assert.match(shelfStyles, /grid-template-columns:\s*repeat\(2, 72px\)/u);
-  assert.match(shelfStyles, /grid-template-rows:\s*repeat\(2, 72px\)/u);
-  assert.match(shelfStyles, /min-height:\s*174px/u);
+  assert.match(shelfStyles, /grid-template-columns:\s*repeat\(2, 92px\)/u);
+  assert.match(shelfStyles, /grid-template-rows:\s*repeat\(2, 92px\)/u);
+  assert.match(shelfStyles, /min-height:\s*214px/u);
   assert.match(shelfStyles, /margin:\s*0 0 8px/u);
-  assert.match(personStyles, /width:\s*72px/u);
-  assert.match(personStyles, /height:\s*72px/u);
-  assert.match(avatarStyles, /width:\s*70px/u);
-  assert.match(avatarStyles, /height:\s*70px/u);
+  assert.match(personStyles, /width:\s*92px/u);
+  assert.match(personStyles, /height:\s*92px/u);
+  assert.match(avatarStyles, /width:\s*90px/u);
+  assert.match(avatarStyles, /height:\s*90px/u);
 });
 
 test("sizes profile, channel, and direct-message navigation up", () => {

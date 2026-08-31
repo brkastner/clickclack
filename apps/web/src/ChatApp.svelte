@@ -6,6 +6,15 @@
   import { desktop } from "./lib/desktop";
   import { probeMediaDimensions } from "./lib/media";
   import {
+    DEFAULT_SIDEBAR_WIDTH,
+    MAX_SIDEBAR_WIDTH,
+    MIN_SIDEBAR_WIDTH,
+    SIDEBAR_WIDTH_STORAGE_KEY,
+    clampSidebarWidth,
+    parseSidebarWidth,
+    sidebarWidthFromKey,
+  } from "./lib/sidebar-width";
+  import {
     appendPendingAttachments,
     mergeUploads,
     readyUploads,
@@ -150,6 +159,9 @@
   let artifactThreadScrollTop: number | null = null;
   let artifactViewerElement: HTMLElement | null = null;
   let shellElement: HTMLElement | null = null;
+  let sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
+  let sidebarResizing = false;
+  let sidebarResizePointerID: number | null = null;
   let artifactModalInertElements = new Set<HTMLElement>();
   let messageBody = "";
   let replyBody = "";
@@ -514,6 +526,7 @@
       onRemoteAudio: (stream) => (remoteVoiceStream = stream),
     });
     loadActivityPrefs();
+    loadSidebarWidth();
     activityClockSweeper = window.setInterval(() => {
       activityClock = Date.now();
     }, 30_000);
@@ -4609,6 +4622,63 @@
     mobileNavOpen = false;
   }
 
+  function loadSidebarWidth() {
+    try {
+      sidebarWidth = parseSidebarWidth(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
+    } catch {
+      sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
+    }
+  }
+
+  function persistSidebarWidth() {
+    try {
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+    } catch {
+      // Sidebar resizing still works for this session when storage is unavailable.
+    }
+  }
+
+  function updateSidebarWidthFromPointer(event: PointerEvent) {
+    const shellLeft = shellElement?.getBoundingClientRect().left ?? 0;
+    sidebarWidth = clampSidebarWidth(event.clientX - shellLeft);
+  }
+
+  function handleSidebarResizeStart(event: PointerEvent) {
+    if (event.button !== 0 || mobileNavViewport || sidebarCollapsed) return;
+    event.preventDefault();
+    sidebarResizePointerID = event.pointerId;
+    sidebarResizing = true;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    updateSidebarWidthFromPointer(event);
+  }
+
+  function handleSidebarResizeMove(event: PointerEvent) {
+    if (!sidebarResizing || sidebarResizePointerID !== event.pointerId) return;
+    updateSidebarWidthFromPointer(event);
+  }
+
+  function handleSidebarResizeEnd(event: PointerEvent) {
+    if (sidebarResizePointerID !== event.pointerId) return;
+    const handle = event.currentTarget as HTMLElement;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    sidebarResizePointerID = null;
+    sidebarResizing = false;
+    persistSidebarWidth();
+  }
+
+  function handleSidebarResizeKeydown(event: KeyboardEvent) {
+    const nextWidth = sidebarWidthFromKey(event.key, sidebarWidth);
+    if (nextWidth === null) return;
+    event.preventDefault();
+    sidebarWidth = nextWidth;
+    persistSidebarWidth();
+  }
+
+  function resetSidebarWidth() {
+    sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
+    persistSidebarWidth();
+  }
+
   function handleSidebarCollapse() {
     if (mobileNavViewport) {
       mobileNavOpen = !mobileNavOpen;
@@ -4666,6 +4736,7 @@
   bind:this={shellElement}
   class="shell"
   class:desktop-shell={integratedTitleBar}
+  class:sidebar-resizing={sidebarResizing}
   class:nav-open={mobileNavOpen}
   class:sidebar-collapsed={sidebarCollapsed}
   class:thread-open={sidePanelOpen && !searchPaneVisible}
@@ -4673,6 +4744,7 @@
   class:artifact-open={selectedArtifact !== null}
   data-connected={connected}
   data-app-ready={connected && status === "ready"}
+  style={`--sidebar-width: ${sidebarWidth}px`}
 >
   {#if integratedTitleBar && desktop}
     <DesktopTitlebar
@@ -4769,6 +4841,27 @@
     onCreateWorkspace={() => void createWorkspace()}
     onOpenWorkspaceSettings={openWorkspaceSettings}
   />
+
+  {#if !sidebarCollapsed && !mobileNavViewport}
+    <button
+      type="button"
+      class="sidebar-resize-handle"
+      role="separator"
+      aria-label="Resize sidebar"
+      aria-orientation="vertical"
+      aria-valuemin={MIN_SIDEBAR_WIDTH}
+      aria-valuemax={MAX_SIDEBAR_WIDTH}
+      aria-valuenow={sidebarWidth}
+      title="Drag to resize sidebar. Double-click to reset."
+      onpointerdown={handleSidebarResizeStart}
+      onpointermove={handleSidebarResizeMove}
+      onpointerup={handleSidebarResizeEnd}
+      onpointercancel={handleSidebarResizeEnd}
+      onlostpointercapture={handleSidebarResizeEnd}
+      onkeydown={handleSidebarResizeKeydown}
+      ondblclick={resetSidebarWidth}
+    ></button>
+  {/if}
 
   <main class="timeline" inert={mobileNavOpen}>
     <!-- The integrated title bar owns the conversation title, so desktop drops

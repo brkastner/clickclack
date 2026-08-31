@@ -246,7 +246,7 @@
             id={person.id}
             name={person.display_name}
             src={person.avatar_url}
-            size={70}
+            size={90}
           />
         </a>
       {/each}
