@@ -142,17 +142,30 @@ test("scales a tall image to fit instead of cropping it", async ({ page }) => {
     .poll(() => displayedImage.evaluate((image: HTMLImageElement) => image.naturalHeight))
     .toBe(1600);
 
+  // Wait out the open animation's scale transform before measuring geometry.
+  await page
+    .locator(".image-viewer")
+    .evaluate((element) =>
+      Promise.all(element.getAnimations().map((animation) => animation.finished)),
+    );
+
   const geometry = await page.evaluate(() => {
+    const viewer = document.querySelector(".image-viewer")!;
     const stage = document.querySelector(".image-viewer-stage")!;
     const image = stage.querySelector("img")! as HTMLImageElement;
+    const viewerBox = viewer.getBoundingClientRect();
     const stageBox = stage.getBoundingClientRect();
     const imageBox = image.getBoundingClientRect();
     return {
+      viewerHeight: viewerBox.height,
+      viewerBottom: viewerBox.bottom,
+      viewerTop: viewerBox.top,
       stageHeight: stageBox.height,
       stageWidth: stageBox.width,
       imageHeight: imageBox.height,
       imageWidth: imageBox.width,
       imageBottom: imageBox.bottom,
+      naturalWidth: image.naturalWidth,
       viewportHeight: window.innerHeight,
       naturalRatio: image.naturalWidth / image.naturalHeight,
     };
@@ -165,6 +178,74 @@ test("scales a tall image to fit instead of cropping it", async ({ page }) => {
   expect(geometry.imageBottom).toBeLessThanOrEqual(geometry.viewportHeight + 1);
   // Scaling preserves the aspect ratio instead of squashing the image.
   expect(geometry.imageWidth / geometry.imageHeight).toBeCloseTo(geometry.naturalRatio, 2);
+  // A portrait image is never enlarged past its natural size.
+  expect(geometry.imageWidth).toBeLessThanOrEqual(geometry.naturalWidth + 1);
+  // The viewer uses the height available to it instead of a fixed cap, so a
+  // tall image is limited by the viewport rather than by the frame.
+  expect(geometry.viewerTop).toBeGreaterThanOrEqual(-1);
+  expect(geometry.viewerBottom).toBeLessThanOrEqual(geometry.viewportHeight + 1);
+  expect(geometry.imageHeight).toBeGreaterThan(geometry.viewerHeight * 0.8);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
+test("keeps a small image at its natural size without a stretched frame", async ({ page }) => {
+  const suffix = Date.now();
+  const filename = `small-${suffix}.png`;
+  const messageText = `small lightbox ${suffix}`;
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByLabel("Upload file").setInputFiles({
+    name: filename,
+    mimeType: "image/png",
+    buffer: solidPNG(320, 240),
+  });
+  await expect(page.getByText(filename)).toBeVisible();
+  await page.getByLabel("Message body").fill(messageText);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const imageRow = page.locator(".message-row").filter({ hasText: messageText });
+  await imageRow.getByRole("button", { name: `Open image ${filename}` }).click();
+
+  const dialog = page.getByRole("dialog", { name: `Image viewer: ${filename}` });
+  await expect(dialog).toBeVisible();
+  await expect
+    .poll(() =>
+      dialog
+        .getByRole("img", { name: filename })
+        .evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBe(320);
+
+  // The viewer animates in with a scale transform, so measure only after it
+  // settles; a mid-animation rect reports the scaled size, not the laid-out one.
+  await page
+    .locator(".image-viewer")
+    .evaluate((element) =>
+      Promise.all(element.getAnimations().map((animation) => animation.finished)),
+    );
+
+  const geometry = await page.evaluate(() => {
+    const viewer = document.querySelector(".image-viewer")!.getBoundingClientRect();
+    const image = document.querySelector(".image-viewer-stage img")! as HTMLImageElement;
+    const imageBox = image.getBoundingClientRect();
+    return {
+      viewerHeight: viewer.height,
+      imageWidth: imageBox.width,
+      imageHeight: imageBox.height,
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  // A small image renders at its natural size rather than being blown up.
+  expect(geometry.imageWidth).toBeCloseTo(geometry.naturalWidth, 0);
+  expect(geometry.imageHeight).toBeCloseTo(geometry.naturalHeight, 0);
+  // The frame hugs that image instead of spanning the whole viewport.
+  expect(geometry.viewerHeight).toBeLessThan(geometry.viewportHeight * 0.85);
 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
