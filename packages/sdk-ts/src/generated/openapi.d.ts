@@ -488,7 +488,11 @@ export interface paths {
     delete: operations["deleteBot"];
     options?: never;
     head?: never;
-    patch?: never;
+    /**
+     * Edit a bot's display name, handle, or avatar
+     * @description Human sessions only; bot tokens cannot mutate profiles. Omitted fields are left unchanged. A user-owned bot is editable only by its owner. A service bot requires manager permission in every workspace it still operates in.
+     */
+    patch: operations["updateBotProfile"];
     trace?: never;
   };
   "/api/bots/{bot_user_id}/tokens": {
@@ -1481,6 +1485,17 @@ export interface components {
     };
     DeleteBotResponse: {
       deleted_bot: components["schemas"]["DeletedBot"];
+    };
+    /** @description Omitted fields are left unchanged. */
+    UpdateBotProfileRequest: {
+      display_name?: string;
+      /** @description Unique bot handle. Accepts an optional leading @ and stores the normalized value without it. */
+      handle?: string;
+      /** @description Public image URL, or an empty string to clear it. */
+      avatar_url?: string;
+    };
+    BotProfileResponse: {
+      bot: components["schemas"]["User"];
     };
     AppInstallationResponse: {
       app_installation: components["schemas"]["AppInstallation"];
@@ -3353,6 +3368,53 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["DeleteBotResponse"];
         };
+      };
+      /** @description User-owned bots require their owner. Service bots require manager permission in every affected workspace. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Active bot not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  updateBotProfile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        bot_user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateBotProfileRequest"];
+      };
+    };
+    responses: {
+      /** @description Updated bot identity */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BotProfileResponse"];
+        };
+      };
+      /** @description Invalid display name, handle, or avatar URL, or the handle is already taken */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description User-owned bots require their owner. Service bots require manager permission in every affected workspace. */
       403: {

@@ -193,6 +193,7 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes", s.createWorkspaceBotSetupCode)
 		r.Post("/bot-setup-codes/claim", s.claimBotSetupCode)
 		r.Put("/bots/self/commands", s.setBotCommands)
+		r.Patch("/bots/{bot_user_id}", s.updateBotProfile)
 		r.Delete("/bots/{bot_user_id}", s.deleteBot)
 		r.Get("/bots/{bot_user_id}/tokens", s.listBotTokens)
 		r.Post("/bots/{bot_user_id}/tokens", s.createBotToken)

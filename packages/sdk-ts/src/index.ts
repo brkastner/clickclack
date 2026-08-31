@@ -703,6 +703,16 @@ export class ClickClackClient {
         body: JSON.stringify(input),
       });
     },
+    updateProfile: async (
+      botUserId: string,
+      input: { display_name?: string; handle?: string; avatar_url?: string },
+    ): Promise<User> => {
+      const data = await this.request<{ bot: User }>(`/api/bots/${botUserId}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+      return data.bot;
+    },
     removeMembership: async (workspaceId: string, botUserId: string): Promise<void> => {
       await this.request(`/api/workspaces/${workspaceId}/bots/${botUserId}/membership`, {
         method: "DELETE",

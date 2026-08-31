@@ -825,6 +825,16 @@ type UpdateUserProfileInput struct {
 	AvatarURL   string
 }
 
+// UpdateBotProfileInput patches a bot's identity. Nil fields are left alone so
+// a caller can send one field without clearing the others.
+type UpdateBotProfileInput struct {
+	BotUserID   string
+	RequesterID string
+	DisplayName *string
+	Handle      *string
+	AvatarURL   *string
+}
+
 type UpdateUserProfileAndNotificationSettingsInput struct {
 	UserID               string
 	DisplayName          string
@@ -1240,6 +1250,7 @@ type Store interface {
 	RevokeConnectedAccount(ctx context.Context, accountID, requesterID string) (ConnectedAccount, error)
 	UpsertIdentityUser(ctx context.Context, input UpsertIdentityUserInput) (User, error)
 	UpdateUserProfile(ctx context.Context, input UpdateUserProfileInput) (User, error)
+	UpdateBotProfile(ctx context.Context, input UpdateBotProfileInput) (User, error)
 	UpdateUserProfileAndNotificationSettings(ctx context.Context, input UpdateUserProfileAndNotificationSettingsInput) (User, error)
 	UpdateCurrentUser(ctx context.Context, input UpdateCurrentUserInput) (CurrentUserState, error)
 	UpdateNotificationSettings(ctx context.Context, input UpdateNotificationSettingsInput) (NotificationSettings, error)

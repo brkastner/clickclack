@@ -932,6 +932,44 @@ func (s *Server) removeBotFromWorkspace(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) updateBotProfile(w http.ResponseWriter, r *http.Request) {
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err)
+		return
+	}
+	if act.botTokenID != "" {
+		writeError(w, http.StatusForbidden, errors.New("bot tokens cannot update profiles"))
+		return
+	}
+	var body struct {
+		DisplayName *string `json:"display_name"`
+		Handle      *string `json:"handle"`
+		AvatarURL   *string `json:"avatar_url"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	bot, err := s.store.UpdateBotProfile(r.Context(), store.UpdateBotProfileInput{
+		BotUserID:   chi.URLParam(r, "bot_user_id"),
+		RequesterID: act.user.ID,
+		DisplayName: body.DisplayName,
+		Handle:      body.Handle,
+		AvatarURL:   body.AvatarURL,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		writeStoreError(w, err)
+		return
+	}
+	s.publishBotUpdated(r.Context(), bot)
+	writeJSON(w, http.StatusOK, map[string]any{"bot": bot})
+}
+
 func (s *Server) deleteBot(w http.ResponseWriter, r *http.Request) {
 	act, err := s.currentActor(r)
 	if err != nil {
@@ -1080,6 +1118,27 @@ func (s *Server) publishBotDeleted(deleted store.DeletedBot) {
 				"display_name":  deleted.DisplayName,
 				"former_handle": deleted.FormerHandle,
 				"deleted_at":    deleted.DeletedAt,
+			},
+		})
+	}
+}
+
+func (s *Server) publishBotUpdated(ctx context.Context, bot store.User) {
+	workspaces, err := s.store.ListWorkspaces(ctx, bot.ID)
+	if err != nil {
+		return
+	}
+	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, workspace := range workspaces {
+		s.hub.Publish(store.Event{
+			Type:        "bot.updated",
+			WorkspaceID: workspace.ID,
+			CreatedAt:   updatedAt,
+			Payload: map[string]string{
+				"bot_user_id":  bot.ID,
+				"display_name": bot.DisplayName,
+				"handle":       bot.Handle,
+				"avatar_url":   bot.AvatarURL,
 			},
 		})
 	}

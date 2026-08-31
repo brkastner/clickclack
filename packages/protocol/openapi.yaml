@@ -694,6 +694,39 @@ paths:
         "429":
           description: Too many claim attempts from this address.
   /api/bots/{bot_user_id}:
+    patch:
+      operationId: updateBotProfile
+      summary: Edit a bot's display name, handle, or avatar
+      description: >-
+        Human sessions only; bot tokens cannot mutate profiles. Omitted fields
+        are left unchanged. A user-owned bot is editable only by its owner. A
+        service bot requires manager permission in every workspace it still
+        operates in.
+      parameters:
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBotProfileRequest"
+      responses:
+        "200":
+          description: Updated bot identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotProfileResponse"
+        "400":
+          description: Invalid display name, handle, or avatar URL, or the handle is already taken
+        "403":
+          description: User-owned bots require their owner. Service bots require manager permission in every affected workspace.
+        "404":
+          description: Active bot not found
     delete:
       operationId: deleteBot
       summary: Permanently retire a bot identity and release its handle
@@ -2347,6 +2380,26 @@ components:
       properties:
         deleted_bot:
           $ref: "#/components/schemas/DeletedBot"
+    UpdateBotProfileRequest:
+      type: object
+      description: Omitted fields are left unchanged.
+      properties:
+        display_name:
+          type: string
+          maxLength: 80
+        handle:
+          type: string
+          description: Unique bot handle. Accepts an optional leading @ and stores the normalized value without it.
+          pattern: "^[a-zA-Z0-9@][a-zA-Z0-9_-]{1,32}$"
+        avatar_url:
+          type: string
+          description: Public image URL, or an empty string to clear it.
+    BotProfileResponse:
+      type: object
+      required: [bot]
+      properties:
+        bot:
+          $ref: "#/components/schemas/User"
     AppInstallationResponse:
       type: object
       required: [app_installation]

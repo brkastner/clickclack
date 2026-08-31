@@ -186,6 +186,8 @@ MVP endpoint mapping:
   (`channel_id` or `direct_conversation_id`), never workspace-wide. DM progress
   also requires `dms:write`.
 - `PATCH /api/me`: human sessions only; bot tokens cannot mutate profiles.
+- `PATCH /api/bots/{bot_user_id}`: human sessions only; bot tokens cannot
+  mutate profiles, including their own.
 
 ## Creation Surfaces
 
@@ -230,6 +232,7 @@ HTTP API:
 - `POST /api/workspaces/{workspace_id}/bots/{bot_user_id}/tokens`
 - `POST /api/workspaces/{workspace_id}/bots/{bot_user_id}/setup-codes`
 - `POST /api/bot-setup-codes/claim`
+- `PATCH /api/bots/{bot_user_id}`
 - `DELETE /api/bots/{bot_user_id}`
 - `GET /api/bots/{bot_user_id}/tokens`
 - `POST /api/bots/{bot_user_id}/tokens`
@@ -337,6 +340,21 @@ Workspace owners and moderators can remove any bot from a workspace with
 `DELETE /api/workspaces/{workspace_id}/bots/{bot_user_id}/membership`; this
 removes the workspace membership and revokes that bot's tokens for that
 workspace. The bot user row remains for history and future installs.
+
+A bot's own identity stays editable after creation through
+`PATCH /api/bots/{bot_user_id}`, which accepts any of `display_name`, `handle`,
+and `avatar_url` and leaves omitted fields unchanged. It requires a human
+session and uses the same authorization as deletion: a user-owned bot is
+editable only by its owner, and a service bot requires the requester to be an
+owner or moderator in every workspace where the bot still has active resources.
+An orphaned service bot falls back to its historical workspaces so an ordinary
+member cannot rename a retired identity. Handles stay unique and normalized the
+same way `PATCH /api/me` normalizes them, and a taken handle answers with `400`.
+A successful edit publishes a `bot.updated` event to every workspace the bot
+belongs to, carrying `bot_user_id`, `display_name`, `handle`, and `avatar_url`.
+
+The web client exposes this from the right-rail profile pane rather than a
+separate admin screen. See [Profiles](profiles.md) for the editor's shape.
 
 Deleting a bot is a separate global action through
 `DELETE /api/bots/{bot_user_id}`. It revokes all tokens, app installations,

@@ -748,6 +748,116 @@ type botDeletionCounts struct {
 	botTokens          int
 }
 
+// UpdateBotProfile edits a bot's own identity fields. Authorization mirrors
+// DeleteBot: a user-owned bot is editable only by its owner, and a service bot
+// requires the requester to manage every workspace the bot still operates in.
+func (s *Store) UpdateBotProfile(ctx context.Context, input store.UpdateBotProfileInput) (store.User, error) {
+	botUserID := strings.TrimSpace(input.BotUserID)
+	requesterID := strings.TrimSpace(input.RequesterID)
+	if botUserID == "" {
+		return store.User{}, errors.New("bot_user_id is required")
+	}
+	if requesterID == "" {
+		return store.User{}, errors.New("requester_id is required")
+	}
+	displayName, handle, avatarURL, err := normalizeUserProfilePatch(input.DisplayName, input.Handle, input.AvatarURL)
+	if err != nil {
+		return store.User{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.User{}, err
+	}
+	defer tx.Rollback()
+	if err := lockBotLifecycleTx(ctx, tx, botUserID); err != nil {
+		return store.User{}, err
+	}
+	qtx := s.q.WithTx(tx)
+	row, err := qtx.GetActiveBotForDeletion(ctx, botUserID)
+	if err != nil {
+		return store.User{}, err
+	}
+	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	if err := requireBotProfileManagerTx(ctx, tx, qtx, bot, requesterID); err != nil {
+		return store.User{}, err
+	}
+	if displayName != nil {
+		if err := qtx.UpdateUserDisplayName(ctx, storedb.UpdateUserDisplayNameParams{
+			DisplayName: *displayName,
+			ID:          bot.ID,
+		}); err != nil {
+			return store.User{}, err
+		}
+	}
+	if handle != nil {
+		if err := qtx.UpdateUserHandle(ctx, storedb.UpdateUserHandleParams{
+			Handle: *handle,
+			ID:     bot.ID,
+		}); err != nil {
+			return store.User{}, profileUpdateError(err)
+		}
+	}
+	if avatarURL != nil {
+		if err := qtx.UpdateUserAvatar(ctx, storedb.UpdateUserAvatarParams{
+			AvatarUrl: *avatarURL,
+			ID:        bot.ID,
+		}); err != nil {
+			return store.User{}, err
+		}
+	}
+	if displayName != nil || handle != nil || avatarURL != nil {
+		updatedRow, err := qtx.GetUser(ctx, bot.ID)
+		if err != nil {
+			return store.User{}, err
+		}
+		updated := storeUserFromGetUser(updatedRow)
+		if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
+			DisplayName: updated.DisplayName,
+			Handle:      updated.Handle,
+			UserID:      bot.ID,
+		}); err != nil {
+			return store.User{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return store.User{}, err
+	}
+	return s.GetUser(ctx, bot.ID)
+}
+
+// requireBotProfileManagerTx allows a user-owned bot's owner, or a manager of
+// every workspace the bot governs. A bot with no governed workspace falls back
+// to its historical workspaces so an orphaned service identity cannot be
+// edited by an ordinary member.
+func requireBotProfileManagerTx(ctx context.Context, tx *sql.Tx, qtx *storedb.Queries, bot store.User, requesterID string) error {
+	if bot.OwnerUserID != "" {
+		if requesterID != bot.OwnerUserID {
+			return store.ErrBotOwnerRequired
+		}
+		return nil
+	}
+	governedWorkspaceIDs, err := qtx.ListBotGovernedWorkspaces(ctx, bot.ID)
+	if err != nil {
+		return err
+	}
+	workspaceIDs := governedWorkspaceIDs
+	if len(workspaceIDs) == 0 {
+		workspaceIDs, err = qtx.ListBotHistoricalWorkspaces(ctx, bot.ID)
+		if err != nil {
+			return err
+		}
+	}
+	if len(workspaceIDs) == 0 {
+		return store.ErrNotWorkspaceManager
+	}
+	for _, workspaceID := range workspaceIDs {
+		if err := requireWorkspaceManagerTx(ctx, tx, workspaceID, requesterID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) DeleteBot(ctx context.Context, botUserID, requesterID string) (store.DeletedBot, error) {
 	botUserID = strings.TrimSpace(botUserID)
 	requesterID = strings.TrimSpace(requesterID)
