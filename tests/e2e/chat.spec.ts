@@ -266,6 +266,32 @@ test("defaults the current user's messages to right alignment", async ({ page })
   await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
 });
 
+test("right alignment moves the bubble but keeps its prose left aligned", async ({ page }) => {
+  const messageText = `bubble alignment ${Date.now()}`;
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+
+  await page.getByLabel("Message body").fill(messageText);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const row = page.locator(".message-row").filter({ hasText: messageText }).last();
+  const content = row.locator(".message-content").first();
+  await expect(content).toBeVisible();
+
+  // Text reads left to right inside the bubble; only the bubble itself is
+  // pushed to the right edge of the row.
+  await expect(content).toHaveCSS("text-align", "left");
+  await expect(row.locator(".markdown").first()).toHaveCSS("text-align", "left");
+
+  const offsets = await row.evaluate((element) => {
+    const rowBox = element.getBoundingClientRect();
+    const bubble = element.querySelector(".message-content")!.getBoundingClientRect();
+    return { leftGap: bubble.left - rowBox.left, rightGap: rowBox.right - bubble.right };
+  });
+  expect(offsets.leftGap).toBeGreaterThan(offsets.rightGap);
+});
+
 test("self-hosted product website links stay on the local app route", async ({ page }) => {
   await page.goto("http://selfhost.localhost:18082/");
   await expect(page.getByRole("heading", { name: /Team chat for humans/ })).toBeVisible();
