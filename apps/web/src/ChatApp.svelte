@@ -3792,11 +3792,6 @@
   }
 
   function handleComposerKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && replyTarget) {
-      event.preventDefault();
-      clearReplyTarget();
-      return;
-    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
@@ -3804,11 +3799,6 @@
   }
 
   function handleReplyKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && thread.draft?.quote) {
-      event.preventDefault();
-      thread.setQuote(null);
-      return;
-    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendReply();
@@ -3976,6 +3966,7 @@
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) return;
     containArtifactModalFocus(event);
     if (event.defaultPrevented) return;
     if (event.key === "Escape") {
@@ -4024,8 +4015,7 @@
       event.key.length === 1 &&
       !event.ctrlKey &&
       !event.metaKey &&
-      !event.altKey &&
-      !event.isComposing
+      !event.altKey
     ) {
       const active = document.activeElement;
       if (
