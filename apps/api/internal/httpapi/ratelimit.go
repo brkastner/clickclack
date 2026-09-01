@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,8 +20,12 @@ type slidingWindowLimiter struct {
 	limit  int
 	window time.Duration
 	nowFn  func() time.Time
-	hits   map[string][]time.Time
+	hits   map[string][]*rateLimitAttempt
 	nextGC time.Time
+}
+
+type rateLimitAttempt struct {
+	at time.Time
 }
 
 func newSlidingWindowLimiter(limit int, window time.Duration) *slidingWindowLimiter {
@@ -28,11 +33,16 @@ func newSlidingWindowLimiter(limit int, window time.Duration) *slidingWindowLimi
 		limit:  limit,
 		window: window,
 		nowFn:  time.Now,
-		hits:   map[string][]time.Time{},
+		hits:   map[string][]*rateLimitAttempt{},
 	}
 }
 
 func (l *slidingWindowLimiter) allow(key string) bool {
+	return l.reserve(key) != nil
+}
+
+// reserve charges in-flight work atomically; callers may refund non-failures.
+func (l *slidingWindowLimiter) reserve(key string) *rateLimitAttempt {
 	now := l.nowFn()
 	cutoff := now.Add(-l.window)
 	l.mu.Lock()
@@ -53,10 +63,26 @@ func (l *slidingWindowLimiter) allow(key string) bool {
 	kept := pruneAfter(l.hits[key], cutoff)
 	if len(kept) >= l.limit {
 		l.hits[key] = kept
-		return false
+		return nil
 	}
-	l.hits[key] = append(kept, now)
-	return true
+	attempt := &rateLimitAttempt{at: now}
+	l.hits[key] = append(kept, attempt)
+	return attempt
+}
+
+func (l *slidingWindowLimiter) refund(key string, attempt *rateLimitAttempt) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	// Identity survives equal timestamps and expired or evicted buckets.
+	entries := l.hits[key]
+	if i := slices.Index(entries, attempt); i >= 0 {
+		entries = slices.Delete(entries, i, i+1)
+		if len(entries) == 0 {
+			delete(l.hits, key)
+		} else {
+			l.hits[key] = entries
+		}
+	}
 }
 
 func (l *slidingWindowLimiter) sweep(cutoff time.Time) {
@@ -70,14 +96,10 @@ func (l *slidingWindowLimiter) sweep(cutoff time.Time) {
 	}
 }
 
-func pruneAfter(entries []time.Time, cutoff time.Time) []time.Time {
-	kept := entries[:0]
-	for _, t := range entries {
-		if t.After(cutoff) {
-			kept = append(kept, t)
-		}
-	}
-	return kept
+func pruneAfter(entries []*rateLimitAttempt, cutoff time.Time) []*rateLimitAttempt {
+	return slices.DeleteFunc(entries, func(attempt *rateLimitAttempt) bool {
+		return !attempt.at.After(cutoff)
+	})
 }
 
 // clientIPKey derives the rate-limit key from the transport peer address. A

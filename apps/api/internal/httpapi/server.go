@@ -42,11 +42,16 @@ type Server struct {
 	cookies               authpolicy.CookieNames
 	cookieSameSite        http.SameSite
 	disableDevAuth        bool
+	passwordAuthEnabled   bool
 	pushNotifier          PushNotifier
 	metrics               *metricsRegistry
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
+	passwordIPLimiter     *slidingWindowLimiter
+	passwordIDLimiter     *slidingWindowLimiter
+	passwordChangeLimiter *slidingWindowLimiter
 	realtimeReplayLimit   int
+	realtimeSessionCheck  time.Duration
 	callbackClient        *http.Client
 }
 
@@ -64,19 +69,42 @@ const (
 	realtimeOverflowCloseReason       = "realtime buffer overflow; reconnect with after_cursor to replay"
 	realtimeReplayCloseReason         = "realtime replay interrupted; reconnect with after_cursor"
 	realtimeResyncRequiredCloseReason = "realtime replay limit exceeded; resync required"
+	realtimeSessionRevokedCloseReason = "session revoked; sign in again"
+	// realtimeSessionRecheckInterval bounds how long a connection whose session
+	// was revoked can sit open while its workspace is quiet. Delivery revalidates
+	// the session regardless, so this only shortens the idle case.
+	realtimeSessionRecheckInterval = 30 * time.Second
 	// setupCodeClaimLimit/Window bound unauthenticated bot setup code
 	// claim attempts per client IP.
 	setupCodeClaimLimit  = 10
 	setupCodeClaimWindow = time.Minute
+	// passwordLoginIPLimit/Window bound password attempts from one client, and
+	// passwordLoginIDLimit/Window bound attempts against one account no matter
+	// how many addresses they come from. The account window is deliberately
+	// long: it is the lockout that makes online guessing impractical.
+	passwordLoginIPLimit  = 20
+	passwordLoginIPWindow = time.Minute
+	passwordLoginIDLimit  = 5
+	passwordLoginIDWindow = 15 * time.Minute
+	// passwordChangeLimit/Window bound wrong current-password guesses against
+	// one signed-in account, so a borrowed session cannot be used to search for
+	// the password it is already holding a session for.
+	passwordChangeLimit  = 5
+	passwordChangeWindow = 15 * time.Minute
 )
 
 var errAmbiguousCookie = errors.New("multiple cookies with the same name are not allowed")
 
 type actor struct {
-	user        store.User
-	botTokenID  string
-	workspaceID string
-	scopes      []string
+	user store.User
+	// sessionToken is the session this caller authenticated with, empty for
+	// every other way of resolving an actor: bot tokens, a trusted-proxy
+	// assertion, and the local development fallbacks. Handlers that revoke or
+	// revalidate the caller's own session key on it.
+	sessionToken string
+	botTokenID   string
+	workspaceID  string
+	scopes       []string
 }
 
 type Options struct {
@@ -91,6 +119,7 @@ type Options struct {
 	EmbedFrameAncestors []string
 	CookieNames         authpolicy.CookieNames
 	DisableDevAuth      bool
+	PasswordAuthEnabled bool
 	PushNotifier        PushNotifier
 	MetricsEnabled      bool
 	Environment         string
@@ -131,10 +160,15 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		cookies:               cookieNames,
 		cookieSameSite:        configuredCookieSameSite(options.FrontendURL, options.PublicAPIURL),
 		disableDevAuth:        options.DisableDevAuth,
+		passwordAuthEnabled:   options.PasswordAuthEnabled,
 		pushNotifier:          options.PushNotifier,
 		metrics:               metrics,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
+		passwordIPLimiter:     newSlidingWindowLimiter(passwordLoginIPLimit, passwordLoginIPWindow),
+		passwordIDLimiter:     newSlidingWindowLimiter(passwordLoginIDLimit, passwordLoginIDWindow),
+		passwordChangeLimiter: newSlidingWindowLimiter(passwordChangeLimit, passwordChangeWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
+		realtimeSessionCheck:  realtimeSessionRecheckInterval,
 		callbackClient:        callbackClient,
 		build: buildMetadata{
 			Environment: options.Environment,
@@ -163,6 +197,9 @@ func (s *Server) Handler() http.Handler {
 		r.Use(bindAccessResponseWriter)
 		r.Post("/auth/magic/request", s.requestMagicLink)
 		r.Post("/auth/magic/consume", s.consumeMagicLink)
+		r.Post("/auth/password/login", s.passwordLogin)
+		r.Post("/auth/password/change", s.changePassword)
+		r.Post("/auth/logout", s.logout)
 		r.Get("/auth/github/start", s.githubStart)
 		r.Get("/auth/github/desktop/start", s.githubDesktopStart)
 		r.Post("/auth/github/desktop/consume", s.githubDesktopConsume)
@@ -432,10 +469,11 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	preferences, err := s.store.GetAppearancePreferences(r.Context(), act.user.ID)
-	writeResult(w, map[string]any{"user": currentUserPayload{
-		User:                  act.user,
-		AppearancePreferences: preferences,
-	}}, err)
+	payload := currentUserPayload{User: act.user, AppearancePreferences: preferences}
+	if err == nil {
+		payload.PasswordEnrolled, err = s.passwordEnrolled(r.Context(), act.user.ID)
+	}
+	writeResult(w, map[string]any{"user": payload}, err)
 }
 
 func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
@@ -467,15 +505,26 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		NotificationSettings:  body.NotificationSettings,
 		AppearancePreferences: body.AppearancePreferences,
 	})
-	writeResult(w, map[string]any{"user": currentUserPayload{
-		User:                  updated.User,
-		AppearancePreferences: updated.AppearancePreferences,
-	}}, err)
+	payload := currentUserPayload{User: updated.User, AppearancePreferences: updated.AppearancePreferences}
+	if err == nil {
+		payload.PasswordEnrolled, err = s.passwordEnrolled(r.Context(), updated.User.ID)
+	}
+	writeResult(w, map[string]any{"user": payload}, err)
 }
 
 type currentUserPayload struct {
 	store.User
 	AppearancePreferences *store.AppearancePreferences `json:"appearance_preferences,omitempty"`
+	PasswordEnrolled      bool                         `json:"password_enrolled"`
+}
+
+// passwordEnrolled reports whether an account has a password on file. The SPA
+// pairs it with the advertised auth methods to decide whether to offer the
+// change-password form. It is reported only for the caller's own account, so it
+// discloses nothing about who else can sign in with a password.
+func (s *Server) passwordEnrolled(ctx context.Context, userID string) (bool, error) {
+	hash, err := s.store.GetUserPasswordHash(ctx, userID)
+	return hash != "", err
 }
 
 func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
@@ -1344,9 +1393,33 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 	ctx := conn.CloseRead(r.Context())
 	replayCursor := r.URL.Query().Get("after_cursor")
+	// Read shared session state so revocation on another replica reaches this socket.
+	// Bot tokens and trusted-proxy identities have no session to revalidate.
+	sessionAuthorityLive := func() bool {
+		if act.sessionToken == "" {
+			return true
+		}
+		if _, err := s.sessionUser(ctx, act.sessionToken); err != nil {
+			if errors.Is(err, errSessionLookupUnavailable) {
+				_ = conn.Close(websocket.StatusTryAgainLater, "session verification unavailable; retry")
+			} else {
+				_ = conn.Close(websocket.StatusPolicyViolation, realtimeSessionRevokedCloseReason)
+			}
+			return false
+		}
+		return true
+	}
+	writeEvent := func(event store.Event) bool {
+		return sessionAuthorityLive() && writeWS(ctx, conn, event) == nil
+	}
+	sessionRecheck := time.NewTicker(s.realtimeSessionCheck)
+	defer sessionRecheck.Stop()
 	// Startup and live delivery share one ordered, authorized durable-log drain.
 	// Capture a finite tail each time; a wake received during this drain stays queued.
 	drain := func() bool {
+		if !sessionAuthorityLive() {
+			return false
+		}
 		replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
 		if err != nil {
 			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
@@ -1411,7 +1484,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 					replayCursor = event.Cursor
 					continue
 				}
-				if err := writeWS(ctx, conn, event); err != nil {
+				if !writeEvent(event) {
 					return false
 				}
 				replayCursor = event.Cursor
@@ -1440,6 +1513,12 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		case <-subscription.Done:
 			_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
 			return
+		case <-sessionRecheck.C:
+			// An idle socket delivers nothing to revalidate against, so revocation
+			// reaches it here instead of waiting for the workspace's next event.
+			if !sessionAuthorityLive() {
+				return
+			}
 		case _, ok := <-subscription.Wake:
 			if !ok {
 				continue
@@ -1459,7 +1538,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 			if !s.shouldDeliverEventToActor(ctx, event, act.user.ID) {
 				continue
 			}
-			if err := writeWS(ctx, conn, event); err != nil {
+			if !writeEvent(event) {
 				return
 			}
 		}
@@ -1576,6 +1655,18 @@ func directConversationIDFromEvent(event store.Event) string {
 	}
 }
 
+var errSessionLookupUnavailable = errors.New("session verification unavailable; retry later")
+
+// Only missing or expired sessions invalidate authentication. Backend failures
+// must remain retryable across HTTP and already-open realtime connections.
+func (s *Server) sessionUser(ctx context.Context, token string) (store.User, error) {
+	user, err := s.store.GetSessionUser(ctx, token)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, store.ErrSessionExpired) {
+		return store.User{}, fmt.Errorf("%w: %w", errSessionLookupUnavailable, err)
+	}
+	return user, err
+}
+
 func (s *Server) currentActor(r *http.Request) (actor, error) {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
@@ -1587,19 +1678,22 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 				scopes:      botAuth.Scopes,
 			}, nil
 		}
-		user, err := s.store.GetSessionUser(r.Context(), token)
-		return actor{user: user}, err
+		user, err := s.sessionUser(r.Context(), token)
+		if err != nil {
+			return actor{}, err
+		}
+		return actor{user: user, sessionToken: token}, nil
 	}
 	cookie, err := requestCookie(r, s.cookies.Session)
 	if errors.Is(err, errAmbiguousCookie) {
 		return actor{}, err
 	}
 	if err == nil && cookie.Value != "" {
-		user, err := s.store.GetSessionUser(r.Context(), cookie.Value)
+		user, err := s.sessionUser(r.Context(), cookie.Value)
 		if err == nil {
-			return actor{user: user}, nil
+			return actor{user: user, sessionToken: cookie.Value}, nil
 		}
-		if s.access == nil || r.Header.Get(accessAssertionHeader) == "" {
+		if errors.Is(err, errSessionLookupUnavailable) || s.access == nil || r.Header.Get(accessAssertionHeader) == "" {
 			return actor{}, err
 		}
 	}
@@ -1695,6 +1789,20 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(index)
 }
 
+// enabledAuthMethods tells the frontend which sign-in surfaces to render. It
+// is always a non-nil slice so the SPA can distinguish "no method configured"
+// from an older server that omitted the field.
+func (s *Server) enabledAuthMethods() []string {
+	methods := []string{}
+	if s.githubOAuth.ClientID != "" && s.githubOAuth.ClientSecret != "" {
+		methods = append(methods, "github")
+	}
+	if s.passwordAuthEnabled {
+		methods = append(methods, "password")
+	}
+	return methods
+}
+
 func isMissingBrowserAssetPath(urlPath string) bool {
 	if strings.HasPrefix(urlPath, "/_app/") || strings.HasPrefix(urlPath, "/assets/") {
 		return true
@@ -1710,9 +1818,14 @@ func isMissingBrowserAssetPath(urlPath string) bool {
 }
 
 func (s *Server) injectRuntimeConfig(index []byte) []byte {
-	config, err := json.Marshal(map[string]string{
-		"apiBaseUrl":      s.publicAPIURL,
-		"frontendBaseUrl": s.frontendURL,
+	config, err := json.Marshal(struct {
+		APIBaseURL      string   `json:"apiBaseUrl"`
+		FrontendBaseURL string   `json:"frontendBaseUrl"`
+		AuthMethods     []string `json:"authMethods"`
+	}{
+		APIBaseURL:      s.publicAPIURL,
+		FrontendBaseURL: s.frontendURL,
+		AuthMethods:     s.enabledAuthMethods(),
 	})
 	if err != nil {
 		return index
@@ -1814,6 +1927,10 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
+	if errors.Is(err, errSessionLookupUnavailable) {
+		status = http.StatusServiceUnavailable
+		err = errSessionLookupUnavailable
+	}
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {
 		status = http.StatusRequestEntityTooLarge

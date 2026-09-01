@@ -1843,3 +1843,76 @@ ORDER BY m.thread_seq ASC;
 -- name: ThreadReplyEdges :one
 SELECT EXISTS(SELECT 1 FROM messages older WHERE older.thread_root_id = sqlc.arg(root_id) AND older.parent_message_id = sqlc.arg(root_id) AND older.thread_seq < sqlc.arg(oldest_seq)) AS has_older,
        EXISTS(SELECT 1 FROM messages newer WHERE newer.thread_root_id = sqlc.arg(root_id) AND newer.parent_message_id = sqlc.arg(root_id) AND newer.thread_seq > sqlc.arg(newest_seq)) AS has_newer;
+
+-- Password login accepts either an identity email or a handle. Both sides are
+-- folded because identity rows keep the casing they were created with, and two
+-- rows are read so an ambiguous identifier can be rejected rather than guessed.
+-- name: ListPasswordLoginsByIdentifier :many
+SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+       COALESCE(p.password_hash, '') AS password_hash
+FROM users u
+LEFT JOIN user_passwords p ON p.user_id = u.id
+WHERE u.kind = 'human'
+  AND (
+    (u.handle <> '' AND lower(u.handle) = lower(sqlc.arg(identifier)))
+    OR EXISTS (
+      SELECT 1 FROM identities i
+      WHERE i.user_id = u.id AND lower(i.email) = lower(sqlc.arg(identifier))
+    )
+  )
+ORDER BY u.created_at, u.id
+LIMIT 2;
+
+-- name: UpsertUserPassword :exec
+INSERT INTO user_passwords (user_id, password_hash, updated_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(password_hash), sqlc.arg(updated_at))
+ON CONFLICT(user_id) DO UPDATE SET
+  password_hash = excluded.password_hash,
+  updated_at = excluded.updated_at;
+
+-- name: DeleteUserPassword :execrows
+DELETE FROM user_passwords
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: RevokeSessionByTokenHash :execrows
+UPDATE sessions
+SET revoked_at = sqlc.arg(revoked_at)
+WHERE token_hash = sqlc.arg(token_hash)
+  AND revoked_at IS NULL;
+
+-- name: GetUserPasswordHash :one
+SELECT password_hash
+FROM user_passwords
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: RevokeUserSessionsExceptTokenHash :execrows
+UPDATE sessions
+SET revoked_at = sqlc.arg(revoked_at)
+WHERE user_id = sqlc.arg(user_id)
+  AND revoked_at IS NULL
+  AND token_hash <> sqlc.arg(keep_token_hash);
+
+-- Hold the credential against rotation until the session commits.
+-- name: InsertSessionForVerifiedPassword :execrows
+INSERT INTO sessions (id, token, token_hash, user_id, created_at, expires_at)
+SELECT sqlc.arg(id), sqlc.arg(token), sqlc.arg(token_hash), p.user_id, sqlc.arg(created_at), sqlc.arg(expires_at)
+FROM user_passwords p
+WHERE p.user_id = sqlc.arg(user_id)
+  AND p.password_hash = sqlc.arg(verified_hash)
+FOR SHARE OF p;
+
+-- name: ReplaceVerifiedUserPassword :execrows
+UPDATE user_passwords
+SET password_hash = sqlc.arg(password_hash),
+    updated_at = sqlc.arg(updated_at)
+WHERE user_id = sqlc.arg(user_id)
+  AND password_hash = sqlc.arg(verified_hash);
+
+-- Keep logout from invalidating the caller before rotation commits.
+-- name: GetLiveUserSessionExpiry :one
+SELECT expires_at
+FROM sessions
+WHERE user_id = sqlc.arg(user_id)
+  AND token_hash = sqlc.arg(token_hash)
+  AND revoked_at IS NULL
+FOR UPDATE;

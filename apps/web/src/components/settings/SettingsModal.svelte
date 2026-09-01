@@ -5,9 +5,11 @@
   import ProfileSettingsForm from "../profile/ProfileSettingsForm.svelte";
   import NotificationSettingsForm from "../profile/NotificationSettingsForm.svelte";
   import MyBotsSection from "./MyBotsSection.svelte";
+  import ChangePasswordSection from "./ChangePasswordSection.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
-  import { APIError } from "../../lib/api";
+  import { APIError, api, authMethods, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
+  import { canChangePassword } from "../../lib/password";
   import {
     ACCOUNT_SETTINGS_SECTIONS,
     DEFAULT_ACCOUNT_SETTINGS_SECTION,
@@ -54,9 +56,14 @@
     onBrowserNotificationsChanged,
   }: Props = $props();
 
+  let signingOut = $state(false);
+  let signOutError = $state("");
   let activeSection = $state<AccountSettingsSectionId>(DEFAULT_ACCOUNT_SETTINGS_SECTION);
   let refreshedUser = $state<User | null>(null);
   const user = $derived(refreshedUser?.id === initialUser.id ? refreshedUser : initialUser);
+  // Only the /api/me refresh carries password_enrolled, so the section appears
+  // once the modal has server-side truth rather than ChatApp's cached user.
+  const showChangePassword = $derived(canChangePassword(user, authMethods()));
   let userStatus = $state<"ready" | "loading" | "error">("ready");
   let userError = $state("");
 
@@ -69,6 +76,21 @@
   onMount(() => {
     void refreshUser();
   });
+
+  // Reload rather than clearing state in place: the session cookie is gone, so
+  // every open subscription and cached workspace has to be rebuilt anyway.
+  async function signOut() {
+    if (signingOut) return;
+    signingOut = true;
+    signOutError = "";
+    try {
+      await api("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+      window.location.reload();
+    } catch (error) {
+      signOutError = readableAPIError(error, "Could not sign out. Try again.");
+      signingOut = false;
+    }
+  }
 
   async function refreshUser() {
     userStatus = "loading";
@@ -239,6 +261,23 @@
           {onOtherAlign}
           {onBrowserNotificationsChanged}
         />
+        {#if showChangePassword}
+          <ChangePasswordSection />
+        {/if}
+        <div class="settings-signout">
+          <div>
+            <strong>Sign out</strong>
+            <p>End this session on this device.</p>
+            {#if signOutError}
+              <p class="settings-status is-error" role="status">{signOutError}</p>
+            {/if}
+          </div>
+          <div class="profile-actions">
+            <button class="ghost-action" disabled={signingOut} onclick={signOut} type="button">
+              {signingOut ? "Signing out..." : "Sign out"}
+            </button>
+          </div>
+        </div>
       {:else if activeSection === "appearance"}
         <AppearanceSection {user} />
       {:else if activeSection === "notifications"}

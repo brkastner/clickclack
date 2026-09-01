@@ -13,7 +13,8 @@ resolver lives in `apps/api/internal/httpapi/server.go` (`currentActor`).
 1. `Authorization: Bearer <token>` — bearer session token or `ccb_...` bot
    token. Bot tokens resolve to the bot user plus token workspace/scopes.
 2. Session cookie — `cc_session` by default, or the configured namespaced
-   cookie. It is HTTP-only and set by magic-link consume and GitHub OAuth.
+   cookie. It is HTTP-only and set by magic-link consume, password login, and
+   GitHub OAuth.
 3. Cloudflare Access assertion — when trusted-proxy authentication is
    configured, a valid `Cf-Access-Jwt-Assertion` provisions or resolves the
    asserted email and creates a normal ClickClack session.
@@ -293,6 +294,122 @@ button only in the browser. Register the exact redirect URI
 When metrics are enabled, `clickclack_openclaw_id_oauth_events_total` exposes
 the same bounded event categories as the GitHub counter.
 
+## Local passwords (optional)
+
+Password login exists for fully offline or self-hosted deployments that cannot
+reach GitHub and do not want to hand out magic-link tokens by hand. It is
+opt-in and off by default:
+
+```sh
+CLICKCLACK_PASSWORD_AUTH_ENABLED=true
+# or: clickclack serve --password-auth
+# or: {"password_auth_enabled": true} in the config file
+```
+
+With the flag off, `POST /api/auth/password/login` returns `501` and the web
+sign-in screen does not render the form.
+
+There is no registration endpoint. An operator enables password sign-in for one
+account at a time, and the command reads the secret from a prompt or piped
+stdin so it never lands in a process listing or a shell history file:
+
+```sh
+clickclack admin user set-password --email maggie@example.com
+printf '%s' "$PASSWORD" | clickclack admin user set-password --email maggie@example.com
+clickclack admin user set-password --email maggie@example.com --clear
+```
+
+Setting a password on an account that has none enables password login for it.
+`--clear` disables it again. `--user usr_...` selects an account by ID when an
+email is ambiguous or absent.
+
+The usual shape is a handover: the operator sets a temporary password, tells the
+person once, and the person replaces it from the app with
+`POST /api/auth/password/change` (below). The operator never learns the
+replacement.
+
+Flow and guarantees:
+
+1. `POST /api/auth/password/login` takes `identifier` (an identity email or a
+   handle, matched case-insensitively) and `password`.
+2. It enforces the same `Origin`/`Sec-Fetch-Site` rejections as magic-link
+   consume, then mints a session that is identical to the one every other
+   method produces. The insert is conditional on the stored hash still being
+   the one this request verified: argon2 verification is slow on purpose and
+   runs outside the write, so a password change can commit in between, and a
+   login that loses that race returns the same `401` as any other bad password
+   instead of a live session for a replaced secret. A lost race does not spend
+   the account's rate-limit budget.
+3. Hashes are argon2id in PHC string format (`apps/api/internal/passwordauth`).
+   Verification uses constant-time digest comparison. A process-wide budget
+   permits two concurrent derivations; queued requests stop waiting when their
+   request context is canceled.
+4. A wrong password, an unknown identifier, and an account with no password on
+   file all return the same `401` body, and all three pay for one key
+   derivation, so the endpoint does not disclose which accounts are enrolled.
+5. Attempts are rate limited per client address and per identifier. The
+   per-identifier budget is the narrow one and its window is long, which is
+   what makes online guessing impractical.
+6. Bot users are never reachable through this endpoint.
+
+### Changing a password
+
+`POST /api/auth/password/change` takes `current_password` and `new_password`
+from an authenticated caller, session cookie or bearer session token alike:
+
+```http
+POST /api/auth/password/change
+{ "current_password": "<temporary>", "new_password": "<theirs>" }
+```
+
+- It only ever replaces a password. An account with none on file gets `409` and
+  stays unenrolled, so enabling password sign-in remains an operator decision.
+- The current password is verified against the stored argon2id hash in constant
+  time, and the new one has to satisfy the same length rules the admin command
+  enforces: 8–256 Unicode code points.
+- It carries the same `Content-Type`, `Origin`, and `Sec-Fetch-Site` rejections
+  as password login, on top of the session CSRF header every unsafe cookie
+  request already needs.
+- Wrong current passwords are rate limited per account, five in fifteen minutes.
+  Only failures spend the budget, so rotating a password repeatedly never locks
+  the owner out.
+- Bot tokens are rejected. Bots have no password.
+- **A successful change revokes every other session for the account** and keeps
+  the caller's own, so a lost or borrowed device is signed out by changing the
+  password. The account owner stays signed in where they made the change. There
+  was no prior house precedent for revoking sessions on a credential change
+  (`admin user set-password` does not), so this endpoint sets it, matching the
+  conventional safe default.
+- **The replacement and the revocations commit together, or not at all**
+  (`Store.ChangeUserPassword`). The transaction is conditional on the state the
+  handler checked before it started: the stored hash must still be the snapshot
+  the current-password check verified, and the caller's own session must still
+  be live. Argon2 runs outside the transaction, which leaves a wide window, and
+  without those conditions the loser of two concurrent changes would overwrite
+  the winner's password and revoke the session the winner kept, while reporting
+  success. A stale snapshot returns `409` and a revoked calling session returns
+  `401`; both mean nothing was written, and the account is exactly as the
+  winning change left it.
+- The `501` behaviour matches login: with `CLICKCLACK_PASSWORD_AUTH_ENABLED`
+  off, the endpoint is not available and the settings form does not render.
+
+`GET /api/me` reports `password_enrolled` for the signed-in account. The web
+settings modal renders its Change Password form only when that flag is true and
+the runtime config advertises `password` among the enabled auth methods. The
+flag describes the account, never the deployment, and is reported only to the
+account itself, so it discloses nothing about who else is enrolled.
+
+`POST /api/auth/logout` revokes the session the caller authenticated with,
+bearer token or cookie, in the precedence `currentActor` uses, and expires the
+cookie. Login returns a bearer-usable session token and the API accepts bearer
+authentication, so a bearer-only caller signs out through the same endpoint. It
+is idempotent, so a stale browser can always return to a signed-out state. A bot
+token revokes nothing here: bot tokens are not sessions. If sign-out fails,
+Settings keeps the session visible, shows the error, and offers a retry. Realtime
+authentication failures return the web app to sign-in. Successful password or
+magic-token sign-in reloads the app so cached messages and workspace state from
+the previous account cannot appear under the new identity.
+
 ## Authorization
 
 Every store mutation that touches a workspace runs `requireMembership` (or the
@@ -314,9 +431,20 @@ workspace check. See [bots.md](bots.md).
 token to a `User`. There is no refresh flow — issue a new session when one
 expires.
 
+Revocation reaches connections that are already open, not just the next request.
+A realtime WebSocket captures its actor at accept, so it revalidates that
+session against the store before delivering, and on an idle timer for quiet
+workspaces; a revoked session closes with `1008`. The check reads the database
+rather than an in-process signal because a deployment runs replicas, and the
+request that revokes a session is routinely in a different process from the
+socket holding it. Connections that authenticated some other way, such as a bot
+token or a trusted-proxy assertion, have no session to revalidate.
+
 ## What is intentionally missing
 
-- Email/password login.
-- Password reset.
+- Self-service registration, and password reset for someone who has forgotten
+  theirs. An operator re-issues a temporary password with
+  `clickclack admin user set-password`; changing a known password is
+  self-service.
 - SMTP delivery for magic links (V0 prints the token; V1 will add delivery).
 - Per-channel ACLs and a historical moderation audit log.

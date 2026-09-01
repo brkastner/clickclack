@@ -112,6 +112,66 @@ paths:
       responses:
         "200":
           description: Created session
+  /api/auth/password/login:
+    post:
+      operationId: passwordLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordLoginRequest"
+      responses:
+        "200":
+          description: Created session
+        "400":
+          description: Missing identifier or password
+        "401":
+          description: Unknown identifier, wrong password, an account without a password set, or a password replaced while this request verified it
+        "403":
+          description: Cross-site login requests are not allowed
+        "415":
+          description: Content-Type must be application/json
+        "429":
+          description: Too many attempts for this client address or identifier
+        "501":
+          description: Password login is not configured
+  /api/auth/password/change:
+    post:
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password replaced; the account's other sessions were revoked
+        "400":
+          description: Missing or unacceptable password
+        "401":
+          description: Not signed in, the current password is wrong, or the calling session was revoked before the change committed
+        "403":
+          description: Cross-site requests are not allowed, and bot tokens cannot change passwords
+        "409":
+          description: The account has no password set and an administrator enrolls it first, or another change replaced the password first and nothing was written
+        "415":
+          description: Content-Type must be application/json
+        "429":
+          description: Too many attempts for this account
+        "501":
+          description: Password login is not configured
+  /api/auth/logout:
+    post:
+      operationId: logout
+      responses:
+        "200":
+          description: The bearer or cookie session that authenticated the call was revoked and the cookie expired
+        "403":
+          description: Cross-site sign-out requests are not allowed
+        "415":
+          description: Content-Type must be application/json
   /api/auth/github/start:
     get:
       operationId: startGitHubOAuth
@@ -1874,6 +1934,23 @@ components:
       properties:
         token:
           type: string
+    PasswordLoginRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier:
+          type: string
+          description: Account email address or handle
+        password:
+          type: string
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
     ConsumeDesktopGitHubOAuthRequest:
       type: object
       required: [code, code_verifier]
@@ -1946,6 +2023,9 @@ components:
           $ref: "#/components/schemas/NotificationSettings"
         appearance_preferences:
           $ref: "#/components/schemas/AppearancePreferences"
+        password_enrolled:
+          type: boolean
+          description: Whether this account has a password on file. Reported only for the signed-in caller, on /api/me.
     BotToken:
       type: object
       required: [id, bot_user_id, workspace_id, name, scopes, created_at]
