@@ -14,7 +14,7 @@
     type MessageEditSession,
   } from "../../lib/messageEditing.svelte";
   import { ReactionController } from "../../lib/reactions.svelte";
-  import { connectRealtime, type RealtimeConnection } from "../../lib/realtime.svelte";
+  import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
     Channel,
     DirectConversation,
@@ -136,10 +136,15 @@
     reactionController.clear();
     editController.clear();
     directConversation = null;
+    selectedImage = null;
   }
 
   function handleLoadError(error: unknown) {
     clearThread();
+    if (error instanceof WorkspaceUnavailableError) {
+      viewState = "forbidden";
+      return;
+    }
     if (error instanceof APIError) {
       if (error.status === 401) {
         viewState = "auth";
@@ -221,19 +226,6 @@
     reactionController.seedMessages(freshMessages);
     editController.reconcile(route?.target_id || root.id, [root, ...replies]);
   }
-  async function refreshThread(isCurrent: () => boolean = () => true) {
-    if (!root || viewState !== "ready") return;
-    const selection = thread.selection;
-    try {
-      await thread.refresh(isCurrent);
-    } catch (error) {
-      if (thread.isCurrent(selection) && isCurrent() && error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      throw error;
-    }
-  }
-
   function eventBelongsToThread(event: RealtimeEvent): boolean {
     if (!root) return false;
     if (event.payload.root_message_id) return event.payload.root_message_id === root.id;
@@ -249,19 +241,15 @@
       reactionController.applyEvent(event);
       return;
     }
-    const selection = thread.selection;
-    try {
-      await thread.handleEvent(event, isCurrent);
-    } catch (error) {
-      if (thread.isCurrent(selection) && isCurrent() && error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      throw error;
-    }
+    await thread.handleEvent(event, isCurrent);
   }
 
   function reportRealtimeError(error: unknown) {
     if (viewState === "ready") {
+      if (error instanceof WorkspaceUnavailableError || (error instanceof APIError && [401, 403, 404].includes(error.status))) {
+        handleLoadError(error);
+        return;
+      }
       realtimeError = readableAPIError(error, "Could not process a realtime update.");
     }
   }
@@ -274,7 +262,7 @@
       onOpen: async (isCurrent, authoritativeResync) => {
         if (authoritativeResync) {
           reactionController.clear();
-          await refreshThread(isCurrent);
+          await thread.refresh(isCurrent);
         }
         if (!isCurrent()) return;
         realtimeError = "";

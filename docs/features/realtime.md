@@ -171,6 +171,15 @@ progress while retaining targetless, workspace-wide presence events.
   Replayed loaded rows and history viewed away from the live edge retain their
   existing unread boundaries.
 - The client sends `after_cursor` on every connect/reconnect.
+  Each attempt first validates access through the HTTP events endpoint, even
+  when it has a saved cursor. An expired session returns the chat or embedded
+  view to sign-in. A denied preflight checks the authorized workspace list:
+  losing the workspace clears its content and returns chat to an available
+  workspace, while embeds show an unavailable state. A denied realtime scope
+  retains readable messages and reports the live-update error. Temporary
+  failures retry with the same processed cursor, so they cannot skip missed
+  events. Validation retains the usual 30-second request
+  deadline and is cancelled when leaving the workspace.
 - On WebSocket connect and each live wake, the server pages durable events with
   a higher `cursor` until it reaches the visible tail captured for that drain. If replay is
   interrupted, the client can reconnect with the last cursor it actually

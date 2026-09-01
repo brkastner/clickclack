@@ -30,7 +30,7 @@
     MessageEditController,
     type MessageEditSession,
   } from "./lib/messageEditing.svelte";
-  import { connectRealtime, type RealtimeConnection } from "./lib/realtime.svelte";
+  import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "./lib/realtime.svelte";
   import { ThreadController } from "./lib/thread.svelte";
   import { ReactionController } from "./lib/reactions.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
@@ -3297,6 +3297,13 @@
       },
       onError: (error) => {
         if (workspaceID === selectedWorkspaceID) {
+          if (error instanceof WorkspaceUnavailableError) {
+            // A newer workspace route may still be waiting for resolution.
+            if (routeWorkspaceID && routeWorkspaceID !== workspaceID && routeWorkspaceID !== routeWorkspaceIDFor(workspaceID)) return;
+            socket?.close();
+            void goto("/app", { invalidateAll: true, replaceState: true }).catch(handleAppLoadError);
+            return;
+          }
           if (error instanceof APIError && error.status === 401) {
             handleAppLoadError(error);
             return;
