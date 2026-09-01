@@ -4,6 +4,7 @@
     collectSidebarPeopleShelf,
     directConversationForUser,
     handleLabel,
+    profileHeaderTarget,
     type ChannelProfileShortcut,
   } from "../../lib/chat/people";
   import type { Channel, DirectConversation, User, Workspace } from "../../lib/types";
@@ -247,16 +248,22 @@
     <section class="sidebar-people-row" aria-label="Recent people">
       {#each displayedRecentPeople as entry (entry.kind === "profile" ? entry.profile.id : entry.person.id)}
         {#if entry.kind === "profile"}
+          {@const target = profileHeaderTarget(entry.profile, profilePeople, directConversations)}
           <a
-            href={hrefForChannel(entry.profile.channel_id)}
+            href={target.kind === "direct" ? hrefForDirect(target.id) : hrefForChannel(target.id)}
             class="sidebar-person"
-            class:active={entry.profile.channel_id === selectedChannelID}
+            class:active={
+              target.kind === "direct"
+                ? target.id === selectedDirectID
+                : target.id === selectedChannelID
+            }
             title={entry.profile.display_name}
             aria-label={entry.profile.display_name}
             onclick={(event) => {
               if (!shouldHandleClientNavigation(event)) return;
               event.preventDefault();
-              onSelectChannel(entry.profile.channel_id);
+              if (target.kind === "direct") onSelectDirect(target.id);
+              else onSelectChannel(target.id);
             }}
           >
             <Avatar

@@ -66,6 +66,22 @@ test("labels shelf tiles with their presented names", () => {
   );
 });
 
+test("routes canonical shelf profiles to their direct conversations", () => {
+  assert.match(
+    sidebar,
+    /profileHeaderTarget\(entry\.profile,\s*profilePeople,\s*directConversations\)/u,
+  );
+  assert.match(
+    sidebar,
+    /href=\{target\.kind === "direct" \? hrefForDirect\(target\.id\) : hrefForChannel\(target\.id\)\}/u,
+  );
+  assert.match(
+    sidebar,
+    /if \(target\.kind === "direct"\) onSelectDirect\(target\.id\);[\s\S]*?else onSelectChannel\(target\.id\);/u,
+  );
+  assert.doesNotMatch(sidebar, /href=\{hrefForChannel\(entry\.profile\.channel_id\)\}/u);
+});
+
 test("sizes profile, channel, and direct-message navigation up", () => {
   const profileToggleStyles =
     sidebarStyles.match(
