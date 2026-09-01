@@ -374,7 +374,7 @@ test("builds a stable six-profile shelf and keeps пи as a profile", () => {
     shortcut("chn_career", "рекрутер"),
     shortcut("chn_pi", "пи"),
   ];
-  const order = ["кай", "лиза", "нудз", "училка", "рекрутер", "пи"];
+  const order = ["кай", "лиза", "рекрутер", "нудз", "училка", "пи"];
 
   const shelf = collectSidebarPeopleShelf(
     availablePeople,

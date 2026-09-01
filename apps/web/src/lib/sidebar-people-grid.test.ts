@@ -20,7 +20,7 @@ test("keeps the profile shelf to one curated two-by-three page", () => {
   // The shelf is read left to right, top row first.
   assert.match(
     sidebar,
-    /PEOPLE_SHELF_ORDER = \["кай", "лиза", "нудз", "училка", "рекрутер", "пи"\]/u,
+    /PEOPLE_SHELF_ORDER = \["кай", "лиза", "рекрутер", "нудз", "училка", "пи"\]/u,
   );
 });
 
