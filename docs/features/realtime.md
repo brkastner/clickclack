@@ -158,12 +158,16 @@ progress while retaining targetless, workspace-wide presence events.
   scrolling and read receipts settle independently, so suspended animation frames
   in a hidden tab do not block subsequent events. Live chat stays pinned as
   successive messages grow an existing group, including after the tab resumes.
+  Scrolling into history cancels pending live following, including after a resize
+  or when animation frames resume. Interrupting a history-page restoration still
+  allows subsequent pages to load. Centering a message keeps the surrounding app
+  layout fixed.
 - Channel and DM list snapshots account for unread counts without consuming live
   timeline events. Browser and desktop alerts track received message sequences
   separately, so a list refresh cannot hide a new alert and a retried event does
   not repeat it. Initial snapshots still suppress historical message alerts.
-- When following live chat, a snapshot that already counts a newly arriving
-  message does not leave it unread after its row and scroll position settle.
+- When following live chat, a snapshot arriving before or after a live message
+  does not leave it unread after its row and scroll position settle.
   Replayed loaded rows and history viewed away from the live edge retain their
   existing unread boundaries.
 - The client sends `after_cursor` on every connect/reconnect.
