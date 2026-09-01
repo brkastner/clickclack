@@ -5230,6 +5230,7 @@
       messages={renderedMessages}
       {selectedDirect}
       {selectedChannel}
+      {channels}
       {mentionPeople}
       {mentionAttentionUserID}
       restoreState={viewRestoreState}

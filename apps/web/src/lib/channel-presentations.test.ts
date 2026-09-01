@@ -52,6 +52,59 @@ test("channel bot presentation overrides only visual bot fields", () => {
   });
 });
 
+test("canonical channel history follows the current bot avatar", () => {
+  const staleBot = { ...bot, avatar_url: "https://example.com/kai-old.webp" };
+  const updatedBot = { ...bot, avatar_url: "https://example.com/kai-new.webp" };
+  const canonicalChannel: Channel = {
+    ...channel,
+    id: "chn_kai",
+    bot_presentations: [
+      {
+        ...channel.bot_presentations![0]!,
+        channel_id: "chn_kai",
+        display_name: "кай",
+        avatar_url: "https://example.com/kai-old.webp",
+      },
+    ],
+  };
+
+  assert.equal(
+    presentChannelUser(staleBot, canonicalChannel, [], [updatedBot])?.avatar_url,
+    updatedBot.avatar_url,
+  );
+});
+
+test("assigned channel history follows its source profile avatar", () => {
+  const source: Channel = {
+    ...channel,
+    id: "chn_recruiter",
+    bot_presentations: [
+      {
+        ...channel.bot_presentations![0]!,
+        channel_id: "chn_recruiter",
+        display_name: "рекрутер",
+        avatar_url: "https://example.com/recruiter-new.webp",
+      },
+    ],
+  };
+  const assigned: Channel = {
+    ...channel,
+    id: "chn_interview",
+    sidebar_section: `profile:${source.id}`,
+    bot_presentations: [
+      {
+        ...source.bot_presentations![0]!,
+        channel_id: "chn_interview",
+        avatar_url: "https://example.com/recruiter-old.webp",
+      },
+    ],
+  };
+
+  const presented = presentChannelUser(bot, assigned, [source, assigned], [bot]);
+  assert.equal(presented?.display_name, "рекрутер");
+  assert.equal(presented?.avatar_url, "https://example.com/recruiter-new.webp");
+});
+
 test("channel bot presentation preserves identity and applies to quoted authors", () => {
   const message: Message = {
     id: "msg_1",
@@ -224,10 +277,16 @@ test("the sidebar shelf can replace a recent person with a profile shortcut", ()
     { ...bot, id: "usr_kai", display_name: "кай" },
   ];
   const recruiter = shortcut("chn_career", "рекрутер");
-  const shelf = collectSidebarPeopleShelf(people, [recruiter], [{
-    personName: "нудз",
-    profileName: "рекрутер",
-  }]);
+  const shelf = collectSidebarPeopleShelf(
+    people,
+    [recruiter],
+    [
+      {
+        personName: "нудз",
+        profileName: "рекрутер",
+      },
+    ],
+  );
 
   assert.deepEqual(
     shelf.map((entry) =>
@@ -355,10 +414,7 @@ test("curated shelf uses a matching profile when the person is unavailable", () 
     order,
   );
   assert.equal(shelf[3]?.kind, "profile");
-  assert.equal(
-    shelf[3]?.kind === "profile" ? shelf[3].profile.channel_id : "",
-    "chn_teacher",
-  );
+  assert.equal(shelf[3]?.kind === "profile" ? shelf[3].profile.channel_id : "", "chn_teacher");
 });
 
 test("builds a stable six-profile shelf and keeps пи as a profile", () => {

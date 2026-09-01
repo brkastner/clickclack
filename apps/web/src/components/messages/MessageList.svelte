@@ -57,6 +57,7 @@
     restoreState?: MessageListState;
     selectedDirect?: DirectConversation;
     selectedChannel?: Channel;
+    channels?: Channel[];
     selectedThreadID?: string;
     currentUserID?: string;
     mentionPeople?: User[];
@@ -110,6 +111,7 @@
     restoreState,
     selectedDirect,
     selectedChannel,
+    channels = [],
     selectedThreadID,
     currentUserID,
     mentionPeople = [],
@@ -259,7 +261,7 @@
       if (m.author?.id === currentUserID || m.author_id === currentUserID) return false;
       return dividerUnreadCount > 0 && (m.channel_seq || 0) > unreadBoundarySeq;
     };
-    for (const group of groupMessages(messages, selectedChannel)) {
+    for (const group of groupMessages(messages, selectedChannel, channels, mentionPeople)) {
       let splitIdx = -1;
       if (!inserted) {
         for (let i = 0; i < group.messages.length; i++) {

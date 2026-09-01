@@ -1077,10 +1077,13 @@
   padding-right: 75px;
 }
 
-/* Right alignment positions the bubble, not the prose inside it. Mirroring the
-   text made multi-line messages ragged-left and hard to read; the bubble still
-   sits on the right via margin-left:auto. */
-:root[data-user-align="right"] .message-group.is-self .message-content,
+/* A right-aligned current-user group carries its prose with it. Other
+   participants keep left-to-right prose even when their bubble is moved. */
+:root[data-user-align="right"] .message-group.is-self .message-content {
+  margin-left: auto;
+  text-align: right;
+}
+
 :root[data-other-align="right"] .message-group:not(.is-self) .message-content {
   margin-left: auto;
   text-align: left;
@@ -3071,11 +3074,11 @@
   border-radius: 12px;
   background: color-mix(in srgb, var(--panel-2) 58%, transparent);
   box-shadow: none;
-  text-align: left;
+  text-align: right;
 }
 
 .message-group.is-self .message-content .markdown {
-  text-align: left;
+  text-align: right;
 }
 
 /* The accepted message pass defaults self messages to the right, but the
@@ -3105,6 +3108,11 @@
 :root[data-user-align="left"] .message-group.is-self .message-content {
   margin-right: auto;
   margin-left: 0;
+  text-align: left;
+}
+
+:root[data-user-align="left"] .message-group.is-self .message-content .markdown {
+  text-align: left;
 }
 
 :root[data-user-align="left"] .message-group.is-self .message-actions {

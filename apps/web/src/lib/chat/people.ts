@@ -51,29 +51,56 @@ export function userDisplayLabel(user?: User | null, fallback = "Local User"): s
   return isDeletedBot(user) ? `${name} (deleted bot)` : name;
 }
 
-export function presentChannelUser(user: User | undefined, channel?: Channel): User | undefined {
+export function presentChannelUser(
+  user: User | undefined,
+  channel?: Channel,
+  channels: Channel[] = [],
+  people: User[] = [],
+): User | undefined {
   if (!user || user.kind !== "bot" || user.deleted_at) return user;
-  const presentation = channel?.bot_presentations?.find(
+  const currentBot = people.find((person) => person.id === user.id && !person.deleted_at) || user;
+  const profileSourceID = channel?.sidebar_section?.startsWith("profile:")
+    ? channel.sidebar_section.slice("profile:".length)
+    : "";
+  const profileSource = profileSourceID
+    ? channels.find((candidate) => candidate.id === profileSourceID)
+    : undefined;
+  const presentation = (profileSource?.bot_presentations || channel?.bot_presentations)?.find(
     (candidate) => candidate.bot_user_id === user.id,
   );
   if (!presentation) return user;
+  const canonical =
+    presentation.display_name.trim() !== "" &&
+    presentation.display_name.trim() === currentBot.display_name.trim();
   return {
     ...user,
     display_name: presentation.display_name,
-    avatar_url: presentation.avatar_url || user.avatar_url,
+    avatar_url: canonical
+      ? currentBot.avatar_url || presentation.avatar_url || user.avatar_url
+      : presentation.avatar_url || currentBot.avatar_url || user.avatar_url,
   };
 }
 
-export function presentChannelMessage(message: Message, channel?: Channel): Message {
+export function presentChannelMessage(
+  message: Message,
+  channel?: Channel,
+  channels: Channel[] = [],
+  people: User[] = [],
+): Message {
   if (!channel || message.channel_id !== channel.id) return message;
-  const author = presentChannelUser(message.author, channel);
-  const quotedAuthor = presentChannelUser(message.quoted_author, channel);
+  const author = presentChannelUser(message.author, channel, channels, people);
+  const quotedAuthor = presentChannelUser(message.quoted_author, channel, channels, people);
   if (author === message.author && quotedAuthor === message.quoted_author) return message;
   return { ...message, author, quoted_author: quotedAuthor };
 }
 
-export function presentChannelMessages(messages: Message[], channel?: Channel): Message[] {
-  return messages.map((message) => presentChannelMessage(message, channel));
+export function presentChannelMessages(
+  messages: Message[],
+  channel?: Channel,
+  channels: Channel[] = [],
+  people: User[] = [],
+): Message[] {
+  return messages.map((message) => presentChannelMessage(message, channel, channels, people));
 }
 
 export function avatarHue(seed: string): number {
@@ -185,8 +212,7 @@ export function collectSidebarPeopleShelf(
       continue;
     }
     const profile = profiles.find(
-      (candidate) =>
-        candidate.display_name.trim().toLocaleLowerCase() === normalizedDisplayName,
+      (candidate) => candidate.display_name.trim().toLocaleLowerCase() === normalizedDisplayName,
     );
     if (profile) entries.push({ kind: "profile", profile });
   }
