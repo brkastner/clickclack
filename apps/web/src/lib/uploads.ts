@@ -13,6 +13,18 @@ export function isVideoUpload(upload: Upload): boolean {
   return upload.content_type.startsWith("video/");
 }
 
+export type ImageViewerItem = {
+  url: string;
+  title: string;
+};
+
+export function imageViewerItems(uploads: Upload[]): ImageViewerItem[] {
+  return uploads.filter(isImageUpload).map((upload) => ({
+    url: uploadURL(upload),
+    title: upload.filename,
+  }));
+}
+
 export function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;

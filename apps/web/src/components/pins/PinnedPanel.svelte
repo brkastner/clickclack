@@ -19,7 +19,7 @@
     maxPins?: number;
     onClose: () => void;
     onOpenThread: (message: Message) => void;
-    onOpenImage: (url: string, title: string) => void;
+    onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
     onUnpin: (message: Message) => Promise<void>;
     onSelectTopic?: (topicID: string) => void;
@@ -118,6 +118,7 @@
                   <MediaAttachment
                     upload={attachment}
                     url={uploadURL(attachment)}
+                    attachments={message.attachments}
                     onOpenImage={onOpenImage}
                     onOpenArtifact={onOpenArtifact}
                   />

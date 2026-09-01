@@ -224,10 +224,10 @@ test("the sidebar shelf can replace a recent person with a profile shortcut", ()
     { ...bot, id: "usr_kai", display_name: "кай" },
   ];
   const recruiter = shortcut("chn_career", "рекрутер");
-  const shelf = collectSidebarPeopleShelf(people, [recruiter], {
+  const shelf = collectSidebarPeopleShelf(people, [recruiter], [{
     personName: "нудз",
     profileName: "рекрутер",
-  });
+  }]);
 
   assert.deepEqual(
     shelf.map((entry) =>
@@ -247,12 +247,16 @@ test("an explicit display order arranges the two-by-two shelf", () => {
     { ...bot, id: "usr_kai", display_name: "кай" },
   ];
   const recruiter = shortcut("chn_career", "рекрутер");
+  const lisa = shortcut("chn_liz", "лиза");
 
   const shelf = collectSidebarPeopleShelf(
     people,
-    [recruiter],
-    { personName: "нудз", profileName: "рекрутер" },
-    ["кай", "клешня", "рекрутер", "пи"],
+    [recruiter, lisa],
+    [
+      { personName: "клешня", profileName: "лиза" },
+      { personName: "нудз", profileName: "рекрутер" },
+    ],
+    ["кай", "лиза", "рекрутер", "пи"],
   );
 
   // Top row is the first two entries, bottom row the last two.
@@ -260,7 +264,7 @@ test("an explicit display order arranges the two-by-two shelf", () => {
     shelf.map((entry) =>
       entry.kind === "person" ? entry.person.display_name : entry.profile.display_name,
     ),
-    ["кай", "клешня", "рекрутер", "пи"],
+    ["кай", "лиза", "рекрутер", "пи"],
   );
   // The replaced profile keeps its channel target after reordering.
   const recruiterEntry = shelf[2];

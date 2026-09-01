@@ -10,10 +10,11 @@ const sidebarStyles = readFileSync(new URL("../styles/sidebar.css", import.meta.
 
 test("keeps the recent-people shelf to one curated two-by-two page", () => {
   assert.match(sidebar, /collectSidebarPeopleShelf\(\s*recentPeople,\s*profileShortcuts/u);
-  assert.match(sidebar, /personName:\s*"нудз"/u);
-  assert.match(sidebar, /profileName:\s*"рекрутер"/u);
+  assert.match(sidebar, /personName:\s*"клешня"/u);
+  assert.match(sidebar, /profileName:\s*"лиза"/u);
+  assert.doesNotMatch(sidebar, /profileName:\s*"рекрутер"/u);
   // The shelf is read left to right, top row first.
-  assert.match(sidebar, /PEOPLE_SHELF_ORDER = \["кай", "клешня", "рекрутер", "пи"\]/u);
+  assert.match(sidebar, /PEOPLE_SHELF_ORDER = \["кай", "лиза", "нудз", "пи"\]/u);
 });
 
 test("fills the two-by-two shelf with larger avatars and compact spacing", () => {

@@ -5,11 +5,18 @@
   type Props = {
     upload: Upload;
     url: string;
-    onOpenImage?: (url: string, title: string) => void;
+    attachments?: Upload[];
+    onOpenImage?: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact?: (upload: Upload) => void;
   };
 
-  let { upload, url, onOpenImage = () => {}, onOpenArtifact = () => {} }: Props = $props();
+  let {
+    upload,
+    url,
+    attachments = [],
+    onOpenImage = () => {},
+    onOpenArtifact = () => {},
+  }: Props = $props();
 
   const MAX_MEDIA_HEIGHT = 360;
   const MIN_MEDIA_HEIGHT = 120;
@@ -81,7 +88,7 @@
       type="button"
       class="media-tile__open"
       aria-label={`Open image ${upload.filename}`}
-      onclick={() => onOpenImage(url, upload.filename)}
+      onclick={() => onOpenImage(url, upload.filename, attachments)}
     >
       <img
         src={url}

@@ -260,10 +260,16 @@ test("product website links to app and docs", async ({ page }) => {
   await expect(page.getByText("Open source · MIT · Single Go binary")).toBeVisible();
 });
 
-test("defaults the current user's messages to right alignment", async ({ page }) => {
+test("restores the current user's messages to right alignment", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("clickclack:user-align:v1", "left");
+  });
   await page.goto("/app");
   await waitForAppReady(page);
   await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+  await expect
+    .poll(() => page.evaluate(() => window.localStorage.getItem("clickclack:user-align:v1")))
+    .toBe("right");
 });
 
 test("right alignment moves the bubble but keeps its prose left aligned", async ({ page }) => {

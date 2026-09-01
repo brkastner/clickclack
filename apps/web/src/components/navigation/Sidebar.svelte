@@ -88,16 +88,18 @@
   }: Props = $props();
 
   // Read left to right, top row first, in the two-by-two shelf.
-  const PEOPLE_SHELF_ORDER = ["кай", "клешня", "рекрутер", "пи"];
+  const PEOPLE_SHELF_ORDER = ["кай", "лиза", "нудз", "пи"];
 
   const displayedRecentPeople = $derived(
     collectSidebarPeopleShelf(
       recentPeople,
       profileShortcuts,
-      {
-        personName: "нудз",
-        profileName: "рекрутер",
-      },
+      [
+        {
+          personName: "клешня",
+          profileName: "лиза",
+        },
+      ],
       PEOPLE_SHELF_ORDER,
     ),
   );

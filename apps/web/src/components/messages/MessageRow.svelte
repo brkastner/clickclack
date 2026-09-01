@@ -50,7 +50,7 @@
     onReply: (message: Message, context: "channel" | "dm") => void;
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;
-    onOpenImage: (url: string, title: string) => void;
+    onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
@@ -730,6 +730,7 @@
           <MediaAttachment
             upload={attachment}
             url={uploadURL(attachment)}
+            attachments={message.attachments}
             onOpenImage={onOpenImage}
             onOpenArtifact={onOpenArtifact}
           />

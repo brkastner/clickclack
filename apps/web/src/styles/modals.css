@@ -469,6 +469,10 @@
 
 /* ---------- IMAGE VIEWER ---------- */
 
+.image-viewer-island {
+  display: contents;
+}
+
 .image-viewer-scrim {
   padding: 28px;
   background: rgba(0, 0, 0, 0.78);
@@ -571,6 +575,7 @@
    overflowed the stage instead of shrinking. Flex keeps the item bounded by the
    stage's own box. */
 .image-viewer-stage {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -578,6 +583,36 @@
   min-height: 0;
   padding: 18px;
   overflow: hidden;
+}
+
+.image-viewer__pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.image-viewer__count {
+  min-width: 36px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.image-viewer > header .image-viewer__page-button {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 22px;
+}
+
+.image-viewer > header .image-viewer__page-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.image-viewer > header .image-viewer__page-button:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 /* A frame that hugs its image can still be narrower than the header's own

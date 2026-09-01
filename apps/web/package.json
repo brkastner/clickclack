@@ -26,6 +26,8 @@
     "highlight.js": "^11.11.2",
     "marked": "^18.0.9",
     "pdfjs-dist": "^6.2.108",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "sax": "^1.6.1",
     "svelte": "^5.56.8",
     "virtua": "^0.50.1",
@@ -35,6 +37,8 @@
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.70.2",
     "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "@types/sax": "^1.2.7",
     "@typescript/native": "npm:typescript@^7.0.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2"

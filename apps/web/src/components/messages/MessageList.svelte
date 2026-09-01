@@ -72,7 +72,7 @@
     onReply: (message: Message, context: "channel" | "dm") => void;
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;
-    onOpenImage: (url: string, title: string) => void;
+    onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
     onLoadOlder?: () => void;
     onLoadNewer?: (source?: "scroll" | "wheel") => void;

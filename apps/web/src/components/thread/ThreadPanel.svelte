@@ -70,7 +70,7 @@
     onActivateThreadComposer: () => void;
     onInlineImagePointerUp: (event: PointerEvent) => void;
     onJumpToQuote: (message: Message) => void;
-    onOpenImage: (url: string, title: string) => void;
+    onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
   };
 
@@ -587,6 +587,7 @@
             <MediaAttachment
               upload={attachment}
               url={uploadURL(attachment)}
+              attachments={root.attachments}
               onOpenImage={onOpenImage}
               onOpenArtifact={onOpenArtifact}
             />
@@ -736,6 +737,7 @@
                 <MediaAttachment
                   upload={attachment}
                   url={uploadURL(attachment)}
+                  attachments={reply.attachments}
                   onOpenImage={onOpenImage}
                   onOpenArtifact={onOpenArtifact}
                 />

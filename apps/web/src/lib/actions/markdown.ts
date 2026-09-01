@@ -1,3 +1,5 @@
+import type { ImageViewerItem } from "../uploads";
+
 const animatedURLKey = Symbol("clickclackAnimatedURL");
 const tableResizeTargets = new WeakMap<Element, HTMLElement>();
 
@@ -33,6 +35,15 @@ const tableResizeObserver =
 
 export function markdownImageViewerURL(image: HTMLImageElement) {
   return (image as EnhancedGIFImage)[animatedURLKey] || image.currentSrc || image.src;
+}
+
+export function markdownImageViewerItems(image: HTMLImageElement): ImageViewerItem[] {
+  const markdown = image.closest(".markdown");
+  const images = markdown?.querySelectorAll<HTMLImageElement>("img") ?? [image];
+  return Array.from(images).map((item) => ({
+    url: markdownImageViewerURL(item),
+    title: item.alt || "Message image",
+  }));
 }
 
 export function enhanceMarkdown(node: HTMLElement) {

@@ -22,7 +22,11 @@
     type PendingAttachment,
   } from "./lib/attachments";
   import { gifLibrary } from "./lib/gifs";
-  import { markdownImageViewerURL } from "./lib/actions/markdown";
+  import {
+    markdownImageViewerItems,
+    markdownImageViewerURL,
+  } from "./lib/actions/markdown";
+  import { imageViewerItems, type ImageViewerItem } from "./lib/uploads";
   import {
     INITIAL_MESSAGE_LIMIT,
     MAX_RETAINED_MESSAGE_WINDOWS,
@@ -165,7 +169,7 @@
   let mentionPeople: User[] = [];
   let profileShortcuts: ChannelProfileShortcut[] = [];
   let mentionAttentionUserID = "";
-  let selectedImage: { url: string; title: string } | null = null;
+  let selectedImage: { items: ImageViewerItem[]; initialIndex: number } | null = null;
   let selectedArtifact: Upload | null = null;
   let artifactConversationKey = "";
   let artifactTrigger: HTMLElement | null = null;
@@ -224,9 +228,8 @@
   // Default: show both. Persisted in localStorage like other client prefs.
   let hideCommentary = false;
   let hideToolCalls = false;
-  // Self-message alignment defaults to the accepted right-side layout. An
-  // explicit left preference remains persisted client-side and applied as a
-  // root data attribute so messages.css can flip the group without prop drilling.
+  // Self messages use the accepted right-side layout. Clear older left-side
+  // preferences on load so returning sessions don't silently restore it.
   let userAlign: "left" | "right" = "right";
   let otherAlign: "left" | "right" = "left";
   let status = "loading";
@@ -826,7 +829,8 @@
       const legacyHidden = window.localStorage.getItem(SHOW_AGENT_ACTIVITY_STORAGE_KEY) === "0";
       hideCommentary = window.localStorage.getItem(HIDE_COMMENTARY_STORAGE_KEY) === "1" || legacyHidden;
       hideToolCalls = window.localStorage.getItem(HIDE_TOOL_CALLS_STORAGE_KEY) === "1" || legacyHidden;
-      userAlign = window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "left" ? "left" : "right";
+      userAlign = "right";
+      window.localStorage.setItem(USER_ALIGN_STORAGE_KEY, "right");
       otherAlign = window.localStorage.getItem(OTHER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
     } catch {
       hideCommentary = false;
@@ -4614,9 +4618,15 @@
     }
   }
 
-  function openImageViewer(url: string, title: string) {
-    if (isModalOpen()) return;
-    selectedImage = { url, title };
+  function openImageViewerItems(items: ImageViewerItem[], url: string) {
+    if (isModalOpen() || items.length === 0) return;
+    const initialIndex = Math.max(0, items.findIndex((item) => item.url === url));
+    selectedImage = { items, initialIndex };
+  }
+
+  function openImageViewer(url: string, title: string, attachments: Upload[] = []) {
+    const items = attachments.length > 0 ? imageViewerItems(attachments) : [{ url, title }];
+    openImageViewerItems(items, url);
   }
 
   function openArtifactViewer(upload: Upload) {
@@ -4693,7 +4703,8 @@
     if (!(target instanceof HTMLImageElement)) return;
     if (!target.closest(".markdown")) return;
     event.preventDefault();
-    openImageViewer(markdownImageViewerURL(target), target.alt || "Image");
+    const url = markdownImageViewerURL(target);
+    openImageViewerItems(markdownImageViewerItems(target), url);
   }
 
   function appendToComposer(snippet: string) {
@@ -5549,6 +5560,10 @@
   />
 {/if}
 {#if selectedImage}
-  <ImageViewer url={selectedImage.url} title={selectedImage.title} onClose={closeModal} />
+  <ImageViewer
+    items={selectedImage.items}
+    initialIndex={selectedImage.initialIndex}
+    onClose={closeModal}
+  />
 {/if}
 {/if}

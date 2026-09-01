@@ -5,11 +5,12 @@
     "allowJs": false,
     "checkJs": false,
     "isolatedModules": true,
+    "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
     "target": "ES2022",
-    "types": ["svelte"]
+    "types": ["svelte", "react", "react-dom"]
   },
   "exclude": ["src/**/*.test.ts"]
 }

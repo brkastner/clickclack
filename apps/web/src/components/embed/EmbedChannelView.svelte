@@ -3,7 +3,11 @@
   import ChatComposer from "../composer/ChatComposer.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   import MessageList, { type MessageListHandle } from "../messages/MessageList.svelte";
-  import { markdownImageViewerURL } from "../../lib/actions/markdown";
+  import {
+    markdownImageViewerItems,
+    markdownImageViewerURL,
+  } from "../../lib/actions/markdown";
+  import { imageViewerItems, type ImageViewerItem } from "../../lib/uploads";
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
@@ -60,7 +64,7 @@
   let sendError = $state("");
   let realtimeError = $state("");
   let sending = $state(false);
-  let selectedImage = $state<{ url: string; title: string } | null>(null);
+  let selectedImage = $state<{ items: ImageViewerItem[]; initialIndex: number } | null>(null);
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
@@ -471,9 +475,23 @@
     if (opened) opened.opener = null;
   }
 
+  function openImageViewer(url: string, title: string, attachments: Upload[] = []) {
+    const items = attachments.length > 0 ? imageViewerItems(attachments) : [{ url, title }];
+    selectedImage = {
+      items,
+      initialIndex: Math.max(0, items.findIndex((item) => item.url === url)),
+    };
+  }
+
   function handleInlineImagePointerUp(event: PointerEvent) {
-    const url = markdownImageViewerURL(event);
-    if (url) selectedImage = { url, title: "Message image" };
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement)) return;
+    const url = markdownImageViewerURL(target);
+    const items = markdownImageViewerItems(target);
+    selectedImage = {
+      items,
+      initialIndex: Math.max(0, items.findIndex((item) => item.url === url)),
+    };
   }
 
   function openArtifact(upload: Upload) {
@@ -537,7 +555,7 @@
       onReply={(message) => setReplyTarget(message)}
       onOpenThread={openThread}
       onJumpToQuote={jumpToQuote}
-      onOpenImage={(url, title) => (selectedImage = { url, title })}
+      onOpenImage={openImageViewer}
       onOpenArtifact={openArtifact}
       onLoadOlder={() => void loadOlderMessages()}
       onLoadNewer={() => queueMessageSync()}
@@ -602,8 +620,8 @@
 
 {#if selectedImage}
   <ImageViewer
-    url={selectedImage.url}
-    title={selectedImage.title}
+    items={selectedImage.items}
+    initialIndex={selectedImage.initialIndex}
     onClose={() => (selectedImage = null)}
   />
 {/if}

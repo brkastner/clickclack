@@ -116,6 +116,49 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   await expect(threadTrigger).toBeFocused();
 });
 
+test("pages through image attachments with controls and arrow keys", async ({ page }) => {
+  const suffix = Date.now();
+  const firstFilename = `gallery-first-${suffix}.png`;
+  const secondFilename = `gallery-second-${suffix}.png`;
+  const messageText = `image gallery ${suffix}`;
+  const pixel = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64",
+  );
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByLabel("Upload file").setInputFiles([
+    { name: firstFilename, mimeType: "image/png", buffer: pixel },
+    { name: secondFilename, mimeType: "image/png", buffer: pixel },
+  ]);
+  await page.getByLabel("Message body").fill(messageText);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const imageRow = page.locator(".message-row").filter({ hasText: messageText });
+  await imageRow.getByRole("button", { name: `Open image ${firstFilename}` }).click();
+
+  let dialog = page.getByRole("dialog", { name: `Image viewer: ${firstFilename}` });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("1 / 2")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Previous image" })).toBeDisabled();
+
+  await dialog.getByRole("button", { name: "Next image" }).click();
+  dialog = page.getByRole("dialog", { name: `Image viewer: ${secondFilename}` });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("2 / 2")).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Open original" })).toHaveAttribute(
+    "href",
+    /\/api\/uploads\//,
+  );
+
+  await page.keyboard.press("ArrowLeft");
+  dialog = page.getByRole("dialog", { name: `Image viewer: ${firstFilename}` });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("dialog", { name: `Image viewer: ${secondFilename}` })).toBeVisible();
+});
+
 test("scales a tall image to fit instead of cropping it", async ({ page }) => {
   const suffix = Date.now();
   const filename = `portrait-${suffix}.png`;

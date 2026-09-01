@@ -146,7 +146,7 @@ export function orderSidebarPeopleShelf(
 export function collectSidebarPeopleShelf(
   recentPeople: User[],
   profiles: ChannelProfileShortcut[],
-  replacement: SidebarPeopleShelfReplacement,
+  replacements: readonly SidebarPeopleShelfReplacement[],
   displayOrder: readonly string[] = [],
   limit = 4,
 ): SidebarPeopleShelfEntry[] {
@@ -155,15 +155,17 @@ export function collectSidebarPeopleShelf(
     kind: "person",
     person,
   }));
-  const normalizedPersonName = replacement.personName.trim().toLocaleLowerCase();
-  const normalizedProfileName = replacement.profileName.trim().toLocaleLowerCase();
-  const personIndex = people.findIndex(
-    (person) => person.display_name.trim().toLocaleLowerCase() === normalizedPersonName,
-  );
-  const profile = profiles.find(
-    (candidate) => candidate.display_name.trim().toLocaleLowerCase() === normalizedProfileName,
-  );
-  if (personIndex >= 0 && profile) entries[personIndex] = { kind: "profile", profile };
+  for (const replacement of replacements) {
+    const normalizedPersonName = replacement.personName.trim().toLocaleLowerCase();
+    const normalizedProfileName = replacement.profileName.trim().toLocaleLowerCase();
+    const personIndex = people.findIndex(
+      (person) => person.display_name.trim().toLocaleLowerCase() === normalizedPersonName,
+    );
+    const profile = profiles.find(
+      (candidate) => candidate.display_name.trim().toLocaleLowerCase() === normalizedProfileName,
+    );
+    if (personIndex >= 0 && profile) entries[personIndex] = { kind: "profile", profile };
+  }
   // Order last, after the profile replacement is placed by its position in
   // `people`, so the replacement still lands on the entry it replaced.
   return orderSidebarPeopleShelf(entries, displayOrder);
