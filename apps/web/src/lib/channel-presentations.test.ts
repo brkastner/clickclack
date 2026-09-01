@@ -329,6 +329,38 @@ test("curated shelf entries stay stable when navigation changes recency", () => 
   );
 });
 
+test("curated shelf uses a matching profile when the person is unavailable", () => {
+  const availablePeople = [
+    { ...bot, id: "usr_pi", display_name: "пи" },
+    { ...bot, id: "usr_claw", display_name: "клешня" },
+    { ...bot, id: "usr_kai", display_name: "кай" },
+    { ...bot, id: "usr_nudz", display_name: "нудз" },
+  ];
+  const profiles = [shortcut("chn_liz", "лиза"), shortcut("chn_teacher", "училка")];
+  const order = ["кай", "лиза", "нудз", "училка"];
+
+  const shelf = collectSidebarPeopleShelf(
+    availablePeople,
+    profiles,
+    [{ personName: "клешня", profileName: "лиза" }],
+    order,
+    4,
+    availablePeople,
+  );
+
+  assert.deepEqual(
+    shelf.map((entry) =>
+      entry.kind === "person" ? entry.person.display_name : entry.profile.display_name,
+    ),
+    order,
+  );
+  assert.equal(shelf[3]?.kind, "profile");
+  assert.equal(
+    shelf[3]?.kind === "profile" ? shelf[3].profile.channel_id : "",
+    "chn_teacher",
+  );
+});
+
 test("profile groups follow the viewer channel order with пи pinned last", () => {
   const profiles = [
     shortcut("chn_career", "рекрутер"),

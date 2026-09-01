@@ -175,6 +175,21 @@ export function collectSidebarPeopleShelf(
     );
     if (personIndex >= 0 && profile) entries[personIndex] = { kind: "profile", profile };
   }
+  for (const displayName of displayOrder) {
+    const normalizedDisplayName = displayName.trim().toLocaleLowerCase();
+    if (
+      entries.some(
+        (entry) => shelfEntryLabel(entry).trim().toLocaleLowerCase() === normalizedDisplayName,
+      )
+    ) {
+      continue;
+    }
+    const profile = profiles.find(
+      (candidate) =>
+        candidate.display_name.trim().toLocaleLowerCase() === normalizedDisplayName,
+    );
+    if (profile) entries.push({ kind: "profile", profile });
+  }
   // Order before applying the shelf limit so curated people are not dropped
   // merely because another bot appeared more recently.
   return orderSidebarPeopleShelf(entries, displayOrder).slice(0, limit);
