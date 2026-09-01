@@ -686,21 +686,23 @@
         />
       {/if}
       <span>{group.label}</span>
-      {#if groupWorking}
-        <span
-          class="sidebar-working-indicator"
-          role="status"
-          aria-label={`Agent is working in ${group.label}`}
-          title="Agent is working"
-        ></span>
-      {/if}
-      {#if groupUnreadCount(group) > 0}
-        <span class="unread-badge" aria-label={`${groupUnreadCount(group)} unread`}>
-          {groupUnreadCount(group) > 99 ? "99+" : groupUnreadCount(group)}
-        </span>
-      {:else if !groupWorking}
-        <span class="channel-subgroup-count">{group.channels.length}</span>
-      {/if}
+      <span class="channel-subgroup-status">
+        {#if groupWorking}
+          <span
+            class="sidebar-working-indicator"
+            role="status"
+            aria-label={`Agent is working in ${group.label}`}
+            title="Agent is working"
+          ></span>
+        {/if}
+        {#if groupUnreadCount(group) > 0}
+          <span class="unread-badge" aria-label={`${groupUnreadCount(group)} unread`}>
+            {groupUnreadCount(group) > 99 ? "99+" : groupUnreadCount(group)}
+          </span>
+        {:else if !groupWorking}
+          <span class="channel-subgroup-count">{group.channels.length}</span>
+        {/if}
+      </span>
     </svelte:element>
     </div>
     <div

@@ -713,8 +713,14 @@
   bottom: -3px;
 }
 
-.channel-subgroup-count {
+.channel-subgroup-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
+}
+
+.channel-subgroup-count {
   color: var(--muted-2);
   font-variant-numeric: tabular-nums;
 }

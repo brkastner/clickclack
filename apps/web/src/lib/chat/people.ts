@@ -149,8 +149,17 @@ export function collectSidebarPeopleShelf(
   replacements: readonly SidebarPeopleShelfReplacement[],
   displayOrder: readonly string[] = [],
   limit = 4,
+  availablePeople: readonly User[] = [],
 ): SidebarPeopleShelfEntry[] {
-  const people = recentPeople.slice(1).concat(recentPeople.slice(0, 1)).slice(0, limit);
+  const seen = new Set<string>();
+  const people = recentPeople
+    .slice(1)
+    .concat(recentPeople.slice(0, 1), availablePeople)
+    .filter((person) => {
+      if (seen.has(person.id)) return false;
+      seen.add(person.id);
+      return true;
+    });
   const entries: SidebarPeopleShelfEntry[] = people.map((person) => ({
     kind: "person",
     person,
@@ -166,9 +175,9 @@ export function collectSidebarPeopleShelf(
     );
     if (personIndex >= 0 && profile) entries[personIndex] = { kind: "profile", profile };
   }
-  // Order last, after the profile replacement is placed by its position in
-  // `people`, so the replacement still lands on the entry it replaced.
-  return orderSidebarPeopleShelf(entries, displayOrder);
+  // Order before applying the shelf limit so curated people are not dropped
+  // merely because another bot appeared more recently.
+  return orderSidebarPeopleShelf(entries, displayOrder).slice(0, limit);
 }
 
 export function collectChannelProfileShortcuts(

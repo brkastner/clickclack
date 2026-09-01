@@ -275,6 +275,60 @@ test("an explicit display order arranges the two-by-two shelf", () => {
   );
 });
 
+test("curated shelf entries win even when they are older than the shelf limit", () => {
+  const people = [
+    { ...bot, id: "usr_pi", display_name: "пи" },
+    { ...bot, id: "usr_claw", display_name: "клешня" },
+    { ...bot, id: "usr_kai", display_name: "кай" },
+    { ...bot, id: "usr_other", display_name: "другой" },
+    { ...bot, id: "usr_nudz", display_name: "нудз" },
+    { ...bot, id: "usr_russian", display_name: "училка" },
+  ];
+  const lisa = shortcut("chn_liz", "лиза");
+
+  const shelf = collectSidebarPeopleShelf(
+    people,
+    [lisa],
+    [{ personName: "клешня", profileName: "лиза" }],
+    ["кай", "лиза", "нудз", "училка"],
+  );
+
+  assert.deepEqual(
+    shelf.map((entry) =>
+      entry.kind === "person" ? entry.person.display_name : entry.profile.display_name,
+    ),
+    ["кай", "лиза", "нудз", "училка"],
+  );
+});
+
+test("curated shelf entries stay stable when navigation changes recency", () => {
+  const availablePeople = [
+    { ...bot, id: "usr_pi", display_name: "пи" },
+    { ...bot, id: "usr_claw", display_name: "клешня" },
+    { ...bot, id: "usr_kai", display_name: "кай" },
+    { ...bot, id: "usr_nudz", display_name: "нудз" },
+    { ...bot, id: "usr_russian", display_name: "училка" },
+  ];
+  const lisa = shortcut("chn_liz", "лиза");
+  const order = ["кай", "лиза", "нудз", "училка"];
+
+  const shelf = collectSidebarPeopleShelf(
+    availablePeople.slice(0, 3),
+    [lisa],
+    [{ personName: "клешня", profileName: "лиза" }],
+    order,
+    4,
+    availablePeople,
+  );
+
+  assert.deepEqual(
+    shelf.map((entry) =>
+      entry.kind === "person" ? entry.person.display_name : entry.profile.display_name,
+    ),
+    order,
+  );
+});
+
 test("profile groups follow the viewer channel order with пи pinned last", () => {
   const profiles = [
     shortcut("chn_career", "рекрутер"),

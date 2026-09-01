@@ -7,6 +7,10 @@ const sidebar = readFileSync(
   "utf8",
 );
 const sidebarStyles = readFileSync(new URL("../styles/sidebar.css", import.meta.url), "utf8");
+const channelList = readFileSync(
+  new URL("../components/navigation/ChannelList.svelte", import.meta.url),
+  "utf8",
+);
 
 test("keeps the recent-people shelf to one curated two-by-two page", () => {
   assert.match(sidebar, /collectSidebarPeopleShelf\(\s*recentPeople,\s*profileShortcuts/u);
@@ -14,7 +18,14 @@ test("keeps the recent-people shelf to one curated two-by-two page", () => {
   assert.match(sidebar, /profileName:\s*"лиза"/u);
   assert.doesNotMatch(sidebar, /profileName:\s*"рекрутер"/u);
   // The shelf is read left to right, top row first.
-  assert.match(sidebar, /PEOPLE_SHELF_ORDER = \["кай", "лиза", "нудз", "пи"\]/u);
+  assert.match(sidebar, /PEOPLE_SHELF_ORDER = \["кай", "лиза", "нудз", "училка"\]/u);
+});
+
+test("backs the curated shelf with stable profile people", () => {
+  assert.match(
+    sidebar,
+    /collectSidebarPeopleShelf\([\s\S]*?PEOPLE_SHELF_ORDER,\s*4,\s*profilePeople,/u,
+  );
 });
 
 test("fills the two-by-two shelf with larger avatars and compact spacing", () => {
@@ -54,4 +65,16 @@ test("sizes profile, channel, and direct-message navigation up", () => {
   assert.match(navItemStyles, /min-height:\s*38px/u);
   assert.match(navItemStyles, /padding:\s*6px 8px/u);
   assert.match(navLabelStyles, /font-size:\s*15px/u);
+});
+
+test("right-aligns profile working and unread indicators", () => {
+  assert.match(
+    channelList,
+    /class="channel-subgroup-status"[\s\S]*?class="sidebar-working-indicator"[\s\S]*?class="unread-badge"/u,
+  );
+
+  const statusStyles =
+    sidebarStyles.match(/\.channel-subgroup-status\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
+  assert.match(statusStyles, /margin-left:\s*auto/u);
+  assert.match(statusStyles, /display:\s*inline-flex/u);
 });
