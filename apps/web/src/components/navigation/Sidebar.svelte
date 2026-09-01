@@ -87,8 +87,8 @@
     onOpenWorkspaceSettings,
   }: Props = $props();
 
-  // Read left to right, top row first, in the two-by-two shelf.
-  const PEOPLE_SHELF_ORDER = ["кай", "лиза", "нудз", "училка"];
+  // Read left to right, top row first, in the two-by-three shelf.
+  const PEOPLE_SHELF_ORDER = ["кай", "лиза", "нудз", "училка", "рекрутер", "пи"];
 
   const displayedRecentPeople = $derived(
     collectSidebarPeopleShelf(
@@ -99,9 +99,13 @@
           personName: "клешня",
           profileName: "лиза",
         },
+        {
+          personName: "пи",
+          profileName: "пи",
+        },
       ],
       PEOPLE_SHELF_ORDER,
-      4,
+      6,
       profilePeople,
     ),
   );
@@ -261,6 +265,7 @@
               src={entry.profile.avatar_url}
               size={90}
             />
+            <span class="sidebar-person-name">{entry.profile.display_name}</span>
           </a>
         {:else}
           {@const person = entry.person}
@@ -288,6 +293,7 @@
               src={person.avatar_url}
               size={90}
             />
+            <span class="sidebar-person-name">{person.display_name}</span>
           </a>
         {/if}
       {/each}

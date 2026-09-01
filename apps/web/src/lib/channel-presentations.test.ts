@@ -361,6 +361,43 @@ test("curated shelf uses a matching profile when the person is unavailable", () 
   );
 });
 
+test("builds a stable six-profile shelf and keeps пи as a profile", () => {
+  const availablePeople = [
+    { ...bot, id: "usr_pi", display_name: "пи" },
+    { ...bot, id: "usr_claw", display_name: "клешня" },
+    { ...bot, id: "usr_kai", display_name: "кай" },
+    { ...bot, id: "usr_nudz", display_name: "нудз" },
+  ];
+  const profiles = [
+    shortcut("chn_liz", "лиза"),
+    shortcut("chn_teacher", "училка"),
+    shortcut("chn_career", "рекрутер"),
+    shortcut("chn_pi", "пи"),
+  ];
+  const order = ["кай", "лиза", "нудз", "училка", "рекрутер", "пи"];
+
+  const shelf = collectSidebarPeopleShelf(
+    availablePeople,
+    profiles,
+    [
+      { personName: "клешня", profileName: "лиза" },
+      { personName: "пи", profileName: "пи" },
+    ],
+    order,
+    6,
+    availablePeople,
+  );
+
+  assert.deepEqual(
+    shelf.map((entry) =>
+      entry.kind === "person" ? entry.person.display_name : entry.profile.display_name,
+    ),
+    order,
+  );
+  assert.equal(shelf[4]?.kind, "profile");
+  assert.equal(shelf[5]?.kind, "profile");
+});
+
 test("profile groups follow the viewer channel order with пи pinned last", () => {
   const profiles = [
     shortcut("chn_career", "рекрутер"),

@@ -12,38 +12,58 @@ const channelList = readFileSync(
   "utf8",
 );
 
-test("keeps the recent-people shelf to one curated two-by-two page", () => {
+test("keeps the profile shelf to one curated two-by-three page", () => {
   assert.match(sidebar, /collectSidebarPeopleShelf\(\s*recentPeople,\s*profileShortcuts/u);
   assert.match(sidebar, /personName:\s*"клешня"/u);
   assert.match(sidebar, /profileName:\s*"лиза"/u);
-  assert.doesNotMatch(sidebar, /profileName:\s*"рекрутер"/u);
+  assert.match(sidebar, /personName:\s*"пи"[\s\S]*?profileName:\s*"пи"/u);
   // The shelf is read left to right, top row first.
-  assert.match(sidebar, /PEOPLE_SHELF_ORDER = \["кай", "лиза", "нудз", "училка"\]/u);
+  assert.match(
+    sidebar,
+    /PEOPLE_SHELF_ORDER = \["кай", "лиза", "нудз", "училка", "рекрутер", "пи"\]/u,
+  );
 });
 
 test("backs the curated shelf with stable profile people", () => {
   assert.match(
     sidebar,
-    /collectSidebarPeopleShelf\([\s\S]*?PEOPLE_SHELF_ORDER,\s*4,\s*profilePeople,/u,
+    /collectSidebarPeopleShelf\([\s\S]*?PEOPLE_SHELF_ORDER,\s*6,\s*profilePeople,/u,
   );
 });
 
-test("fills the two-by-two shelf with larger avatars and compact spacing", () => {
+test("fills the two-by-three shelf with labeled avatars and compact spacing", () => {
   const shelfStyles = sidebarStyles.match(/\.sidebar-people-row\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
   const personStyles = sidebarStyles.match(/\.sidebar-person\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
   const avatarStyles =
     sidebarStyles.match(/\.sidebar-person > \.avatar\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
 
+  const labelStyles =
+    sidebarStyles.match(/\.sidebar-person-name\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
+
   assert.match(shelfStyles, /grid-template-columns:\s*repeat\(2, 92px\)/u);
-  assert.match(shelfStyles, /grid-template-rows:\s*repeat\(2, 92px\)/u);
-  assert.match(shelfStyles, /min-height:\s*214px/u);
+  assert.match(shelfStyles, /grid-template-rows:\s*repeat\(3, 112px\)/u);
+  assert.match(shelfStyles, /min-height:\s*360px/u);
   assert.match(shelfStyles, /align-content:\s*space-evenly/u);
   assert.match(shelfStyles, /justify-content:\s*space-around/u);
   assert.match(shelfStyles, /margin:\s*0 0 8px/u);
   assert.match(personStyles, /width:\s*92px/u);
-  assert.match(personStyles, /height:\s*92px/u);
+  assert.match(personStyles, /height:\s*112px/u);
+  assert.match(personStyles, /grid-template-rows:\s*90px 16px/u);
   assert.match(avatarStyles, /width:\s*90px/u);
   assert.match(avatarStyles, /height:\s*90px/u);
+  assert.match(labelStyles, /text-overflow:\s*ellipsis/u);
+  assert.match(labelStyles, /text-align:\s*center/u);
+});
+
+test("labels shelf tiles with their presented names", () => {
+  assert.match(
+    sidebar,
+    /name=\{entry\.profile\.display_name\}[\s\S]*?<span class="sidebar-person-name">\{entry\.profile\.display_name\}<\/span>/u,
+  );
+  assert.match(
+    sidebar,
+    /name=\{person\.display_name\}[\s\S]*?<span class="sidebar-person-name">\{person\.display_name\}<\/span>/u,
+  );
 });
 
 test("sizes profile, channel, and direct-message navigation up", () => {
