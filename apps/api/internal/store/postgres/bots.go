@@ -752,72 +752,14 @@ type botDeletionCounts struct {
 // DeleteBot: a user-owned bot is editable only by its owner, and a service bot
 // requires the requester to manage every workspace the bot still operates in.
 func (s *Store) UpdateBotProfile(ctx context.Context, input store.UpdateBotProfileInput) (store.User, error) {
-	botUserID := strings.TrimSpace(input.BotUserID)
-	requesterID := strings.TrimSpace(input.RequesterID)
-	if botUserID == "" {
-		return store.User{}, errors.New("bot_user_id is required")
-	}
-	if requesterID == "" {
-		return store.User{}, errors.New("requester_id is required")
-	}
-	displayName, handle, avatarURL, err := normalizeUserProfilePatch(input.DisplayName, input.Handle, input.AvatarURL)
-	if err != nil {
-		return store.User{}, err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.User{}, err
 	}
 	defer tx.Rollback()
-	if err := lockBotLifecycleTx(ctx, tx, botUserID); err != nil {
-		return store.User{}, err
-	}
-	qtx := s.q.WithTx(tx)
-	row, err := qtx.GetActiveBotForDeletion(ctx, botUserID)
+	bot, err := s.updateBotProfileTx(ctx, tx, input)
 	if err != nil {
 		return store.User{}, err
-	}
-	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
-	if err := requireBotProfileManagerTx(ctx, tx, qtx, bot, requesterID); err != nil {
-		return store.User{}, err
-	}
-	if displayName != nil {
-		if err := qtx.UpdateUserDisplayName(ctx, storedb.UpdateUserDisplayNameParams{
-			DisplayName: *displayName,
-			ID:          bot.ID,
-		}); err != nil {
-			return store.User{}, err
-		}
-	}
-	if handle != nil {
-		if err := qtx.UpdateUserHandle(ctx, storedb.UpdateUserHandleParams{
-			Handle: *handle,
-			ID:     bot.ID,
-		}); err != nil {
-			return store.User{}, profileUpdateError(err)
-		}
-	}
-	if avatarURL != nil {
-		if err := qtx.UpdateUserAvatar(ctx, storedb.UpdateUserAvatarParams{
-			AvatarUrl: *avatarURL,
-			ID:        bot.ID,
-		}); err != nil {
-			return store.User{}, err
-		}
-	}
-	if displayName != nil || handle != nil || avatarURL != nil {
-		updatedRow, err := qtx.GetUser(ctx, bot.ID)
-		if err != nil {
-			return store.User{}, err
-		}
-		updated := storeUserFromGetUser(updatedRow)
-		if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
-			DisplayName: updated.DisplayName,
-			Handle:      updated.Handle,
-			UserID:      bot.ID,
-		}); err != nil {
-			return store.User{}, err
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		return store.User{}, err
@@ -826,19 +768,19 @@ func (s *Store) UpdateBotProfile(ctx context.Context, input store.UpdateBotProfi
 }
 
 func (s *Store) UpdateBotProfileWithEvents(ctx context.Context, input store.UpdateBotProfileInput) (store.User, []store.Event, error) {
-	bot, err := s.UpdateBotProfile(ctx, input)
-	if err != nil {
-		return store.User{}, nil, err
-	}
-	workspaces, err := s.ListWorkspaces(ctx, bot.ID)
-	if err != nil {
-		return store.User{}, nil, err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return store.User{}, nil, err
 	}
 	defer tx.Rollback()
+	bot, err := s.updateBotProfileTx(ctx, tx, input)
+	if err != nil {
+		return store.User{}, nil, err
+	}
+	workspaces, err := s.q.WithTx(tx).ListWorkspaces(ctx, bot.ID)
+	if err != nil {
+		return store.User{}, nil, err
+	}
 	events := make([]store.Event, 0, len(workspaces))
 	for _, workspace := range workspaces {
 		event, err := insertEvent(ctx, tx, workspace.ID, "", "bot.updated", nil, map[string]string{
@@ -853,6 +795,64 @@ func (s *Store) UpdateBotProfileWithEvents(ctx context.Context, input store.Upda
 		return store.User{}, nil, err
 	}
 	return bot, events, nil
+}
+
+func (s *Store) updateBotProfileTx(ctx context.Context, tx *sql.Tx, input store.UpdateBotProfileInput) (store.User, error) {
+	botUserID := strings.TrimSpace(input.BotUserID)
+	requesterID := strings.TrimSpace(input.RequesterID)
+	if botUserID == "" {
+		return store.User{}, errors.New("bot_user_id is required")
+	}
+	if requesterID == "" {
+		return store.User{}, errors.New("requester_id is required")
+	}
+	displayName, handle, avatarURL, err := normalizeUserProfilePatch(input.DisplayName, input.Handle, input.AvatarURL)
+	if err != nil {
+		return store.User{}, err
+	}
+	if err := lockBotLifecycleTx(ctx, tx, botUserID); err != nil {
+		return store.User{}, err
+	}
+	qtx := s.q.WithTx(tx)
+	row, err := qtx.GetActiveBotForDeletion(ctx, botUserID)
+	if err != nil {
+		return store.User{}, err
+	}
+	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	if err := requireBotProfileManagerTx(ctx, tx, qtx, bot, requesterID); err != nil {
+		return store.User{}, err
+	}
+	if displayName != nil {
+		if err := qtx.UpdateUserDisplayName(ctx, storedb.UpdateUserDisplayNameParams{DisplayName: *displayName, ID: bot.ID}); err != nil {
+			return store.User{}, err
+		}
+	}
+	if handle != nil {
+		if err := qtx.UpdateUserHandle(ctx, storedb.UpdateUserHandleParams{Handle: *handle, ID: bot.ID}); err != nil {
+			return store.User{}, profileUpdateError(err)
+		}
+	}
+	if avatarURL != nil {
+		if err := qtx.UpdateUserAvatar(ctx, storedb.UpdateUserAvatarParams{AvatarUrl: *avatarURL, ID: bot.ID}); err != nil {
+			return store.User{}, err
+		}
+	}
+	if displayName == nil && handle == nil && avatarURL == nil {
+		return bot, nil
+	}
+	updatedRow, err := qtx.GetUser(ctx, bot.ID)
+	if err != nil {
+		return store.User{}, err
+	}
+	updated := storeUserFromGetUser(updatedRow)
+	if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
+		DisplayName: updated.DisplayName,
+		Handle:      updated.Handle,
+		UserID:      bot.ID,
+	}); err != nil {
+		return store.User{}, err
+	}
+	return updated, nil
 }
 
 // requireBotProfileManagerTx allows a user-owned bot's owner, or a manager of
