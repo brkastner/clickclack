@@ -3494,7 +3494,12 @@ WHERE dc.workspace_id = ?2
     WHERE dch.conversation_id = dc.id
       AND dch.user_id = ?1
   )
-ORDER BY dc.created_at
+ORDER BY COALESCE(
+           (SELECT MAX(m.created_at) FROM messages m WHERE m.direct_conversation_id = dc.id),
+           dc.created_at
+         ) DESC,
+         dc.created_at DESC,
+         dc.id
 `
 
 type ListDirectConversationsParams struct {

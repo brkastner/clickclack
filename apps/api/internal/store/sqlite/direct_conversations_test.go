@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -117,6 +118,133 @@ func TestCreateDirectConversationReusesLegacyUnkeyedPair(t *testing.T) {
 	}
 	if got := scalarCount(t, ctx, st, `SELECT COUNT(*) FROM direct_conversations WHERE workspace_id = ?`, workspace.ID); got != 1 {
 		t.Fatalf("expected no duplicate conversation row, got %d", got)
+	}
+}
+
+func TestListDirectConversationsOrdersByLatestMessage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+
+	conversationIDs := make([]string, 0, 3)
+	for index, name := range []string{"First", "Second", "Third"} {
+		member, err := st.CreateUser(ctx, store.CreateUserInput{
+			DisplayName: name,
+			Email:       name + "@example.com",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+			t.Fatal(err)
+		}
+		conversation, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+			WorkspaceID: workspace.ID,
+			UserID:      owner.ID,
+			MemberIDs:   []string{member.ID},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{
+			ConversationID: conversation.ID,
+			AuthorID:       owner.ID,
+			Body:           name,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		mustExecSQL(
+			t,
+			ctx,
+			st,
+			`UPDATE messages SET created_at = ? WHERE direct_conversation_id = ?`,
+			[]string{"2026-01-01T00:00:00Z", "2026-03-01T00:00:00Z", "2026-02-01T00:00:00Z"}[index],
+			conversation.ID,
+		)
+		conversationIDs = append(conversationIDs, conversation.ID)
+	}
+
+	listed, err := st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{conversationIDs[1], conversationIDs[2], conversationIDs[0]}
+	if len(listed) != len(want) {
+		t.Fatalf("expected %d direct conversations, got %#v", len(want), listed)
+	}
+	for index, conversationID := range want {
+		if listed[index].ID != conversationID {
+			t.Fatalf("expected recency order %v, got %#v", want, listed)
+		}
+	}
+}
+
+func TestListDirectConversationsUsesDeterministicEmptyFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Owner", "owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+
+	conversationIDs := make([]string, 0, 3)
+	for _, name := range []string{"First", "Second", "Third"} {
+		member, err := st.CreateUser(ctx, store.CreateUserInput{
+			DisplayName: name,
+			Email:       "empty-" + name + "@example.com",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.AddWorkspaceMember(ctx, workspace.ID, member.ID, store.WorkspaceRoleMember); err != nil {
+			t.Fatal(err)
+		}
+		conversation, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
+			WorkspaceID: workspace.ID,
+			UserID:      owner.ID,
+			MemberIDs:   []string{member.ID},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		conversationIDs = append(conversationIDs, conversation.ID)
+	}
+	mustExecSQL(t, ctx, st, `UPDATE direct_conversations SET created_at = '2026-01-01T00:00:00Z' WHERE id = ?`, conversationIDs[0])
+	for _, conversationID := range conversationIDs[1:] {
+		mustExecSQL(t, ctx, st, `UPDATE direct_conversations SET created_at = '2026-02-01T00:00:00Z' WHERE id = ?`, conversationID)
+	}
+
+	listed, err := st.ListDirectConversations(ctx, workspace.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tied := append([]string(nil), conversationIDs[1:]...)
+	sort.Strings(tied)
+	want := append(tied, conversationIDs[0])
+	if len(listed) != len(want) {
+		t.Fatalf("expected %d direct conversations, got %#v", len(want), listed)
+	}
+	for index, conversationID := range want {
+		if listed[index].ID != conversationID {
+			t.Fatalf("expected deterministic empty-conversation order %v, got %#v", want, listed)
+		}
 	}
 }
 

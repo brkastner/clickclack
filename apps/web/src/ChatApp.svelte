@@ -4,6 +4,10 @@
   import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError, voiceBaseURL } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
   import { desktop } from "./lib/desktop";
+  import {
+    directConversationIDForRecencyEvent,
+    promoteDirectConversation,
+  } from "./lib/directConversationRecency";
   import { probeMediaDimensions } from "./lib/media";
   import {
     DEFAULT_SIDEBAR_WIDTH,
@@ -3120,6 +3124,12 @@
         method: "POST",
         body: JSON.stringify(payload),
       });
+      if (draft.directConversationID) {
+        directConversations = promoteDirectConversation(
+          directConversations,
+          draft.directConversationID,
+        );
+      }
       let message = data.message;
       updateConversationAgentWork(draft.viewKey, {
         type: "pending.replace",
@@ -3397,6 +3407,9 @@
         sendID: nonce,
         replacementID: data.message.id,
       });
+      if (directConversations.some((conversation) => conversation.id === conversationID)) {
+        directConversations = promoteDirectConversation(directConversations, conversationID);
+      }
       if (quote) clearReplyTarget();
       if (!replies.some((reply) => reply.id === data.message.id)) {
         replies = [...replies, data.message];
@@ -4105,6 +4118,13 @@
       await loadTopics(event.workspace_id);
     }
     if (messageEventAlreadyAccounted(event)) return;
+    const recentDirectConversationID = directConversationIDForRecencyEvent(event);
+    if (recentDirectConversationID) {
+      directConversations = promoteDirectConversation(
+        directConversations,
+        recentDirectConversationID,
+      );
+    }
     if (
       (event.type === "message.updated" || event.type === "message.deleted") &&
       pinnedMessageIDs.has(event.payload.message_id || "")
@@ -4303,6 +4323,7 @@
 
   function handleUnreadBump(event: RealtimeEvent, activeWasAtBottom?: boolean) {
     const payload = event.payload as Record<string, unknown>;
+    const { channelID, dmID } = messageEventScope(event);
     // Durable agent activity messages never bump unread counts, mirroring the
     // server-side accounting (their rows are excluded from unread subqueries).
     const kind = typeof payload.kind === "string" ? payload.kind : "";
@@ -4313,7 +4334,6 @@
     // Threaded replies don't affect channel unread (channel_seq isn't assigned).
     if (payload.parent_message_id) return;
     const seq = eventMessageSeq(event);
-    const { channelID, dmID } = messageEventScope(event);
     if (channelID) {
       const isActive = channelID === selectedChannelID && !selectedDirectID;
       const activeAtBottom =

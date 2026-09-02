@@ -1191,7 +1191,12 @@ WHERE dc.workspace_id = sqlc.arg(workspace_id)
     WHERE dch.conversation_id = dc.id
       AND dch.user_id = sqlc.arg(reader_user_id)
   )
-ORDER BY dc.created_at;
+ORDER BY COALESCE(
+           (SELECT MAX(m.created_at) FROM messages m WHERE m.direct_conversation_id = dc.id),
+           dc.created_at
+         ) DESC,
+         dc.created_at DESC,
+         dc.id;
 
 -- name: GetDirectConversation :one
 SELECT dc.id, COALESCE(dc.route_id, '') AS route_id, dc.workspace_id, dc.created_at,
