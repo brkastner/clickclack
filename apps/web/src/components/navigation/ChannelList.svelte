@@ -168,6 +168,7 @@
 {#snippet channelRow(channel: Channel, scope: Channel[], groupKey: string, subdued = false)}
   {@const unread = channel.unread_count || 0}
   {@const index = scope.findIndex((candidate) => candidate.id === channel.id)}
+  {@const assignment = assignmentFor(channel)}
   <div class="channel-row" class:subdued class:reorderable={expanded} role="listitem" class:drop-before={dropTargetID === channel.id && dropBefore} class:drop-after={dropTargetID === channel.id && !dropBefore}
     oncontextmenu={(event) => void openChannelContextMenu(event, channel)}
     ondragover={(event) => { if (!draggedChannelID || draggedGroupKey !== groupKey || draggedChannelID === channel.id) return; event.preventDefault(); dropTargetID = channel.id; dropBefore = event.clientY < (event.currentTarget as HTMLElement).getBoundingClientRect().top + (event.currentTarget as HTMLElement).offsetHeight / 2; }}
@@ -191,7 +192,6 @@
       {#if moveMenuChannelID === channel.id}
         <div class="channel-move-menu" role="menu" tabindex="-1" aria-label={`Move #${channelDisplayTitle(channel)}`} bind:this={moveMenuElement}
           onkeydown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); void closeMoveMenu(true); } }}>
-          {@const assignment = assignmentFor(channel)}
           {#if assignment}
             <button type="button" role="menuitem" disabled={personaChannelPins[assignment.bot_user_id] === channel.id} onclick={() => pin(channel, assignment)}>Pin</button>
           {/if}
