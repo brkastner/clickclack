@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { findMentionRanges } from "./actions/mention-highlight.ts";
 
-const handles = new Set(["alice", "openclaw-bot", "лиза"]);
+const handles = new Set(["alice", "openclaw-bot", "ботик"]);
 
 test("finds known handles at token boundaries", () => {
   assert.deepEqual(findMentionRanges("@alice please ask @openclaw-bot", handles), [
@@ -28,7 +28,7 @@ test("matches handles case-insensitively", () => {
 });
 
 test("matches unicode handles", () => {
-  assert.deepEqual(findMentionRanges("привет @лиза", handles), [
-    { start: 7, end: 12, handle: "лиза" },
+  assert.deepEqual(findMentionRanges("привет @ботик", handles), [
+    { start: 7, end: 13, handle: "ботик" },
   ]);
 });

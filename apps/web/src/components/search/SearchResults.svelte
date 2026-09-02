@@ -1,6 +1,6 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import { handleLabel, isDeletedBot, presentChannelUser, userHandle } from "../../lib/chat/people";
+  import { handleLabel, isDeletedBot, userHandle } from "../../lib/chat/people";
   import type { Channel, SearchHighlight, SearchResult, SearchSession } from "../../lib/types";
 
   type Props = {
@@ -96,7 +96,7 @@
       <ul class="search-result-list">
         {#each session.results as result (result.id)}
           {@const context = contextFor(result)}
-          {@const author = presentChannelUser(result.author, channels.find((channel) => channel.id === result.channel_id)) || result.author}
+          {@const author = result.author}
           <li>
             <button
               type="button"

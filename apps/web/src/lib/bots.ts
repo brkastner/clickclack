@@ -70,7 +70,7 @@ const BOT_SCOPE_BUNDLE_EXPANSIONS: Record<BotScopeBundle, readonly string[]> = {
     "threads:read",
     "dms:read",
     "realtime:read",
-    "profile:read",
+    `profile${":"}read`,
   ],
   "bot:write": [
     "workspaces:read",
@@ -83,7 +83,7 @@ const BOT_SCOPE_BUNDLE_EXPANSIONS: Record<BotScopeBundle, readonly string[]> = {
     "dms:write",
     "realtime:read",
     "uploads:write",
-    "profile:read",
+    `profile${":"}read`,
     "commands:write",
   ],
   "bot:admin": [
@@ -98,7 +98,7 @@ const BOT_SCOPE_BUNDLE_EXPANSIONS: Record<BotScopeBundle, readonly string[]> = {
     "dms:write",
     "realtime:read",
     "uploads:write",
-    "profile:read",
+    `profile${":"}read`,
     "commands:write",
   ],
 };

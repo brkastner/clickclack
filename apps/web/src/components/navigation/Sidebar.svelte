@@ -1,12 +1,6 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import {
-    collectSidebarPeopleShelf,
-    directConversationForUser,
-    handleLabel,
-    profileHeaderTarget,
-    type ChannelProfileShortcut,
-  } from "../../lib/chat/people";
+  import { directConversationForUser, handleLabel, type ChannelProfileShortcut } from "../../lib/chat/people";
   import type { Channel, DirectConversation, User, Workspace } from "../../lib/types";
   import ChannelList from "./ChannelList.svelte";
   import DirectMessageList from "./DirectMessageList.svelte";
@@ -88,28 +82,7 @@
     onOpenWorkspaceSettings,
   }: Props = $props();
 
-  // Read left to right, top row first, in the two-by-three shelf.
-  const PEOPLE_SHELF_ORDER = ["кай", "лиза", "рекрутер", "нудз", "училка", "пи"];
-
-  const displayedRecentPeople = $derived(
-    collectSidebarPeopleShelf(
-      recentPeople,
-      profileShortcuts,
-      [
-        {
-          personName: "клешня",
-          profileName: "лиза",
-        },
-        {
-          personName: "пи",
-          profileName: "пи",
-        },
-      ],
-      PEOPLE_SHELF_ORDER,
-      6,
-      profilePeople,
-    ),
-  );
+  const displayedRecentPeople = $derived(recentPeople.slice(0, 6));
 
   type SectionState = { channels: boolean; directMessages: boolean };
   const SECTION_STORAGE_PREFIX = "clickclack:sidebar-sections:v1:";
@@ -246,36 +219,7 @@
 
   <div class="sidebar-scroll">
     <section class="sidebar-people-row" aria-label="Recent people">
-      {#each displayedRecentPeople as entry (entry.kind === "profile" ? entry.profile.id : entry.person.id)}
-        {#if entry.kind === "profile"}
-          {@const target = profileHeaderTarget(entry.profile, profilePeople, directConversations)}
-          <a
-            href={target.kind === "direct" ? hrefForDirect(target.id) : hrefForChannel(target.id)}
-            class="sidebar-person"
-            class:active={
-              target.kind === "direct"
-                ? target.id === selectedDirectID
-                : target.id === selectedChannelID
-            }
-            title={entry.profile.display_name}
-            aria-label={entry.profile.display_name}
-            onclick={(event) => {
-              if (!shouldHandleClientNavigation(event)) return;
-              event.preventDefault();
-              if (target.kind === "direct") onSelectDirect(target.id);
-              else onSelectChannel(target.id);
-            }}
-          >
-            <Avatar
-              id={entry.profile.id}
-              name={entry.profile.display_name}
-              src={entry.profile.avatar_url}
-              size={90}
-            />
-            <span class="sidebar-person-name">{entry.profile.display_name}</span>
-          </a>
-        {:else}
-          {@const person = entry.person}
+      {#each displayedRecentPeople as person (person.id)}
           {@const conversation = directConversationForUser(directConversations, person.id)}
           <a
             href={conversation ? hrefForDirect(conversation.id) : "#"}
@@ -302,7 +246,6 @@
             />
             <span class="sidebar-person-name">{person.display_name}</span>
           </a>
-        {/if}
       {/each}
       {#if displayedRecentPeople.length === 0}
         <span class="sidebar-people-empty">No recent people</span>

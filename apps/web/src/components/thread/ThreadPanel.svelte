@@ -4,14 +4,7 @@
   import Avatar from "../avatar/Avatar.svelte";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
-  import {
-    handleLabel,
-    isDeletedBot,
-    presentChannelMessage,
-    presentChannelUser,
-    userHandle,
-    type ChannelProfileShortcut,
-  } from "../../lib/chat/people";
+  import { handleLabel, isDeletedBot, userHandle } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
   import { writeClipboardText } from "../../lib/clipboard";
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
@@ -40,7 +33,6 @@
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
     mentionPeople?: User[];
-    mentionProfiles?: ChannelProfileShortcut[];
     mentionAttentionUserID?: string;
     agentResponding?: boolean;
     respondingAgentNames?: string[];
@@ -85,7 +77,6 @@
     reactionController,
     reactionsDisabled = false,
     mentionPeople = [],
-    mentionProfiles = [],
     mentionAttentionUserID,
     agentResponding = false,
     respondingAgentNames = [],
@@ -121,7 +112,7 @@
 
   let threadScroll = $state<HTMLDivElement>();
   let editSession = $derived(editController?.session(editScope));
-  let rootAuthor = $derived(presentChannelUser(root.author, channel));
+  let rootAuthor = $derived(root.author);
   const editReturnFocus = new Map<string, HTMLElement>();
   const canDelete = (message: Message) =>
     canDeleteAnyMessage ||
@@ -365,7 +356,7 @@
   function sheetDelete() {
     const message = actionMessage;
     closeActionSheet();
-    if (message) onDeleteMessage?.(presentChannelMessage(message, channel));
+    if (message) onDeleteMessage?.(message);
   }
 
   async function togglePin(message: Message) {
@@ -528,7 +519,7 @@
               aria-label="Delete message"
               data-tooltip="Delete message"
               disabled={deletingMessageIDs.has(root.id)}
-              onclick={() => onDeleteMessage?.(presentChannelMessage(root, channel))}
+              onclick={() => onDeleteMessage?.(root)}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
@@ -599,7 +590,7 @@
   <div class="thread-divider"><span>{replies.length} {replies.length === 1 ? "reply" : "replies"}</span></div>
   <div class="reply-list">
     {#each replies as reply (reply.id)}
-      {@const replyAuthor = presentChannelUser(reply.author, channel)}
+      {@const replyAuthor = reply.author}
       <!-- svelte-ignore a11y_no_static_element_interactions (Long-press supplements the focusable More actions button.) -->
       <article
         class="reply"
@@ -676,7 +667,7 @@
                   aria-label="Delete message"
                   data-tooltip="Delete message"
                   disabled={deletingMessageIDs.has(reply.id)}
-                  onclick={() => onDeleteMessage?.(presentChannelMessage(reply, channel))}
+                  onclick={() => onDeleteMessage?.(reply)}
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                     <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-1 5v6M9 11v6m-3-11 1 14h10l1-14"/>
@@ -713,7 +704,7 @@
               onSave={() => saveEdit(reply)}
             />
           {:else}
-            <QuoteBlock message={presentChannelMessage(reply, channel)} onJump={onJumpToQuote} />
+            <QuoteBlock message={reply} onJump={onJumpToQuote} />
             <div
               class="markdown"
               use:enhanceMarkdown
@@ -796,7 +787,6 @@
   disabled={replyDisabled}
   replyTarget={replyTarget}
   {mentionPeople}
-  {mentionProfiles}
   onValue={onReplyBody}
   onSubmit={onSubmitReply}
   onKeydown={onReplyKeydown}

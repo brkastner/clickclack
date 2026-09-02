@@ -68,11 +68,11 @@ test("uses a channel presentation name without changing responder identity", () 
   assert.deepEqual(
     respondingAgentNames(
       turns,
-      [command("bot-a", "кай")],
+      [command("bot-a", "canonical")],
       () => undefined,
-      (userID, fallback) => (userID === "bot-a" ? "лиза" : fallback),
+      (userID, fallback) => (userID === "bot-a" ? "alias" : fallback),
     ),
-    ["лиза"],
+    ["alias"],
   );
 });
 

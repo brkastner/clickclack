@@ -2,22 +2,11 @@ import type { Channel, DirectConversation, Message, User } from "../types";
 
 export type ChannelProfileShortcut = {
   id: string;
-  channel_id: string;
-  channel_name: string;
   bot_user_id: string;
   display_name: string;
   avatar_url: string;
   handle: string;
   unread_count: number;
-};
-
-export type SidebarPeopleShelfEntry =
-  | { kind: "person"; person: User }
-  | { kind: "profile"; profile: ChannelProfileShortcut };
-
-export type SidebarPeopleShelfReplacement = {
-  personName: string;
-  profileName: string;
 };
 
 export function workspaceInitial(name: string): string {
@@ -42,14 +31,6 @@ export function userHandle(user?: User | null): string {
   return user?.handle || user?.former_handle || "";
 }
 
-export function channelProfileMentionText(
-  profile: ChannelProfileShortcut,
-  people: readonly User[],
-): string {
-  const person = people.find((candidate) => candidate.id === profile.bot_user_id);
-  return `@${person?.handle || profile.handle} `;
-}
-
 export function isDeletedBot(user?: User | null): boolean {
   return user?.kind === "bot" && !!user.deleted_at;
 }
@@ -57,58 +38,6 @@ export function isDeletedBot(user?: User | null): boolean {
 export function userDisplayLabel(user?: User | null, fallback = "Local User"): string {
   const name = user?.display_name || fallback;
   return isDeletedBot(user) ? `${name} (deleted bot)` : name;
-}
-
-export function presentChannelUser(
-  user: User | undefined,
-  channel?: Channel,
-  channels: Channel[] = [],
-  people: User[] = [],
-): User | undefined {
-  if (!user || user.kind !== "bot" || user.deleted_at) return user;
-  const currentBot = people.find((person) => person.id === user.id && !person.deleted_at) || user;
-  const profileSourceID = channel?.sidebar_section?.startsWith("profile:")
-    ? channel.sidebar_section.slice("profile:".length)
-    : "";
-  const profileSource = profileSourceID
-    ? channels.find((candidate) => candidate.id === profileSourceID)
-    : undefined;
-  const presentation = (profileSource?.bot_presentations || channel?.bot_presentations)?.find(
-    (candidate) => candidate.bot_user_id === user.id,
-  );
-  if (!presentation) return user;
-  const canonical =
-    presentation.display_name.trim() !== "" &&
-    presentation.display_name.trim() === currentBot.display_name.trim();
-  return {
-    ...user,
-    display_name: presentation.display_name,
-    avatar_url: canonical
-      ? currentBot.avatar_url || presentation.avatar_url || user.avatar_url
-      : presentation.avatar_url || currentBot.avatar_url || user.avatar_url,
-  };
-}
-
-export function presentChannelMessage(
-  message: Message,
-  channel?: Channel,
-  channels: Channel[] = [],
-  people: User[] = [],
-): Message {
-  if (!channel || message.channel_id !== channel.id) return message;
-  const author = presentChannelUser(message.author, channel, channels, people);
-  const quotedAuthor = presentChannelUser(message.quoted_author, channel, channels, people);
-  if (author === message.author && quotedAuthor === message.quoted_author) return message;
-  return { ...message, author, quoted_author: quotedAuthor };
-}
-
-export function presentChannelMessages(
-  messages: Message[],
-  channel?: Channel,
-  channels: Channel[] = [],
-  people: User[] = [],
-): Message[] {
-  return messages.map((message) => presentChannelMessage(message, channel, channels, people));
 }
 
 export function avatarHue(seed: string): number {
@@ -137,197 +66,34 @@ export function collectRecentPeople(
   const people = new Map<string, User>();
   for (const conversation of conversations) {
     for (const member of conversation.members) {
-      if (member.id && member.id !== currentUserID && !member.deleted_at) {
+      if (member.id && member.id !== currentUserID && !member.deleted_at)
         people.set(member.id, member);
-      }
     }
   }
   for (const message of [...messageList].reverse()) {
     const author = message.author;
-    if (author?.id && author.id !== currentUserID && !author.deleted_at) {
+    if (author?.id && author.id !== currentUserID && !author.deleted_at)
       people.set(author.id, author);
-    }
   }
   return [...people.values()].slice(0, 12);
 }
 
-function shelfEntryLabel(entry: SidebarPeopleShelfEntry): string {
-  return entry.kind === "person" ? entry.person.display_name : entry.profile.display_name;
-}
-
-/**
- * Sorts shelf entries into an explicit display order by name.
- *
- * The shelf renders as a two-by-two grid, so this sequence is read left to
- * right, top row first. Names outside `displayOrder` keep their relative order
- * after the named ones instead of disappearing.
- */
-export function orderSidebarPeopleShelf(
-  entries: SidebarPeopleShelfEntry[],
-  displayOrder: readonly string[],
-): SidebarPeopleShelfEntry[] {
-  if (displayOrder.length === 0) return entries;
-  const ranked = displayOrder.map((name) => name.trim().toLocaleLowerCase());
-  const rankOf = (entry: SidebarPeopleShelfEntry) => {
-    const position = ranked.indexOf(shelfEntryLabel(entry).trim().toLocaleLowerCase());
-    return position === -1 ? Number.MAX_SAFE_INTEGER : position;
-  };
-  return entries
-    .map((entry, index) => ({ entry, index }))
-    .sort((left, right) => rankOf(left.entry) - rankOf(right.entry) || left.index - right.index)
-    .map(({ entry }) => entry);
-}
-
-export function collectSidebarPeopleShelf(
-  recentPeople: User[],
-  profiles: ChannelProfileShortcut[],
-  replacements: readonly SidebarPeopleShelfReplacement[],
-  displayOrder: readonly string[] = [],
-  limit = 4,
-  availablePeople: readonly User[] = [],
-): SidebarPeopleShelfEntry[] {
-  const seen = new Set<string>();
-  const people = recentPeople
-    .slice(1)
-    .concat(recentPeople.slice(0, 1), availablePeople)
-    .filter((person) => {
-      if (seen.has(person.id)) return false;
-      seen.add(person.id);
-      return true;
-    });
-  const entries: SidebarPeopleShelfEntry[] = people.map((person) => ({
-    kind: "person",
-    person,
-  }));
-  for (const replacement of replacements) {
-    const normalizedPersonName = replacement.personName.trim().toLocaleLowerCase();
-    const normalizedProfileName = replacement.profileName.trim().toLocaleLowerCase();
-    const personIndex = people.findIndex(
-      (person) => person.display_name.trim().toLocaleLowerCase() === normalizedPersonName,
-    );
-    const profile = profiles.find(
-      (candidate) => candidate.display_name.trim().toLocaleLowerCase() === normalizedProfileName,
-    );
-    if (personIndex >= 0 && profile) entries[personIndex] = { kind: "profile", profile };
-  }
-  for (const displayName of displayOrder) {
-    const normalizedDisplayName = displayName.trim().toLocaleLowerCase();
-    if (
-      entries.some(
-        (entry) => shelfEntryLabel(entry).trim().toLocaleLowerCase() === normalizedDisplayName,
-      )
-    ) {
-      continue;
-    }
-    const profile = profiles.find(
-      (candidate) => candidate.display_name.trim().toLocaleLowerCase() === normalizedDisplayName,
-    );
-    if (profile) entries.push({ kind: "profile", profile });
-  }
-  // Order before applying the shelf limit so curated people are not dropped
-  // merely because another bot appeared more recently.
-  return orderSidebarPeopleShelf(entries, displayOrder).slice(0, limit);
-}
-
 export function collectChannelProfileShortcuts(
-  channels: Channel[],
+  _channels: Channel[],
   people: User[],
 ): ChannelProfileShortcut[] {
-  const peopleByID = new Map(people.map((person) => [person.id, person]));
-  return channels.flatMap((channel) => {
-    const profileSource = channel.sidebar_section?.startsWith("profile:")
-      ? channel.sidebar_section.slice("profile:".length)
-      : "";
-    // A copied presentation belongs to an assigned channel, not the profile
-    // catalog. Only self-referential profile sections define draggable profiles.
-    if (profileSource && profileSource !== channel.id) return [];
-    return (channel.bot_presentations || []).flatMap((presentation) => {
-      const bot = peopleByID.get(presentation.bot_user_id);
-      if (!bot || bot.deleted_at) return [];
-      const handle = userHandle(bot);
-      if (!handle) return [];
-      return [
-        {
-          id: `${channel.id}:${presentation.bot_user_id}`,
-          channel_id: channel.id,
-          channel_name: channel.name,
-          bot_user_id: presentation.bot_user_id,
-          display_name: presentation.display_name,
-          avatar_url: presentation.avatar_url || bot.avatar_url,
-          handle,
-          unread_count: channel.unread_count || 0,
-        },
-      ];
-    });
-  });
+  return people
+    .filter((person) => person.kind === "bot" && !person.deleted_at && userHandle(person))
+    .map((bot) => ({
+      id: bot.id,
+      bot_user_id: bot.id,
+      display_name: bot.display_name,
+      avatar_url: bot.avatar_url,
+      handle: userHandle(bot),
+      unread_count: 0,
+    }));
 }
 
-// Sidebar profile groups follow the viewer's channel order, keyed by each
-// profile's source channel. Profiles whose source channel is missing keep their
-// original relative position at the end.
-export function orderProfileShortcuts(
-  profiles: ChannelProfileShortcut[],
-  channelIDs: string[],
-): ChannelProfileShortcut[] {
-  const rank = new Map<string, number>();
-  channelIDs.forEach((id, index) => {
-    if (!rank.has(id)) rank.set(id, index);
-  });
-  return profiles
-    .map((profile, index) => ({ profile, index }))
-    .sort((a, b) => {
-      const leftIsPi = a.profile.display_name.trim().toLocaleLowerCase() === "пи";
-      const rightIsPi = b.profile.display_name.trim().toLocaleLowerCase() === "пи";
-      if (leftIsPi !== rightIsPi) return leftIsPi ? 1 : -1;
-      const left = rank.get(a.profile.channel_id) ?? Number.MAX_SAFE_INTEGER;
-      const right = rank.get(b.profile.channel_id) ?? Number.MAX_SAFE_INTEGER;
-      return left === right ? a.index - b.index : left - right;
-    })
-    .map((entry) => entry.profile);
-}
-
-export function profileAvatarURL(profile: ChannelProfileShortcut, people: User[]): string {
-  if (!profileIsCanonicalIdentity(profile, people)) return profile.avatar_url;
-  return (
-    people.find((person) => person.id === profile.bot_user_id)?.avatar_url || profile.avatar_url
-  );
-}
-
-// One channel-scoped face for a bot, as shown in the profile editor. A lane's
-// `is_canonical` marks the profile whose label already matches the bot's own
-// display name, so the editor can warn that renaming the bot also renames it.
-export type ProfilePersonaLane = {
-  channel_id: string;
-  channel_name: string;
-  bot_user_id: string;
-  display_name: string;
-  avatar_url: string;
-  is_canonical: boolean;
-};
-
-// Collects the persona lanes wrapping one bot, ordered by the viewer's channel
-// order so the editor matches the sidebar. Only self-referential profile
-// sections are lanes; copied presentations on assigned channels are not.
-export function collectBotPersonaLanes(
-  profiles: ChannelProfileShortcut[],
-  botUserID: string,
-  people: User[],
-  channelIDs: string[] = [],
-): ProfilePersonaLane[] {
-  if (!botUserID) return [];
-  const owned = profiles.filter((profile) => profile.bot_user_id === botUserID);
-  return orderProfileShortcuts(owned, channelIDs).map((profile) => ({
-    channel_id: profile.channel_id,
-    channel_name: profile.channel_name,
-    bot_user_id: profile.bot_user_id,
-    display_name: profile.display_name,
-    avatar_url: profile.avatar_url,
-    is_canonical: profileIsCanonicalIdentity(profile, people),
-  }));
-}
-
-// Moves one channel ID within a viewer order, landing before or after the
-// target. Returns the original order when either ID is absent.
 export function moveChannelInOrder(
   order: string[],
   movingID: string,
@@ -343,35 +109,6 @@ export function moveChannelInOrder(
   if (target < 0) return order;
   next.splice(target + (before ? 0 : 1), 0, movingID);
   return next;
-}
-
-// A profile is the bot's canonical identity when its label matches the bot's
-// own display name. Persona profiles (several labels over one bot) are wrappers
-// and keep their own channel; only a canonical profile stands for the bot
-// itself and therefore opens that bot's direct conversation.
-export function profileIsCanonicalIdentity(
-  profile: Pick<ChannelProfileShortcut, "bot_user_id" | "display_name">,
-  people: User[],
-): boolean {
-  const bot = people.find((person) => person.id === profile.bot_user_id);
-  if (!bot || bot.deleted_at) return false;
-  const label = profile.display_name.trim();
-  return label !== "" && label === (bot.display_name || "").trim();
-}
-
-// Resolves the conversation a profile header should open. Canonical profiles
-// target the bot's DM; personas and any canonical profile without a DM fall
-// back to the profile's own source channel.
-export function profileHeaderTarget(
-  profile: Pick<ChannelProfileShortcut, "bot_user_id" | "display_name" | "channel_id">,
-  people: User[],
-  conversations: DirectConversation[],
-): { kind: "direct"; id: string } | { kind: "channel"; id: string } {
-  if (profileIsCanonicalIdentity(profile, people)) {
-    const direct = directConversationForUser(conversations, profile.bot_user_id);
-    if (direct) return { kind: "direct", id: direct.id };
-  }
-  return { kind: "channel", id: profile.channel_id };
 }
 
 export function collectMentionPeople(

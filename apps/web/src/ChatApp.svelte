@@ -36,14 +36,11 @@
     type MessageWindowDirection,
   } from "./lib/chat/messageWindow";
   import {
-    collectBotPersonaLanes,
     collectChannelProfileShortcuts,
     collectMentionPeople,
     collectRecentPeople,
     dmTitle,
-    profileHeaderTarget,
     type ChannelProfileShortcut,
-    type ProfilePersonaLane,
   } from "./lib/chat/people";
   import { updateBotProfile } from "./lib/bots";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
@@ -95,7 +92,7 @@
     type ConversationAgentWorkAction,
   } from "./lib/agent-working";
   import { listWorkspaceMembersPage } from "./lib/workspace-members";
-  import type { Channel, ChannelBotPresentation, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
   import { findUniqueBotCommand } from "./lib/bot-command-routing";
   import {
@@ -506,9 +503,7 @@
     agentProgressTurns,
     botCommands,
     lookupUser,
-    (userID, fallback) =>
-      selectedChannel?.bot_presentations?.find((presentation) => presentation.bot_user_id === userID)
-        ?.display_name || fallback,
+    (_userID, fallback) => fallback,
   );
   $: sidePanelOpen = pinnedPanelOpen || selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
@@ -525,15 +520,6 @@
   $: recentPeople = collectRecentPeople(messages, directConversations, user?.id || "");
   $: mentionPeople = collectMentionPeople(user, recentPeople, workspaceMemberUsers, selectedDirect);
   $: profileShortcuts = collectChannelProfileShortcuts(channels, mentionPeople);
-  $: selectedProfileLanes =
-    selectedProfile?.kind === "bot"
-      ? collectBotPersonaLanes(
-          profileShortcuts,
-          selectedProfile.id,
-          mentionPeople,
-          channels.map((channel) => channel.id),
-        )
-      : ([] as ProfilePersonaLane[]);
   $: mentionAttentionUserID =
     user?.id &&
     (selectedDirectID ||
@@ -951,55 +937,20 @@
   ) {
     const current = channels.find((channel) => channel.id === channelID);
     if (!current) return;
-    const currentProfileSource = current.sidebar_section?.startsWith("profile:")
-      ? current.sidebar_section.slice("profile:".length)
-      : "";
-    const currentProfile = profileShortcuts.find(
-      (candidate) => candidate.channel_id === currentProfileSource,
-    );
     try {
-      const data = await api<{ channel: Channel }>(`/api/channels/${channelID}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          sidebar_section: profile ? `profile:${profile.channel_id}` : "",
-        }),
-      });
-      let updated = data.channel;
-      if (profile) {
-        const presentation = await api<{ presentation: ChannelBotPresentation }>(
-          `/api/channels/${channelID}/bot-presentations/${profile.bot_user_id}`,
-          {
-            method: "PUT",
-            body: JSON.stringify({
-              display_name: profile.display_name,
-              avatar_url: profile.avatar_url,
-            }),
-          },
-        );
-        updated = {
-          ...updated,
-          bot_presentations: [
-            ...(updated.bot_presentations || []).filter(
-              (candidate) => candidate.bot_user_id !== profile.bot_user_id,
-            ),
-            presentation.presentation,
-          ],
-        };
-      } else if (currentProfile) {
-        await api(
-          `/api/channels/${channelID}/bot-presentations/${currentProfile.bot_user_id}`,
-          { method: "DELETE" },
-        );
-        updated = {
-          ...updated,
-          bot_presentations: (updated.bot_presentations || []).filter(
-            (candidate) => candidate.bot_user_id !== currentProfile.bot_user_id,
-          ),
-        };
+      for (const assignment of current.bot_assignments || []) {
+        if (profile?.bot_user_id === assignment.bot_user_id) continue;
+        await api(`/api/channels/${channelID}/bot-assignments/${assignment.bot_user_id}`, { method: "DELETE" });
       }
-      channels = channels.map((channel) => (channel.id === channelID ? updated : channel));
+      if (profile) {
+        await api(`/api/channels/${channelID}/bot-assignments/${profile.bot_user_id}`, { method: "PUT" });
+      }
+      const bot_assignments = profile
+        ? [{ channel_id: channelID, bot_user_id: profile.bot_user_id }]
+        : [];
+      channels = channels.map((channel) => channel.id === channelID ? { ...channel, bot_assignments } : channel);
     } catch (error) {
-      status = readableAPIError(error, "Could not assign channel profile");
+      status = readableAPIError(error, "Could not assign channel bot");
       await loadChannels();
     }
   }
@@ -2469,8 +2420,8 @@
       : undefined;
     if (commandOwner) expected.add(commandOwner.id);
     const channel = channels.find((candidate) => candidate.id === conversationID);
-    for (const presentation of channel?.bot_presentations ?? []) {
-      expected.add(presentation.bot_user_id);
+    for (const assignment of channel?.bot_assignments ?? []) {
+      expected.add(assignment.bot_user_id);
     }
     if (threadRoot?.author?.kind === "bot" && !threadRoot.author.deleted_at) {
       expected.add(threadRoot.author.id);
@@ -4113,7 +4064,7 @@
       if (event.workspace_id === selectedWorkspaceID) await handleBotMembershipRemovedEvent(event);
       return;
     }
-    if ((event.type === "channel.created" || event.type === "channel.updated") && event.workspace_id === selectedWorkspaceID) {
+    if ((event.type === "channel.created" || event.type === "channel.updated" || event.type === "channel.bot_assignment_updated") && event.workspace_id === selectedWorkspaceID) {
       await loadChannels(false, false, false);
       return;
     }
@@ -4256,47 +4207,6 @@
       members: conversation.members.map((member) => (member.id === botUserID ? updated : member)),
     }));
     await loadChannels(false, false, false);
-  }
-
-  // Opens the channel a persona presents in, so the "appears as" chips work as
-  // navigation rather than decoration.
-  async function openPersonaLane(lane: ProfilePersonaLane) {
-    if (!lane.channel_id) return;
-    // Canonical lanes stand for the bot itself, so they open its DM; personas
-    // are wrappers and open the channel they present in. Same rule the sidebar
-    // profile headers follow.
-    const target = profileHeaderTarget(lane, mentionPeople, directConversations);
-    closeSidePanel();
-    if (target.kind === "direct") {
-      await selectDirectConversation(target.id);
-      return;
-    }
-    await selectChannel(target.id);
-  }
-
-  // Saves one channel-scoped persona. The underlying bot identity is untouched.
-  async function savePersonaLane(
-    botUserID: string,
-    channelID: string,
-    presentation: { display_name: string; avatar_url: string },
-  ) {
-    const data = await api<{ presentation: ChannelBotPresentation }>(
-      `/api/channels/${channelID}/bot-presentations/${botUserID}`,
-      { method: "PUT", body: JSON.stringify(presentation) },
-    );
-    channels = channels.map((channel) =>
-      channel.id === channelID
-        ? {
-            ...channel,
-            bot_presentations: [
-              ...(channel.bot_presentations || []).filter(
-                (candidate) => candidate.bot_user_id !== botUserID,
-              ),
-              data.presentation,
-            ],
-          }
-        : channel,
-    );
   }
 
   async function handleBotDeletedEvent(event: RealtimeEvent) {
@@ -5359,7 +5269,6 @@
       slashCommands={selectedChannelID ? slashCommands : []}
       botCommands={composerBotCommands}
       {mentionPeople}
-      mentionProfiles={profileShortcuts}
       onValue={(value) => {
         const previous = messageBody;
         messageBody = value;
@@ -5445,7 +5354,6 @@
         {replyBody}
         replyTarget={replyTarget && replyContext === "thread" ? replyTarget : null}
         {mentionPeople}
-        mentionProfiles={profileShortcuts}
         {mentionAttentionUserID}
         {agentResponding}
         respondingAgentNames={activeRespondingAgentNames}
@@ -5485,10 +5393,7 @@
         workspaceName={selectedWorkspace?.name}
         currentUserRole={currentWorkspaceRole}
         moderation={selectedProfileModeration}
-        personaLanes={selectedProfileLanes}
-        onOpenPersona={(lane) => void openPersonaLane(lane)}
         onSaveBotProfile={saveBotProfile}
-        onSavePersonaLane={savePersonaLane}
         onClose={closeSidePanel}
         onEdit={openProfileSettings}
         onMessage={(memberID) => void startDirectWithUser(memberID)}

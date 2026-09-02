@@ -4,12 +4,7 @@
   import { Placeholder } from "@tiptap/extension-placeholder";
   import { Markdown } from "@tiptap/markdown";
   import { StarterKit } from "@tiptap/starter-kit";
-  import {
-    avatarInitial,
-    channelProfileMentionText,
-    handleLabel,
-    type ChannelProfileShortcut,
-  } from "../../lib/chat/people";
+  import { avatarInitial, handleLabel } from "../../lib/chat/people";
   import {
     clipboardImageFiles,
     MAX_MESSAGE_ATTACHMENTS,
@@ -121,7 +116,6 @@
     slashCommands?: SlashCommand[];
     botCommands?: WorkspaceBotCommand[];
     mentionPeople?: User[];
-    mentionProfiles?: ChannelProfileShortcut[];
     disabled?: boolean;
     submitDisabled?: boolean;
     onValue: (value: string) => void;
@@ -173,7 +167,6 @@
     slashCommands = [],
     botCommands = [],
     mentionPeople = [],
-    mentionProfiles = [],
     disabled = false,
     submitDisabled = false,
     onValue,
@@ -440,14 +433,6 @@
 
   function mentionSuggestions(token: ActiveToken): ComposerSuggestion[] {
     const query = token.query;
-    const profileSuggestions = mentionProfiles.map((profile) => ({
-      id: profile.id,
-      kind: "mention" as const,
-      label: `@${profile.display_name}`,
-      detail: `profile · inserts @${profile.handle}`,
-      insertText: channelProfileMentionText(profile, mentionPeople),
-      sortText: `${profile.display_name} ${profile.channel_name} ${profile.handle}`.toLowerCase(),
-    }));
     const seen = new Set<string>();
     const peopleSuggestions = mentionPeople
       .filter((person) => {
@@ -467,7 +452,7 @@
           sortText: searchable,
         };
       });
-    return [...profileSuggestions, ...peopleSuggestions]
+    return peopleSuggestions
       .filter((suggestion) => !query || suggestion.sortText.includes(query))
       .sort((a, b) => Number(!a.sortText.startsWith(query)) - Number(!b.sortText.startsWith(query)) || a.sortText.localeCompare(b.sortText))
       .slice(0, 6);

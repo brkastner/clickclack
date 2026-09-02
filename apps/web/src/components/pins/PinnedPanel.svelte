@@ -1,7 +1,6 @@
 <script lang="ts">
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
-  import { presentChannelMessage } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
   import { uploadURL } from "../../lib/uploads";
   import type { Channel, Message, Topic, Upload, User } from "../../lib/types";
@@ -99,7 +98,7 @@
       {:else}
         <div class="pinned-panel__list">
         {#each messages as message (message.id)}
-          {@const presentedMessage = presentChannelMessage(message, channel)}
+          {@const presentedMessage = message}
           {@const topic = topics.find((candidate) => candidate.id === message.topic_id)}
           <div class="pinned-panel__item" data-message-id={message.id}>
             <div class="pinned-item__meta">

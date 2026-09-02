@@ -2,7 +2,6 @@
   import Avatar from "../avatar/Avatar.svelte";
   import ProfileEditor from "./ProfileEditor.svelte";
   import { avatarHue, handleLabel } from "../../lib/chat/people";
-  import type { ProfilePersonaLane } from "../../lib/chat/people";
   import { profileEditScope } from "../../lib/profile-editing";
   import type { MemberModeration, User, Workspace } from "../../lib/types";
 
@@ -12,7 +11,6 @@
     workspaceName?: string;
     currentUserRole?: Workspace["role"] | "";
     moderation?: MemberModeration;
-    personaLanes?: ProfilePersonaLane[];
     onClose: () => void;
     onEdit: () => void;
     onMessage: (memberID: string) => void;
@@ -21,15 +19,9 @@
     onBlock: (memberID: string) => void;
     onUnblock: (memberID: string) => void;
     onSetStatus: () => void;
-    onOpenPersona: (lane: ProfilePersonaLane) => void;
     onSaveBotProfile: (
       botUserID: string,
       patch: { display_name?: string; handle?: string; avatar_url?: string },
-    ) => Promise<void>;
-    onSavePersonaLane: (
-      botUserID: string,
-      channelID: string,
-      presentation: { display_name: string; avatar_url: string },
     ) => Promise<void>;
   };
 
@@ -39,7 +31,6 @@
     workspaceName,
     currentUserRole,
     moderation,
-    personaLanes = [],
     onClose,
     onEdit,
     onMessage,
@@ -48,9 +39,7 @@
     onBlock,
     onUnblock,
     onSetStatus,
-    onOpenPersona,
     onSaveBotProfile,
-    onSavePersonaLane,
   }: Props = $props();
 
   const botLabel = $derived(
@@ -103,12 +92,9 @@
 {#if editing}
   <ProfileEditor
     {profile}
-    {personaLanes}
     canEditIdentity={scope.canEditIdentity}
-    canEditPersonas={scope.canEditPersonas}
     onBack={() => (editing = false)}
     {onSaveBotProfile}
-    {onSavePersonaLane}
   />
 {:else}
 <div class="profile-pane">
@@ -215,31 +201,6 @@
       </header>
       <p class="profile-note">Member of {workspaceName || "this workspace"}.</p>
     </section>
-    {#if personaLanes.length > 0}
-      <section class="profile-info">
-        <header>
-          <strong>appears as</strong>
-          <span class="profile-lane-count">{personaLanes.length}</span>
-        </header>
-        <div class="profile-lane-strip">
-          {#each personaLanes as lane (lane.channel_id)}
-            <button
-              type="button"
-              class="profile-lane-chip"
-              title={`Open #${lane.channel_name}`}
-              onclick={() => onOpenPersona(lane)}
-            >
-              <Avatar id={lane.channel_id} name={lane.display_name} src={lane.avatar_url} size={24} />
-              <span>{lane.display_name}</span>
-            </button>
-          {/each}
-        </div>
-        <p class="profile-note">
-          Channel-scoped names and avatars for this bot. The underlying identity, mentions, and
-          permissions do not change.
-        </p>
-      </section>
-    {/if}
     {#if canModerate && moderation}
       <section class="profile-info moderation-box">
         <header>
