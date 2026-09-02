@@ -338,9 +338,14 @@
       <div
         class="sidebar-shelf-menu"
         role="menu"
+        tabindex="-1"
         aria-label="Recent people options"
         style={`left: ${shelfMenu.x}px; top: ${shelfMenu.y}px;`}
         onclick={(event) => event.stopPropagation()}
+        onkeydown={(event) => {
+          if (event.key === "Escape") closeShelfMenu();
+          event.stopPropagation();
+        }}
       >
         {#if hiddenShelfCount > 0}
           <button type="button" role="menuitem" onclick={shelfShowAll}>show all</button>

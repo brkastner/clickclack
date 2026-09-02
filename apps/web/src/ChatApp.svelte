@@ -5170,10 +5170,11 @@
   />
 
   {#if !sidebarCollapsed && !mobileNavViewport}
-    <button
-      type="button"
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions (ARIA separator is interactive when focusable and value-bearing) -->
+    <div
       class="sidebar-resize-handle"
       role="separator"
+      tabindex="0"
       aria-label="Resize sidebar"
       aria-orientation="vertical"
       aria-valuemin={MIN_SIDEBAR_WIDTH}
@@ -5187,7 +5188,7 @@
       onlostpointercapture={handleSidebarResizeEnd}
       onkeydown={handleSidebarResizeKeydown}
       ondblclick={resetSidebarWidth}
-    ></button>
+    ></div>
   {/if}
 
   <main class="timeline" inert={mobileNavOpen}>
