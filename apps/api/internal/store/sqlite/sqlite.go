@@ -810,6 +810,9 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		return store.Message{}, store.Event{}, err
 	}
 	eventFields := map[string]string{"message_id": id, "author_id": input.AuthorID}
+	if input.ExpectedAttachmentCount > 0 {
+		eventFields["expected_attachment_count"] = fmt.Sprintf("%d", input.ExpectedAttachmentCount)
+	}
 	if input.TopicID != "" {
 		eventFields["topic_id"] = input.TopicID
 	}
@@ -1022,6 +1025,9 @@ func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadR
 	if input.TurnID != "" {
 		replyFields["turn_id"] = input.TurnID
 		replyFields["author_id"] = input.AuthorID
+	}
+	if input.ExpectedAttachmentCount > 0 {
+		replyFields["expected_attachment_count"] = fmt.Sprintf("%d", input.ExpectedAttachmentCount)
 	}
 	replyPayload := eventPayload(ctx, replyFields, nonce)
 	statePayload := map[string]string{"root_message_id": root.ID}

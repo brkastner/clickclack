@@ -1553,14 +1553,19 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Body            string `json:"body"`
-		QuotedMessageID string `json:"quoted_message_id"`
-		Nonce           string `json:"nonce"`
-		Kind            string `json:"kind"`
-		TurnID          string `json:"turn_id"`
+		Body                    string `json:"body"`
+		QuotedMessageID         string `json:"quoted_message_id"`
+		Nonce                   string `json:"nonce"`
+		Kind                    string `json:"kind"`
+		TurnID                  string `json:"turn_id"`
+		ExpectedAttachmentCount int    `json:"expected_attachment_count"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.ExpectedAttachmentCount < 0 || body.ExpectedAttachmentCount > 10 {
+		writeError(w, http.StatusBadRequest, errors.New("expected_attachment_count must be between 0 and 10"))
 		return
 	}
 	if err := act.requireScope("dms:write"); err != nil {
@@ -1574,7 +1579,7 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 	if !s.requireBotDirectWorkspace(w, r, act, chi.URLParam(r, "conversation_id")) {
 		return
 	}
-	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, Kind: kind, TurnID: turnID})
+	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, Kind: kind, TurnID: turnID, ExpectedAttachmentCount: body.ExpectedAttachmentCount})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {

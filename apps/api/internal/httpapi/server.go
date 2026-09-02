@@ -999,16 +999,21 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Body            string `json:"body"`
-		QuotedMessageID string `json:"quoted_message_id"`
-		Nonce           string `json:"nonce"`
-		TopicID         string `json:"topic_id"`
-		Kind            string `json:"kind"`
-		TurnID          string `json:"turn_id"`
-		BotCommandID    string `json:"bot_command_id"`
+		Body                    string `json:"body"`
+		QuotedMessageID         string `json:"quoted_message_id"`
+		Nonce                   string `json:"nonce"`
+		TopicID                 string `json:"topic_id"`
+		Kind                    string `json:"kind"`
+		TurnID                  string `json:"turn_id"`
+		BotCommandID            string `json:"bot_command_id"`
+		ExpectedAttachmentCount int    `json:"expected_attachment_count"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.ExpectedAttachmentCount < 0 || body.ExpectedAttachmentCount > 10 {
+		writeError(w, http.StatusBadRequest, errors.New("expected_attachment_count must be between 0 and 10"))
 		return
 	}
 	kind, turnID, ok := s.resolveMessageKind(w, act, body.Kind, body.TurnID)
@@ -1031,7 +1036,7 @@ func (s *Server) createMessage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: channelID, AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, Kind: kind, TurnID: turnID, BotCommandID: botCommand.ID, BotCommandOwnerUserID: botCommand.Bot.ID})
+	message, event, err := s.store.CreateMessage(r.Context(), store.CreateMessageInput{ChannelID: channelID, AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TopicID: body.TopicID, Kind: kind, TurnID: turnID, BotCommandID: botCommand.ID, BotCommandOwnerUserID: botCommand.Bot.ID, ExpectedAttachmentCount: body.ExpectedAttachmentCount})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {
@@ -1236,13 +1241,18 @@ func (s *Server) createThreadReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Body            string `json:"body"`
-		QuotedMessageID string `json:"quoted_message_id"`
-		Nonce           string `json:"nonce"`
-		TurnID          string `json:"turn_id"`
+		Body                    string `json:"body"`
+		QuotedMessageID         string `json:"quoted_message_id"`
+		Nonce                   string `json:"nonce"`
+		TurnID                  string `json:"turn_id"`
+		ExpectedAttachmentCount int    `json:"expected_attachment_count"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.ExpectedAttachmentCount < 0 || body.ExpectedAttachmentCount > 10 {
+		writeError(w, http.StatusBadRequest, errors.New("expected_attachment_count must be between 0 and 10"))
 		return
 	}
 	_, turnID, ok := s.resolveMessageKind(w, act, store.MessageKindMessage, body.TurnID)
@@ -1252,7 +1262,7 @@ func (s *Server) createThreadReply(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireBotMessageResource(w, r, act, chi.URLParam(r, "message_id"), "dms:write"); !ok {
 		return
 	}
-	message, state, events, err := s.store.CreateThreadReply(r.Context(), store.CreateThreadReplyInput{RootMessageID: chi.URLParam(r, "message_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TurnID: turnID})
+	message, state, events, err := s.store.CreateThreadReply(r.Context(), store.CreateThreadReplyInput{RootMessageID: chi.URLParam(r, "message_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, TurnID: turnID, ExpectedAttachmentCount: body.ExpectedAttachmentCount})
 	if err == nil && len(events) > 0 {
 		s.publishEvents(r.Context(), events)
 		s.notifyMessageCreated(r.Context(), message, messageEventMentionedUserIDs(events))

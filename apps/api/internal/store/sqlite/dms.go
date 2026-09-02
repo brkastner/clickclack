@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
@@ -310,6 +311,9 @@ func (s *Store) CreateDirectMessage(ctx context.Context, input store.CreateDirec
 		return store.Message{}, store.Event{}, err
 	}
 	dmEventFields := map[string]string{"message_id": id, "direct_conversation_id": input.ConversationID, "author_id": input.AuthorID}
+	if input.ExpectedAttachmentCount > 0 {
+		dmEventFields["expected_attachment_count"] = fmt.Sprintf("%d", input.ExpectedAttachmentCount)
+	}
 	if kind != store.MessageKindMessage {
 		dmEventFields["kind"] = kind
 	}

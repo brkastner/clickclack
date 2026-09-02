@@ -3107,7 +3107,11 @@
     const path = draft.directConversationID
       ? `/api/dms/${draft.directConversationID}/messages`
       : `/api/channels/${draft.channelID}/messages`;
-    const payload: Record<string, unknown> = { body: draft.body, nonce };
+    const payload: Record<string, unknown> = {
+      body: draft.body,
+      nonce,
+      expected_attachment_count: draft.uploads.length,
+    };
     if (draft.quotedMessageID) payload.quoted_message_id = draft.quotedMessageID;
     if (draft.topicID) payload.topic_id = draft.topicID;
     if (draft.botCommandID) payload.bot_command_id = draft.botCommandID;

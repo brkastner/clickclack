@@ -2881,6 +2881,11 @@ components:
         topic_id:
           type: string
           description: Optional topic id. Channel-scoped topics can only be used in their channel.
+        expected_attachment_count:
+          type: integer
+          minimum: 0
+          maximum: 10
+          description: Number of uploads the client will attach after message creation.
         bot_command_id:
           type: string
           description: |
@@ -2913,6 +2918,11 @@ components:
         nonce:
           type: string
           maxLength: 128
+        expected_attachment_count:
+          type: integer
+          minimum: 0
+          maximum: 10
+          description: Number of uploads the client will attach after reply creation.
         turn_id:
           type: string
           description: Optional source-message correlation ID for a bot-authored final reply; human replies reject it.

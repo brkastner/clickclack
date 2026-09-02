@@ -920,14 +920,15 @@ type DeleteChannelBotAssignmentInput struct {
 }
 
 type CreateMessageInput struct {
-	ChannelID             string
-	AuthorID              string
-	Body                  string
-	QuotedMessageID       *string
-	Nonce                 string
-	TopicID               string
-	BotCommandID          string
-	BotCommandOwnerUserID string
+	ChannelID               string
+	AuthorID                string
+	Body                    string
+	QuotedMessageID         *string
+	Nonce                   string
+	TopicID                 string
+	BotCommandID            string
+	BotCommandOwnerUserID   string
+	ExpectedAttachmentCount int
 	// Kind defaults to 'message' when empty. Activity kinds are gated at the
 	// API layer by AgentActivityWriteScope.
 	Kind   string
@@ -946,12 +947,13 @@ type DeleteMessageInput struct {
 }
 
 type CreateThreadReplyInput struct {
-	RootMessageID   string
-	AuthorID        string
-	Body            string
-	QuotedMessageID *string
-	Nonce           string
-	TurnID          string
+	RootMessageID           string
+	AuthorID                string
+	Body                    string
+	QuotedMessageID         *string
+	Nonce                   string
+	TurnID                  string
+	ExpectedAttachmentCount int
 }
 
 type CreateReactionInput struct {
@@ -1090,13 +1092,14 @@ type CreateDirectConversationInput struct {
 }
 
 type CreateDirectMessageInput struct {
-	ConversationID  string
-	AuthorID        string
-	Body            string
-	QuotedMessageID *string
-	Nonce           string
-	Kind            string
-	TurnID          string
+	ConversationID          string
+	AuthorID                string
+	Body                    string
+	QuotedMessageID         *string
+	Nonce                   string
+	Kind                    string
+	TurnID                  string
+	ExpectedAttachmentCount int
 }
 
 type Topic struct {
