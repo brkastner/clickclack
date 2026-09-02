@@ -1224,6 +1224,11 @@ export class ClickClackClient {
   };
 
   uploads = {
+    download: async (uploadId: string): Promise<Blob> => {
+      const response = await this.fetchResponse(`/api/uploads/${encodeURIComponent(uploadId)}`);
+      if (!response.ok) throw new Error(await response.text());
+      return response.blob();
+    },
     create: async (
       workspaceId: string,
       file: File | Blob,
