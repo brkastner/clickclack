@@ -120,18 +120,48 @@
     setBotShelfOrder(moveChannelInOrder(fullOrder, moving, targetID, shelfDropBefore));
   }
 
-  function shelfShowMore() { setBotShelfLimit(shelfLimit + 3); }
-  function shelfShowLess() { setBotShelfLimit(Math.max(1, shelfLimit - 3)); }
+  let shelfMenu = $state<{ x: number; y: number } | null>(null);
 
-  type SectionState = { channels: boolean; directMessages: boolean };
+  function openShelfMenu(event: MouseEvent) {
+    event.preventDefault();
+    shelfMenu = { x: event.clientX, y: event.clientY };
+  }
+
+  function closeShelfMenu() {
+    shelfMenu = null;
+  }
+
+  function shelfShowAll() {
+    setBotShelfLimit(orderedShelfPeople.length);
+    closeShelfMenu();
+  }
+
+  function shelfHideAll() {
+    setBotShelfLimit(0);
+    closeShelfMenu();
+  }
+
+  type SectionState = { channels: boolean; directMessages: boolean; archived: boolean };
   const SECTION_STORAGE_PREFIX = "clickclack:sidebar-sections:v1:";
-  const DEFAULT_SECTION_STATE: SectionState = { channels: true, directMessages: true };
+  const DEFAULT_SECTION_STATE: SectionState = {
+    channels: true,
+    directMessages: true,
+    archived: true,
+  };
   let sections = $state<SectionState>({ ...DEFAULT_SECTION_STATE });
 
-  function isSectionState(value: unknown): value is SectionState {
-    if (!value || typeof value !== "object") return false;
+  function parseSectionState(value: unknown): SectionState | undefined {
+    if (!value || typeof value !== "object") return undefined;
     const candidate = value as Record<string, unknown>;
-    return typeof candidate.channels === "boolean" && typeof candidate.directMessages === "boolean";
+    if (
+      typeof candidate.channels !== "boolean"
+      || typeof candidate.directMessages !== "boolean"
+    ) return undefined;
+    return {
+      channels: candidate.channels,
+      directMessages: candidate.directMessages,
+      archived: typeof candidate.archived === "boolean" ? candidate.archived : true,
+    };
   }
 
   function loadSections(id: string): SectionState {
@@ -139,8 +169,7 @@
     try {
       const raw = window.localStorage.getItem(`${SECTION_STORAGE_PREFIX}${id}`);
       if (!raw) return { ...DEFAULT_SECTION_STATE };
-      const parsed: unknown = JSON.parse(raw);
-      return isSectionState(parsed) ? parsed : { ...DEFAULT_SECTION_STATE };
+      return parseSectionState(JSON.parse(raw)) ?? { ...DEFAULT_SECTION_STATE };
     } catch {
       return { ...DEFAULT_SECTION_STATE };
     }
@@ -235,7 +264,11 @@
   }
 </script>
 
-<svelte:window onstorage={handleStorage} />
+<svelte:window
+  onstorage={handleStorage}
+  onclick={closeShelfMenu}
+  onkeydown={(event) => { if (event.key === "Escape") closeShelfMenu(); }}
+/>
 
 <aside id="primary-navigation" class="sidebar" aria-label="Channels and DMs">
   {#if showHeader}
@@ -275,6 +308,7 @@
             ondragover={(event) => shelfDragOver(event, person.id)}
             ondragleave={() => { if (shelfDropTargetID === person.id) shelfDropTargetID = ""; }}
             ondrop={(event) => shelfDrop(event, person.id)}
+            oncontextmenu={openShelfMenu}
             onclick={(event) => {
               if (conversation) {
                 if (!shouldHandleClientNavigation(event)) return;
@@ -300,13 +334,18 @@
         <span class="sidebar-people-empty">No recent people</span>
       {/if}
     </section>
-    {#if orderedShelfPeople.length > 1}
-      <div class="sidebar-people-controls">
+    {#if shelfMenu && (hiddenShelfCount > 0 || displayedRecentPeople.length > DEFAULT_BOT_SHELF_LIMIT)}
+      <div
+        class="sidebar-shelf-menu"
+        role="menu"
+        aria-label="Recent people options"
+        style={`left: ${shelfMenu.x}px; top: ${shelfMenu.y}px;`}
+        onclick={(event) => event.stopPropagation()}
+      >
         {#if hiddenShelfCount > 0}
-          <button type="button" class="sidebar-people-control" onclick={shelfShowMore}>show more ({hiddenShelfCount} hidden)</button>
-        {/if}
-        {#if shelfLimit > 1 && displayedRecentPeople.length > 1}
-          <button type="button" class="sidebar-people-control" onclick={shelfShowLess}>show fewer</button>
+          <button type="button" role="menuitem" onclick={shelfShowAll}>show all</button>
+        {:else}
+          <button type="button" role="menuitem" onclick={shelfHideAll}>hide all</button>
         {/if}
       </div>
     {/if}
@@ -345,6 +384,28 @@
       {hiddenDirectTitle}
       {onUndoHideDirect}
       onToggle={() => toggleSection("directMessages")}
+    />
+
+    <ChannelList
+      {workspaceID}
+      variant="archived"
+      expanded={sections.archived}
+      channels={orderedChannels}
+      profiles={profileShortcuts}
+      {directConversations}
+      people={profilePeople}
+      {selectedChannelID}
+      {selectedDirectID}
+      {workingConversationIDs}
+      {hrefForChannel}
+      {hrefForDirect}
+      {onSelectChannel}
+      {onSelectDirect}
+      {onStartDirect}
+      {onCreateChannel}
+      onToggle={() => toggleSection("archived")}
+      onReorder={saveChannelOrder}
+      onAssignProfile={onAssignChannelProfile}
     />
 
   </div>

@@ -33,6 +33,18 @@ test("sidebar sections collapse independently and persist per workspace", async 
   const { channel: hiddenChannel } = (await hiddenChannelResponse.json()) as {
     channel: { id: string; route_id: string; name: string };
   };
+  const archivedChannelResponse = await page.request.post(
+    `/api/workspaces/${workspace.id}/channels`,
+    { data: { name: `archived-${suffix}`, kind: "public" } },
+  );
+  expect(archivedChannelResponse.ok()).toBe(true);
+  const { channel: archivedChannel } = (await archivedChannelResponse.json()) as {
+    channel: { id: string; route_id: string; name: string };
+  };
+  const archiveResponse = await page.request.patch(`/api/channels/${archivedChannel.id}`, {
+    data: { archived: true },
+  });
+  expect(archiveResponse.ok()).toBe(true);
   const botResponse = await page.request.post(`/api/workspaces/${workspace.id}/bots`, {
     data: {
       display_name: "Sidebar Proof Bot",
@@ -122,12 +134,25 @@ test("sidebar sections collapse independently and persist per workspace", async 
   await expect(page.getByRole("heading", { name: `#${activeChannel.name}` })).toBeVisible();
   const channels = page.getByRole("button", { name: "Channels", exact: true });
   const directMessages = page.getByRole("button", { name: "Direct messages", exact: true });
+  const archived = page.getByRole("button", { name: "Archived", exact: true });
   await expect(channels).toHaveAttribute("aria-controls", "sidebar-channels-list");
   await expect(directMessages).toHaveAttribute("aria-controls", "sidebar-direct-messages-list");
+  await expect(archived).toHaveAttribute("aria-controls", "sidebar-archived-channels-list");
+  await expect(
+    page.locator(".sidebar-scroll > .nav-section > .section-title .section-toggle .label"),
+  ).toHaveText(["Channels", "Direct messages", "Archived"]);
 
-  for (const toggle of [channels, directMessages]) {
+  for (const toggle of [channels, directMessages, archived]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
   }
+  const archivedList = page.locator("#sidebar-archived-channels-list");
+  const archivedChannelLink = archivedList.getByRole("link", {
+    name: `# ${archivedChannel.name}`,
+    exact: true,
+  });
+  await expect(archivedChannelLink).toBeVisible();
+  await archived.click();
+  await expect(archivedList).toBeHidden();
   await channels.click();
   const channelList = page.locator("#sidebar-channels-list");
   const unreadChannelLink = channelList.locator("a.nav-item.channel", {
@@ -178,7 +203,7 @@ test("sidebar sections collapse independently and persist per workspace", async 
   await page.keyboard.press("Escape");
 
   await page.reload();
-  for (const toggle of [channels, directMessages]) {
+  for (const toggle of [channels, directMessages, archived]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
   }
   await expect(channelList).toBeVisible();
@@ -188,6 +213,10 @@ test("sidebar sections collapse independently and persist per workspace", async 
   await expect(
     channelList.getByRole("link", { name: `# ${channel.name}`, exact: true }),
   ).toBeVisible();
+  await page.goto(`/app/${workspace.route_id}/${archivedChannel.route_id}`);
+  await expect(page.getByRole("heading", { name: `#${archivedChannel.name}` })).toBeVisible();
+  await expect(archived).toHaveAttribute("aria-expanded", "false");
+  await expect(archivedChannelLink).toBeVisible();
 
   const secondResponse = await page.request.post("/api/workspaces", {
     data: { name: `Second Sidebar Workspace ${suffix}` },
@@ -200,13 +229,25 @@ test("sidebar sections collapse independently and persist per workspace", async 
   for (const toggle of [channels, directMessages]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
   }
+  await expect(archived).toHaveCount(0);
 
   await page.goto(`/app/${workspace.route_id}`);
+  await page.evaluate((workspaceID) => {
+    localStorage.setItem(
+      `clickclack:sidebar-sections:v1:${workspaceID}`,
+      JSON.stringify({ channels: false, directMessages: true }),
+    );
+  }, workspace.id);
+  await page.reload();
+  await expect(channels).toHaveAttribute("aria-expanded", "false");
+  await expect(directMessages).toHaveAttribute("aria-expanded", "true");
+  await expect(archived).toHaveAttribute("aria-expanded", "true");
+
   await page.evaluate((workspaceID) => {
     localStorage.setItem(`clickclack:sidebar-sections:v1:${workspaceID}`, "not-json");
   }, workspace.id);
   await page.reload();
-  for (const toggle of [channels, directMessages]) {
+  for (const toggle of [channels, directMessages, archived]) {
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
   }
 
