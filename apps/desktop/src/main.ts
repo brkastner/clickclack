@@ -33,6 +33,7 @@ import {
   desktopOAuthStartURL,
   mergeSettings,
   hasIntegratedTitleBarCapability,
+  isSafeClipboardPNG,
   LEGACY_DESKTOP_PROTOCOL,
   normalizeServerURL,
   safeAppRoute,
@@ -45,6 +46,7 @@ import {
 const PROTOCOLS = [LEGACY_DESKTOP_PROTOCOL, DESKTOP_AUTH_PROTOCOL] as const;
 const SETTINGS_FILE = "desktop.json";
 const APP_NAME = "ClickClack";
+const MAX_CLIPBOARD_IMAGE_BYTES = 64 * 1024 * 1024;
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -402,6 +404,21 @@ function registerIPC() {
   });
   ipcMain.on("desktop:paste-native", (event) => {
     if (isMainSender(event)) event.sender.paste();
+  });
+  ipcMain.handle("desktop:write-clipboard-image", (event, input) => {
+    if (
+      !isMainSender(event) ||
+      !(input instanceof ArrayBuffer) ||
+      input.byteLength === 0 ||
+      input.byteLength > MAX_CLIPBOARD_IMAGE_BYTES ||
+      !isSafeClipboardPNG(input)
+    ) {
+      return false;
+    }
+    const image = nativeImage.createFromBuffer(Buffer.from(input));
+    if (image.isEmpty()) return false;
+    clipboard.writeImage(image);
+    return true;
   });
   ipcMain.handle("desktop:write-clipboard-text", (event, input) => {
     if (!isMainSender(event) || typeof input !== "string") return false;

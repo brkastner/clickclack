@@ -5,6 +5,29 @@ export const DESKTOP_TITLEBAR_ARG = "--clickclack-integrated-titlebar";
 export const DESKTOP_AUTH_PROTOCOL = "chat.clickclack.desktop";
 export const LEGACY_DESKTOP_PROTOCOL = "clickclack";
 export const DESKTOP_OAUTH_PROTOCOL_VERSION = 2;
+export const MAX_CLIPBOARD_IMAGE_DIMENSION = 16_384;
+export const MAX_CLIPBOARD_IMAGE_PIXELS = 16 * 1024 * 1024;
+
+const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
+
+export function isSafeClipboardPNG(input: ArrayBuffer): boolean {
+  if (input.byteLength < 24) return false;
+  const bytes = new Uint8Array(input);
+  if (!PNG_SIGNATURE.every((value, index) => bytes[index] === value)) return false;
+  const view = new DataView(input);
+  if (view.getUint32(8) !== 13) return false;
+  if (String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR") return false;
+
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  return (
+    width > 0 &&
+    height > 0 &&
+    width <= MAX_CLIPBOARD_IMAGE_DIMENSION &&
+    height <= MAX_CLIPBOARD_IMAGE_DIMENSION &&
+    width * height <= MAX_CLIPBOARD_IMAGE_PIXELS
+  );
+}
 
 export type WindowState = {
   height?: number;

@@ -1,4 +1,5 @@
 import { applyDefaultFetchTimeout } from "./api.ts";
+import { desktop } from "./desktop.ts";
 
 type ClipboardWriter = Pick<Clipboard, "write">;
 type ClipboardItemConstructor = new (items: Record<string, Blob>) => ClipboardItem;
@@ -6,6 +7,7 @@ type ClipboardItemConstructor = new (items: Record<string, Blob>) => ClipboardIt
 type ImageClipboardDependencies = {
   clipboard?: ClipboardWriter;
   clipboardItem?: ClipboardItemConstructor;
+  desktop?: (png: ArrayBuffer) => Promise<boolean>;
   fetcher?: typeof fetch;
   toPNG?: (image: Blob) => Promise<Blob>;
 };
@@ -52,10 +54,6 @@ export async function copyViewerImage(
   url: string,
   dependencies: ImageClipboardDependencies = {},
 ): Promise<void> {
-  const clipboard = dependencies.clipboard ?? browserClipboard();
-  const ClipboardItemClass = dependencies.clipboardItem ?? globalThis.ClipboardItem;
-  if (!ClipboardItemClass) throw new Error("Image clipboard access is unavailable");
-
   const response = await (dependencies.fetcher ?? fetch)(
     url,
     applyDefaultFetchTimeout({ credentials: "include" }),
@@ -71,5 +69,12 @@ export async function copyViewerImage(
       `Expected PNG clipboard data, received ${png.type || "an unknown content type"}`,
     );
   }
+
+  const desktopWriter = dependencies.desktop ?? desktop?.writeClipboardImage;
+  if (desktopWriter && (await desktopWriter(await png.arrayBuffer()))) return;
+
+  const clipboard = dependencies.clipboard ?? browserClipboard();
+  const ClipboardItemClass = dependencies.clipboardItem ?? globalThis.ClipboardItem;
+  if (!ClipboardItemClass) throw new Error("Image clipboard access is unavailable");
   await clipboard.write([new ClipboardItemClass({ "image/png": png })]);
 }

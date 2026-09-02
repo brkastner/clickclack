@@ -42,6 +42,53 @@ test("copies an absolute attachment link", async () => {
   assert.deepEqual(recorder.textWrites, ["https://clickclack.example/api/uploads/upl_1"]);
 });
 
+test("uses the Electron image clipboard bridge before the browser clipboard", async () => {
+  const recorder = clipboardRecorder();
+  let desktopPayload: ArrayBuffer | undefined;
+  let clipboardPayload: Record<string, Blob> | undefined;
+  class FakeClipboardItem {
+    constructor(items: Record<string, Blob>) {
+      clipboardPayload = items;
+    }
+  }
+
+  await copyViewerImage("/api/uploads/upl_1", {
+    clipboard: recorder.clipboard,
+    clipboardItem: FakeClipboardItem as unknown as typeof ClipboardItem,
+    desktop: async (png) => {
+      desktopPayload = png;
+      return true;
+    },
+    fetcher: async () =>
+      new Response("PNGDATA", {
+        headers: { "Content-Type": "image/png" },
+      }),
+  });
+
+  assert.equal(new TextDecoder().decode(desktopPayload), "PNGDATA");
+  assert.equal(recorder.imageWrites.length, 0);
+  assert.equal(clipboardPayload, undefined);
+});
+
+test("falls back to the browser image clipboard when the Electron bridge rejects", async () => {
+  const recorder = clipboardRecorder();
+  class FakeClipboardItem {
+    constructor(_items: Record<string, Blob>) {}
+  }
+
+  await copyViewerImage("/api/uploads/upl_1", {
+    clipboard: recorder.clipboard,
+    clipboardItem: FakeClipboardItem as unknown as typeof ClipboardItem,
+    desktop: async () => false,
+    fetcher: async () =>
+      new Response("PNGDATA", {
+        headers: { "Content-Type": "image/png" },
+      }),
+  });
+
+  assert.equal(recorder.imageWrites.length, 1);
+});
+
 test("downloads an authenticated image with a bounded request and copies it as PNG", async () => {
   const recorder = clipboardRecorder();
   let requestInit: RequestInit | undefined;

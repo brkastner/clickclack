@@ -11,11 +11,36 @@ import {
   desktopTitleBarOptions,
   deepLinkToRoute,
   hasIntegratedTitleBarCapability,
+  isSafeClipboardPNG,
+  MAX_CLIPBOARD_IMAGE_DIMENSION,
   mergeSettings,
   normalizeServerURL,
   safeAppRoute,
   sanitizeNotification,
 } from "./contract";
+
+function pngHeader(width: number, height: number): ArrayBuffer {
+  const bytes = new Uint8Array(24);
+  bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(8, 13);
+  bytes.set([73, 72, 68, 82], 12);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  return bytes.buffer;
+}
+
+test("bounds PNG dimensions before decoding clipboard images", () => {
+  assert.equal(isSafeClipboardPNG(pngHeader(32, 32)), true);
+  assert.equal(isSafeClipboardPNG(pngHeader(0, 32)), false);
+  assert.equal(isSafeClipboardPNG(pngHeader(MAX_CLIPBOARD_IMAGE_DIMENSION + 1, 1)), false);
+  assert.equal(isSafeClipboardPNG(pngHeader(4097, 4096)), false);
+
+  const wrongSignature = pngHeader(32, 32);
+  new Uint8Array(wrongSignature)[0] = 0;
+  assert.equal(isSafeClipboardPNG(wrongSignature), false);
+  assert.equal(isSafeClipboardPNG(new ArrayBuffer(23)), false);
+});
 
 test("normalizes hosted and loopback servers", () => {
   assert.equal(normalizeServerURL("https://chat.example.com/app/"), "https://chat.example.com");
