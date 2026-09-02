@@ -89,6 +89,143 @@ expires after five minutes. Permission requests from remote content are denied.
 Server configuration is accepted only from the bundled local settings window
 and is written atomically with user-only permissions.
 
+## Embedded terminal plan
+
+The desktop client will add one local terminal session per Electron window. The
+terminal uses `node-pty` in the privileged main process and `@xterm/xterm` with
+`@xterm/addon-fit` in a bottom-docked Svelte panel. The dock is hidden and
+unmounted by default. Hiding it preserves the shell, while explicit termination
+or window shutdown cleans it up.
+
+This stays deliberately small. It does not add tabs, split panes, multiplexing,
+persistence across app restarts, remote shells, terminal sharing, a new service,
+or an IDE framework.
+
+### Contracts and compatibility
+
+- The renderer bridge gains an optional desktop-only `terminal` capability.
+  Browser callers continue to work when that property is absent.
+- The IPC contract is limited to `start`, `status`, `write`, `resize`,
+  `terminate`, `data`, and `exit`. Inputs are typed and validated. Generic
+  process spawning, shell strings, environment mutation, filesystem access,
+  Node.js access, and raw IPC do not cross the preload boundary.
+- Electron owns PTY creation, shell selection, process identity, and disposal.
+  Svelte owns panel visibility, xterm rendering, focus, and measured rows and
+  columns.
+- Visibility and process lifetime remain separate. Closing the dock hides it
+  without ending the shell. Explicit termination ends it, starting after an exit
+  creates a fresh PTY, and closing the Electron window always disposes it.
+- The initial target is one local shell per desktop window on macOS, Windows,
+  and Linux. Browser behavior, server behavior, the API, the database, the
+  protocol, and the SDK do not change.
+- Electron, xterm.js, node-pty, operating-system PTY facilities, and the user's
+  shell remain external dependencies. ClickClack uses their public interfaces
+  and does not assume they can change.
+
+### Implementation plan
+
+1. Add `node-pty` as a packaged dependency of `apps/desktop`. Add
+   `@xterm/xterm` and `@xterm/addon-fit` to `apps/web`. Update the root lockfile,
+   keep `node-pty` external to the browser bundle, and use the existing
+   Electron and electron-builder paths to rebuild and package its native binary.
+   A clean install, `pnpm build:desktop`, and a packaged-directory smoke build
+   must prove that the module loads on the current platform.
+2. Add a focused PTY owner under `apps/desktop/src/` and connect it from
+   `apps/desktop/src/main.ts`. It chooses the user's platform shell with
+   conservative fallbacks, owns one PTY per window, forwards data and exit
+   events, validates bounded input and dimensions, preserves the PTY while the
+   panel is hidden, supports explicit termination and restart, and cleans up
+   idempotently with the window. IPC handlers use the existing main-sender
+   validation pattern.
+3. Extend `apps/desktop/src/app-preload.ts` and
+   `apps/web/src/lib/desktop.ts` with the optional terminal bridge. Expose only
+   start/status, write, resize, terminate, and data/exit subscriptions. Each
+   subscription returns an unsubscribe function, and payloads are checked on
+   both sides.
+4. Add `apps/web/src/components/terminal/TerminalDock.svelte`. Use xterm.js and
+   FitAddon, mount only when opened, wire each input and output subscription
+   once, fit through `ResizeObserver`, show starting, running, exited, and error
+   states, and provide close, terminate, and restart controls. Opening focuses
+   the terminal. Unmounting disposes renderer observers and listeners but does
+   not terminate the PTY.
+5. Add non-persisted `terminalOpen = false` state to
+   `apps/web/src/ChatApp.svelte`. Render the dock as the final row beneath the
+   conversation only when the preload advertises terminal support. Put a clear,
+   labeled toggle in `DesktopTitlebar.svelte` or the nearest existing desktop
+   action surface. Reuse the existing colors, borders, controls, focus styles,
+   and responsive layout. The closed state reserves no space.
+6. Add focused tests through the existing desktop and web test runners. Prefer
+   unit and contract tests. Add an end-to-end test only if the current harness
+   already supports the Electron preload boundary. Do not add a test framework.
+7. Update this document with the shipped behavior. Use the existing macOS,
+   Windows, and Linux desktop release matrix for rollout. Change those jobs only
+   when an explicit native-module rebuild or package smoke check is required.
+   No data migration, server rollout, feature service, or API migration applies.
+
+### Verification
+
+- Dependency and build checks prove `node-pty` is externalized, rebuilt for
+  Electron, packaged, and loadable.
+- PTY owner tests cover spawn, duplicate start, data, input, resize, exit,
+  restart, terminate, invalid payloads, invalid senders, window cleanup, and
+  idempotent disposal without orphan processes.
+- Preload contract tests cover the exact allowed methods and channels, payload
+  validation, subscription cleanup, and the missing capability in browser mode.
+- Terminal UI tests cover the hidden default, capability gating, opening and
+  focus, fitting and resize, input and output, hide without termination,
+  explicit termination and restart, failure states, and listener cleanup.
+- A layout regression test proves the open panel stays below the conversation
+  and the closed panel leaves no empty area.
+- A manual desktop smoke test opens the panel, runs an interactive command,
+  resizes it, hides and reopens it with the session intact, terminates and
+  restarts it, and closes the app without leaving a shell process alive.
+- `pnpm test:desktop`, web tests and typechecking, lint, formatting, and
+  `pnpm check` pass without weakened checks.
+- The existing macOS, Windows, and Linux release jobs provide packaging evidence
+  before rollout is complete.
+
+### Risks and handling
+
+- `node-pty` may fail to rebuild, sign, or package against an Electron ABI. Pin a
+  compatible release, use the existing rebuild path, externalize it, and require
+  the three-platform package matrix plus a current-platform packaged smoke test.
+- An overly broad IPC bridge could let compromised renderer content run local
+  processes. Keep shell selection and PTY ownership in main, validate every
+  sender and payload, and never accept executable paths, commands, environment
+  maps, or arbitrary channels from the renderer.
+- Repeated hide and open cycles could duplicate subscriptions, lose output, or
+  end the shell. Keep process lifetime in main, make start idempotent, return
+  unsubscribe functions, dispose renderer resources on unmount, and test the
+  cycle directly.
+- Resize observations could flood IPC or send invalid dimensions. Fit only after
+  the dock is measurable, clamp rows and columns in both processes, and skip
+  unchanged or transient resize events.
+- A configured shell may be missing, exit immediately, or fail through its own
+  startup files. Use conservative platform fallbacks and show a bounded error or
+  exited state with restart. Do not interpret output or modify user settings.
+- Existing uncommitted work touches nearby files. Use targeted edits, preserve
+  unrelated changes, inspect each diff, and keep terminal work in new modules
+  and components where practical.
+
+### Boundaries
+
+This plan does not change API handlers, database schemas or migrations,
+OpenAPI, SDK behavior, bot features, hosted infrastructure, or external
+services. It does not change Electron, xterm.js, node-pty, operating-system
+terminals or PTY facilities, shells, signing systems, or package toolchains.
+
+It does not embed or reparent Terminal.app, Windows Terminal, or Linux terminal
+emulator windows. It does not build a terminal emulator, PTY implementation,
+shell parser, command-runner abstraction, or platform window manager. It does
+not add tabs, split panes, multiplexing, persisted sessions, a command-history
+service, remote shells, terminal sharing, workspace-specific shell settings, or
+a general IDE framework. Ordinary browser sessions receive no terminal
+capability, generic Node.js access, or raw IPC access.
+
+No new service, resource, repository, test framework, or rollout mechanism is
+part of this work. The implementation reuses the current monorepo, Electron
+bridge patterns, package pipeline, and release matrix.
+
 ## Build locally
 
 Install workspace dependencies, then build or run the desktop package:
