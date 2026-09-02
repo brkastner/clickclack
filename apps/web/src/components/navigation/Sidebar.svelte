@@ -2,6 +2,7 @@
   import Avatar from "../avatar/Avatar.svelte";
   import { directConversationForUser, handleLabel, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
   import { botShelfPreferences, DEFAULT_BOT_SHELF_LIMIT, setBotShelfLimit, setBotShelfOrder } from "../../lib/appearance";
+  import { parsePersonaChannelPins, pinnedPersonaChannel, type PersonaChannelPins } from "../../lib/personaNavigation";
   import type { Channel, DirectConversation, User, Workspace } from "../../lib/types";
   import ChannelList from "./ChannelList.svelte";
   import DirectMessageList from "./DirectMessageList.svelte";
@@ -238,10 +239,44 @@
     }
   }
 
+  const PERSONA_CHANNEL_PIN_STORAGE_PREFIX = "clickclack:persona-channel-pins:v1:";
+  let personaChannelPins = $state<PersonaChannelPins>({});
+
+  function personaChannelPinStorageKey(workspaceID: string, userID: string): string {
+    return `${PERSONA_CHANNEL_PIN_STORAGE_PREFIX}${userID}:${workspaceID}`;
+  }
+
+  function loadPersonaChannelPins(workspaceID: string, userID: string): PersonaChannelPins {
+    if (!workspaceID || !userID) return {};
+    try {
+      return parsePersonaChannelPins(
+        window.localStorage.getItem(personaChannelPinStorageKey(workspaceID, userID)),
+      );
+    } catch {
+      return {};
+    }
+  }
+
+  function pinPersonaChannel(personaID: string, channelID: string) {
+    personaChannelPins = { ...personaChannelPins, [personaID]: channelID };
+    if (!workspaceID || !currentUser?.id) return;
+    try {
+      window.localStorage.setItem(
+        personaChannelPinStorageKey(workspaceID, currentUser.id),
+        JSON.stringify(personaChannelPins),
+      );
+    } catch {
+      // The pin remains active for this session when storage is unavailable.
+    }
+  }
+
   function handleStorage(event: StorageEvent) {
     if (!workspaceID || !currentUser?.id) return;
-    if (event.key !== channelOrderStorageKey(workspaceID, currentUser.id)) return;
-    channelOrder = parseChannelOrder(event.newValue);
+    if (event.key === channelOrderStorageKey(workspaceID, currentUser.id)) {
+      channelOrder = parseChannelOrder(event.newValue);
+    } else if (event.key === personaChannelPinStorageKey(workspaceID, currentUser.id)) {
+      personaChannelPins = parsePersonaChannelPins(event.newValue);
+    }
   }
 
   let orderedChannels = $derived.by(() => {
@@ -256,7 +291,9 @@
   });
 
   $effect(() => {
-    channelOrder = loadChannelOrder(workspaceID, currentUser?.id || "");
+    const userID = currentUser?.id || "";
+    channelOrder = loadChannelOrder(workspaceID, userID);
+    personaChannelPins = loadPersonaChannelPins(workspaceID, userID);
   });
 
   function shouldHandleClientNavigation(event: MouseEvent): boolean {
@@ -293,10 +330,11 @@
     <section class="sidebar-people-row" aria-label="Recent people">
       {#each displayedRecentPeople as person (person.id)}
           {@const conversation = directConversationForUser(directConversations, person.id)}
+          {@const pinnedChannel = pinnedPersonaChannel(personaChannelPins, person.id, channels)}
           <a
-            href={conversation ? hrefForDirect(conversation.id) : "#"}
+            href={pinnedChannel ? hrefForChannel(pinnedChannel.id) : conversation ? hrefForDirect(conversation.id) : "#"}
             class="sidebar-person"
-            class:active={conversation?.id === selectedDirectID || selectedProfile?.id === person.id}
+            class:active={pinnedChannel?.id === selectedChannelID || conversation?.id === selectedDirectID || selectedProfile?.id === person.id}
             class:shelf-drop-before={shelfDropTargetID === person.id && shelfDropBefore}
             class:shelf-drop-after={shelfDropTargetID === person.id && !shelfDropBefore}
             class:shelf-dragging={draggedPersonID === person.id}
@@ -310,7 +348,11 @@
             ondrop={(event) => shelfDrop(event, person.id)}
             oncontextmenu={openShelfMenu}
             onclick={(event) => {
-              if (conversation) {
+              if (pinnedChannel) {
+                if (!shouldHandleClientNavigation(event)) return;
+                event.preventDefault();
+                onSelectChannel(pinnedChannel.id);
+              } else if (conversation) {
                 if (!shouldHandleClientNavigation(event)) return;
                 event.preventDefault();
                 onSelectDirect(conversation.id);
@@ -374,6 +416,8 @@
       onToggle={() => toggleSection("channels")}
       onReorder={saveChannelOrder}
       onAssignProfile={onAssignChannelProfile}
+      {personaChannelPins}
+      onPinPersonaChannel={pinPersonaChannel}
     />
 
     <DirectMessageList
@@ -411,6 +455,8 @@
       onToggle={() => toggleSection("archived")}
       onReorder={saveChannelOrder}
       onAssignProfile={onAssignChannelProfile}
+      {personaChannelPins}
+      onPinPersonaChannel={pinPersonaChannel}
     />
 
   </div>

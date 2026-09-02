@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import { channelDisplayTitle } from "../../lib/chat/channels";
   import { directConversationForUser, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
+  import type { PersonaChannelPins } from "../../lib/personaNavigation";
   import type { Channel, DirectConversation, User } from "../../lib/types";
   import Avatar from "../avatar/Avatar.svelte";
 
@@ -25,18 +26,20 @@
     onToggle: () => void;
     onReorder: (channelIDs: string[]) => void;
     onAssignProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
+    personaChannelPins: PersonaChannelPins;
+    onPinPersonaChannel: (personaID: string, channelID: string) => void;
   };
 
   let {
     variant = "active", expanded, channels, profiles, directConversations, selectedChannelID, selectedDirectID,
     workingConversationIDs, hrefForChannel, hrefForDirect, onSelectChannel, onSelectDirect, onStartDirect,
-    onCreateChannel, onToggle, onReorder, onAssignProfile,
+    onCreateChannel, onToggle, onReorder, onAssignProfile, personaChannelPins, onPinPersonaChannel,
   }: Props = $props();
 
   let moveMenuChannelID = $state("");
   let moveAnnouncement = $state("");
   let moveMenuElement = $state<HTMLDivElement>();
-  let moveMenuTrigger: HTMLButtonElement | undefined;
+  let moveMenuTrigger: HTMLElement | undefined;
   let draggedChannelID = $state("");
   let draggedGroupKey = $state("");
   let dropTargetID = $state("");
@@ -95,10 +98,19 @@
     if (index >= 0 && target >= 0 && target < scope.length) moveChannel(channelID, scope[target].id, offset < 0);
   }
 
-  async function toggleMoveMenu(channelID: string, trigger: HTMLButtonElement) {
+  async function toggleMoveMenu(channelID: string, trigger: HTMLElement) {
     if (moveMenuChannelID === channelID) { moveMenuChannelID = ""; return; }
     moveMenuTrigger = trigger;
     moveMenuChannelID = channelID;
+    await tick();
+    moveMenuElement?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }
+
+  async function openChannelContextMenu(event: MouseEvent, channel: Channel) {
+    if (variant !== "active" || !assignmentFor(channel)) return;
+    event.preventDefault();
+    moveMenuTrigger = (event.target as HTMLElement | null)?.closest<HTMLElement>("a, button") ?? undefined;
+    moveMenuChannelID = channel.id;
     await tick();
     moveMenuElement?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }
@@ -115,6 +127,12 @@
 
   function assign(channel: Channel, profile: ChannelProfileShortcut | null) {
     onAssignProfile(channel.id, profile);
+    void closeMoveMenu(true);
+  }
+
+  function pin(channel: Channel, profile: ChannelProfileShortcut) {
+    onPinPersonaChannel(profile.bot_user_id, channel.id);
+    announceMove(`Pinned #${channelDisplayTitle(channel)} for ${profile.display_name}`);
     void closeMoveMenu(true);
   }
 
@@ -151,6 +169,7 @@
   {@const unread = channel.unread_count || 0}
   {@const index = scope.findIndex((candidate) => candidate.id === channel.id)}
   <div class="channel-row" class:subdued class:reorderable={expanded} role="listitem" class:drop-before={dropTargetID === channel.id && dropBefore} class:drop-after={dropTargetID === channel.id && !dropBefore}
+    oncontextmenu={(event) => void openChannelContextMenu(event, channel)}
     ondragover={(event) => { if (!draggedChannelID || draggedGroupKey !== groupKey || draggedChannelID === channel.id) return; event.preventDefault(); dropTargetID = channel.id; dropBefore = event.clientY < (event.currentTarget as HTMLElement).getBoundingClientRect().top + (event.currentTarget as HTMLElement).offsetHeight / 2; }}
     ondrop={(event) => { if (draggedGroupKey !== groupKey) return; event.preventDefault(); event.stopPropagation(); moveChannel(draggedChannelID, channel.id, dropBefore); draggedChannelID = ""; dropTargetID = ""; }}>
     {#if expanded}
@@ -172,6 +191,10 @@
       {#if moveMenuChannelID === channel.id}
         <div class="channel-move-menu" role="menu" tabindex="-1" aria-label={`Move #${channelDisplayTitle(channel)}`} bind:this={moveMenuElement}
           onkeydown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); void closeMoveMenu(true); } }}>
+          {@const assignment = assignmentFor(channel)}
+          {#if assignment}
+            <button type="button" role="menuitem" disabled={personaChannelPins[assignment.bot_user_id] === channel.id} onclick={() => pin(channel, assignment)}>Pin</button>
+          {/if}
           <button type="button" role="menuitem" disabled={index <= 0} onclick={() => { moveBy(channel.id, -1, scope); void closeMoveMenu(true); }}>Move up</button>
           <button type="button" role="menuitem" disabled={index < 0 || index >= scope.length - 1} onclick={() => { moveBy(channel.id, 1, scope); void closeMoveMenu(true); }}>Move down</button>
           {#each profiles as profile (profile.id)}
