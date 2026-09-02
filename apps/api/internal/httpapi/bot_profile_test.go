@@ -110,6 +110,19 @@ func TestUpdateServiceBotProfileAsManager(t *testing.T) {
 	if updated.Bot.Handle != "kai" {
 		t.Fatalf("handle = %q, want it unchanged", updated.Bot.Handle)
 	}
+	events, err := fixture.store.ListEventsAfter(context.Background(), fixture.workspace.ID, fixture.owner.ID, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundBotUpdate := false
+	for _, event := range events {
+		if event.Type == "bot.updated" {
+			foundBotUpdate = true
+		}
+	}
+	if !foundBotUpdate {
+		t.Fatalf("durable bot.updated event not found: %#v", events)
+	}
 
 	// Moderators manage bots too.
 	moderated := patchJSONAsUser[struct {

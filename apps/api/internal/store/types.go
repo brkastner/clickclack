@@ -1273,6 +1273,7 @@ type Store interface {
 	UpsertIdentityUser(ctx context.Context, input UpsertIdentityUserInput) (User, error)
 	UpdateUserProfile(ctx context.Context, input UpdateUserProfileInput) (User, error)
 	UpdateBotProfile(ctx context.Context, input UpdateBotProfileInput) (User, error)
+	UpdateBotProfileWithEvents(ctx context.Context, input UpdateBotProfileInput) (User, []Event, error)
 	UpdateUserProfileAndNotificationSettings(ctx context.Context, input UpdateUserProfileAndNotificationSettingsInput) (User, error)
 	UpdateCurrentUser(ctx context.Context, input UpdateCurrentUserInput) (CurrentUserState, error)
 	UpdateNotificationSettings(ctx context.Context, input UpdateNotificationSettingsInput) (NotificationSettings, error)

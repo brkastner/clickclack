@@ -3,6 +3,8 @@ package store
 // DurableEventTypes enumerates every event type persisted to the event log and
 // eligible for outgoing event subscriptions.
 var DurableEventTypes = []string{
+	"bot.updated",
+	"channel.bot_assignment_updated",
 	"channel.created",
 	"channel.read",
 	"channel.updated",

@@ -951,7 +951,7 @@ func (s *Server) updateBotProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	bot, err := s.store.UpdateBotProfile(r.Context(), store.UpdateBotProfileInput{
+	bot, events, err := s.store.UpdateBotProfileWithEvents(r.Context(), store.UpdateBotProfileInput{
 		BotUserID:   chi.URLParam(r, "bot_user_id"),
 		RequesterID: act.user.ID,
 		DisplayName: body.DisplayName,
@@ -966,7 +966,9 @@ func (s *Server) updateBotProfile(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	s.publishBotUpdated(r.Context(), bot)
+	for _, event := range events {
+		s.publishEvent(r.Context(), event)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"bot": bot})
 }
 

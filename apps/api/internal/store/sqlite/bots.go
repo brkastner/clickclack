@@ -771,6 +771,36 @@ func (s *Store) UpdateBotProfile(ctx context.Context, input store.UpdateBotProfi
 	return s.GetUser(ctx, bot.ID)
 }
 
+func (s *Store) UpdateBotProfileWithEvents(ctx context.Context, input store.UpdateBotProfileInput) (store.User, []store.Event, error) {
+	bot, err := s.UpdateBotProfile(ctx, input)
+	if err != nil {
+		return store.User{}, nil, err
+	}
+	workspaces, err := s.ListWorkspaces(ctx, bot.ID)
+	if err != nil {
+		return store.User{}, nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.User{}, nil, err
+	}
+	defer tx.Rollback()
+	events := make([]store.Event, 0, len(workspaces))
+	for _, workspace := range workspaces {
+		event, err := insertEvent(ctx, tx, workspace.ID, "", "bot.updated", nil, map[string]string{
+			"bot_user_id": bot.ID, "display_name": bot.DisplayName, "handle": bot.Handle, "avatar_url": bot.AvatarURL,
+		})
+		if err != nil {
+			return store.User{}, nil, err
+		}
+		events = append(events, event)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.User{}, nil, err
+	}
+	return bot, events, nil
+}
+
 // requireBotProfileManagerTx allows a user-owned bot's owner, or a manager of
 // every workspace the bot governs. A bot with no governed workspace falls back
 // to its historical workspaces so an orphaned service identity cannot be
