@@ -9,9 +9,7 @@ function isAutoLoadMedia(upload: Upload): boolean {
   );
 }
 
-export function newestAutoLoadAttachmentID(
-  messages: readonly Message[],
-): string | undefined {
+export function newestAutoLoadAttachmentID(messages: readonly Message[]): string | undefined {
   let newest: Upload | undefined;
   for (const message of messages) {
     if (message.deleted_at) continue;

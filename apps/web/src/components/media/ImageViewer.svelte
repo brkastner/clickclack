@@ -13,10 +13,11 @@
   };
 
   let { items, initialIndex = 0, onClose }: Props = $props();
-  let hostElement: HTMLDivElement;
+  let hostElement: HTMLDivElement | null = $state(null);
   let island: ImageViewerIsland | null = null;
 
   onMount(() => {
+    if (!hostElement) return;
     island = mountImageViewerIsland(hostElement, { items, initialIndex, onClose });
     return () => island?.unmount();
   });

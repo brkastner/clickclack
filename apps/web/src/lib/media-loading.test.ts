@@ -4,11 +4,7 @@ import test from "node:test";
 import { newestAutoLoadAttachmentID } from "./media-loading.ts";
 import type { Message, Upload } from "./types.ts";
 
-function upload(
-  id: string,
-  createdAt: string,
-  contentType = "image/png",
-): Upload {
+function upload(id: string, createdAt: string, contentType = "image/png"): Upload {
   return {
     id,
     workspace_id: "workspace-1",
