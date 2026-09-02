@@ -938,16 +938,17 @@
     const current = channels.find((channel) => channel.id === channelID);
     if (!current) return;
     try {
-      for (const assignment of current.bot_assignments || []) {
-        if (profile?.bot_user_id === assignment.bot_user_id) continue;
-        await api(`/api/channels/${channelID}/bot-assignments/${assignment.bot_user_id}`, { method: "DELETE" });
-      }
       if (profile) {
+        // The server replaces the single assignment atomically, preserving the
+        // current bot if this request fails.
         await api(`/api/channels/${channelID}/bot-assignments/${profile.bot_user_id}`, { method: "PUT" });
+      } else {
+        const assignment = current.bot_assignments?.[0];
+        if (assignment) {
+          await api(`/api/channels/${channelID}/bot-assignments/${assignment.bot_user_id}`, { method: "DELETE" });
+        }
       }
-      const bot_assignments = profile
-        ? [{ channel_id: channelID, bot_user_id: profile.bot_user_id }]
-        : [];
+      const bot_assignments = profile ? [{ channel_id: channelID, bot_user_id: profile.bot_user_id }] : [];
       channels = channels.map((channel) => channel.id === channelID ? { ...channel, bot_assignments } : channel);
     } catch (error) {
       status = readableAPIError(error, "Could not assign channel bot");
@@ -5066,6 +5067,7 @@
     onAssignChannelProfile={(channelID, profile) =>
       void assignChannelProfile(channelID, profile)}
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
+    onStartDirect={(memberID) => void startDirectWithUser(memberID)}
     onCreateDirect={() => (showCreateDirect = true)}
     onHideDirect={(conversationID) => void hideDirectConversation(conversationID)}
     hiddenDirectTitle={hiddenDirectUndo?.title}

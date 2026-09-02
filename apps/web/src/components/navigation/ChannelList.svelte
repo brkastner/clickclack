@@ -19,6 +19,7 @@
     hrefForDirect: (conversationID: string) => string;
     onSelectChannel: (channelID: string) => void;
     onSelectDirect: (conversationID: string) => void;
+    onStartDirect: (memberID: string) => void;
     onCreateChannel: () => void;
     onToggle: () => void;
     onReorder: (channelIDs: string[]) => void;
@@ -27,7 +28,7 @@
 
   let {
     expanded, channels, profiles, directConversations, selectedChannelID, selectedDirectID,
-    workingConversationIDs, hrefForChannel, hrefForDirect, onSelectChannel, onSelectDirect,
+    workingConversationIDs, hrefForChannel, hrefForDirect, onSelectChannel, onSelectDirect, onStartDirect,
     onCreateChannel, onToggle, onReorder, onAssignProfile,
   }: Props = $props();
 
@@ -42,7 +43,20 @@
   const activeChannels = $derived(channels.filter((channel) => !channel.archived_at));
   const archivedChannels = $derived(channels.filter((channel) => Boolean(channel.archived_at)));
   const assignedChannelIDs = $derived(new Set(activeChannels.filter((channel) => (channel.bot_assignments?.length ?? 0) > 0).map((channel) => channel.id)));
-  const unsectionedChannels = $derived(activeChannels.filter((channel) => !assignedChannelIDs.has(channel.id)));
+  const unsectionedChannels = $derived(activeChannels.filter((channel) =>
+    !assignedChannelIDs.has(channel.id) && !channel.sidebar_section?.trim(),
+  ));
+  const ordinarySectionGroups = $derived.by(() => {
+    const grouped = new Map<string, Channel[]>();
+    for (const channel of activeChannels) {
+      const section = channel.sidebar_section?.trim();
+      if (assignedChannelIDs.has(channel.id) || !section) continue;
+      grouped.set(section, [...(grouped.get(section) || []), channel]);
+    }
+    return [...grouped.entries()]
+      .map(([label, channels]) => ({ label, channels }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  });
   const botGroups = $derived(profiles.map((profile) => ({
     profile,
     channels: activeChannels.filter((channel) => channel.bot_assignments?.some((assignment) => assignment.bot_user_id === profile.bot_user_id)),
@@ -129,7 +143,7 @@
       <section class="channel-subgroup profile-channel-group" role="group">
         <div class="channel-subgroup-header profile-subgroup-header">
           <a href={conversation ? hrefForDirect(conversation.id) : "#"} class="channel-subgroup-toggle profile-source-link" class:active={conversation?.id === selectedDirectID}
-            onclick={(event) => { event.preventDefault(); if (conversation) onSelectDirect(conversation.id); }}>
+            onclick={(event) => { event.preventDefault(); if (conversation) onSelectDirect(conversation.id); else onStartDirect(group.profile.bot_user_id); }}>
             <Avatar class="channel-profile-avatar" id={group.profile.id} name={group.profile.display_name} src={group.profile.avatar_url} size={26} />
             <span>{group.profile.display_name}</span><span class="channel-subgroup-count">{group.channels.length}</span>
           </a>
@@ -148,6 +162,12 @@
   <div class="nav-list" id="sidebar-channels-list" hidden={!expanded && priorityChannels.length === 0}>
     {#if expanded}
       {#each unsectionedChannels as channel (channel.id)}{@render channelRow(channel, unsectionedChannels, "unsectioned")}{/each}
+      {#each ordinarySectionGroups as group (group.label)}
+        <section class="channel-subgroup" role="group" aria-label={group.label}>
+          <p class="section-label">{group.label}</p>
+          {#each group.channels as channel (channel.id)}{@render channelRow(channel, group.channels, `section:${group.label}`)}{/each}
+        </section>
+      {/each}
       {#if archivedChannels.length > 0}<p class="section-label">Archived</p>{#each archivedChannels as channel (channel.id)}{@render channelRow(channel, archivedChannels, "archived", true)}{/each}{/if}
     {:else}
       {#each priorityChannels as channel (channel.id)}{@render channelRow(channel, priorityChannels, "priority")}{/each}

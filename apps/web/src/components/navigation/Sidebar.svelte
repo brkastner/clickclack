@@ -32,6 +32,7 @@
     onCreateChannel: () => void;
     onAssignChannelProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
     onSelectDirect: (conversationID: string) => void;
+    onStartDirect: (memberID: string) => void;
     onCreateDirect: () => void;
     onHideDirect: (conversationID: string) => void;
     hiddenDirectTitle?: string;
@@ -69,6 +70,7 @@
     onCreateChannel,
     onAssignChannelProfile,
     onSelectDirect,
+    onStartDirect,
     onCreateDirect,
     onHideDirect,
     hiddenDirectTitle,
@@ -266,6 +268,7 @@
       {hrefForDirect}
       {onSelectChannel}
       {onSelectDirect}
+      {onStartDirect}
       {onCreateChannel}
       onToggle={() => toggleSection("channels")}
       onReorder={saveChannelOrder}
