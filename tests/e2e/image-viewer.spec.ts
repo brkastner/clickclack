@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createGeneralChannel } from "./channel-fixture";
 import { waitForAppReady } from "./app-ready";
 
 test("opens conversation and thread images in an accessible lightbox", async ({ page }) => {
@@ -6,7 +7,8 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   const filename = `lightbox-${suffix}.png`;
   const messageText = `image lightbox ${suffix}`;
 
-  await page.goto("/app");
+  const { route } = await createGeneralChannel(page, "Image Viewer");
+  await page.goto(route);
   await waitForAppReady(page);
   await page.getByLabel("Upload file").setInputFiles({
     name: filename,

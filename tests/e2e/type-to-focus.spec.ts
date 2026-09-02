@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createGeneralChannel } from "./channel-fixture";
 
 async function clickThreadRootReplyButton(page: Page) {
   const button = page.locator(".thread-root .reply-quote-btn");
@@ -11,8 +12,8 @@ async function clickThreadRootReplyButton(page: Page) {
 
 test.describe("type-to-focus composer", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/app");
-    await page.getByRole("link", { name: "# general" }).click();
+    const { route } = await createGeneralChannel(page, "Type Focus");
+    await page.goto(route);
     await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
   });
 
