@@ -61,15 +61,7 @@ func (s *Store) UpsertChannelBotAssignment(ctx context.Context, input store.Upse
 	if target.Kind != "bot" || !target.IsWorkspaceMember {
 		return store.ChannelBotAssignment{}, store.Event{}, errors.New("bot_user_id must be a bot member of the channel workspace")
 	}
-	assignment := store.ChannelBotAssignment{}
-	err = tx.QueryRowContext(ctx, `
-		INSERT INTO channel_bot_assignments (channel_id, bot_user_id, updated_by, updated_at)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT(channel_id) DO UPDATE SET
-		  bot_user_id = excluded.bot_user_id,
-		  updated_by = excluded.updated_by,
-		  updated_at = excluded.updated_at
-		RETURNING channel_id, bot_user_id`, input.ChannelID, input.BotUserID, input.ActorUserID, now()).Scan(&assignment.ChannelID, &assignment.BotUserID)
+	row, err := qtx.UpsertChannelBotAssignment(ctx, storedb.UpsertChannelBotAssignmentParams{ChannelID: input.ChannelID, BotUserID: input.BotUserID, UpdatedBy: input.ActorUserID, UpdatedAt: now()})
 	if err != nil {
 		return store.ChannelBotAssignment{}, store.Event{}, err
 	}
@@ -77,7 +69,7 @@ func (s *Store) UpsertChannelBotAssignment(ctx context.Context, input store.Upse
 	if err != nil {
 		return store.ChannelBotAssignment{}, store.Event{}, err
 	}
-	return assignment, event, tx.Commit()
+	return channelBotAssignmentFromDB(row.ChannelID, row.BotUserID), event, tx.Commit()
 }
 
 func (s *Store) DeleteChannelBotAssignment(ctx context.Context, input store.DeleteChannelBotAssignmentInput) (store.Event, error) {

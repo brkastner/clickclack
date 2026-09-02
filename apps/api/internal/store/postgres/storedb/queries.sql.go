@@ -5902,7 +5902,8 @@ func (q *Queries) UploadHasOtherDirectMessageAttachment(ctx context.Context, arg
 const upsertChannelBotAssignment = `-- name: UpsertChannelBotAssignment :one
 INSERT INTO channel_bot_assignments (channel_id, bot_user_id, updated_by, updated_at)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT(channel_id, bot_user_id) DO UPDATE SET
+ON CONFLICT(channel_id) DO UPDATE SET
+  bot_user_id = excluded.bot_user_id,
   updated_by = excluded.updated_by,
   updated_at = excluded.updated_at
 RETURNING channel_id, bot_user_id
