@@ -11,6 +11,7 @@ import { getEmbedHostThemeMode } from "./embed-theme";
 import type { AppearancePreferences, AppearancePreferencesPatch, User } from "./types";
 
 export type ColorMode = "light" | "dark" | "system";
+export type ResolvedColorMode = Exclude<ColorMode, "system">;
 export type BoardTheme = "signal" | "ember" | "moss" | "iris";
 export type MessageLayout = "standard" | "outlined";
 export type Density = "comfortable" | "compact";
@@ -25,6 +26,16 @@ export const DEFAULT_COLOR_MODE: ColorMode = "system";
 export const DEFAULT_BOARD_THEME: BoardTheme = "signal";
 export const DEFAULT_MESSAGE_LAYOUT: MessageLayout = "standard";
 export const DEFAULT_DENSITY: Density = "comfortable";
+
+function initialResolvedColorMode(): ResolvedColorMode {
+  if (typeof document === "undefined" || typeof window === "undefined") return "light";
+  const explicit = document.documentElement.getAttribute("data-color-mode");
+  if (explicit === "light" || explicit === "dark") return explicit;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+export const colorMode = writable<ColorMode>(DEFAULT_COLOR_MODE);
+export const resolvedColorMode = writable<ResolvedColorMode>(initialResolvedColorMode());
 
 export const COLOR_MODES: { id: ColorMode; label: string }[] = [
   { id: "light", label: "Light" },
@@ -67,6 +78,7 @@ let appearanceRevision = 0;
 let appearanceSettledRevision = 0;
 let appearanceAccountGeneration = 0;
 const migratedAppearanceUsers = new Set<string>();
+let appearanceModeTrackingInstalled = false;
 
 type AppearanceRequestState = {
   userID: string;
@@ -128,15 +140,40 @@ export function loadDensity(): Density {
 }
 
 export function applyColorMode(mode: ColorMode) {
+  colorMode.set(mode);
   try {
     // Account refreshes must not replace the host-selected embed appearance;
     // the override is document-local and never enters account preferences.
     const resolvedMode = getEmbedHostThemeMode() ?? mode;
     if (resolvedMode === "system") document.documentElement.removeAttribute("data-color-mode");
     else document.documentElement.setAttribute("data-color-mode", resolvedMode);
+    syncResolvedColorMode();
   } catch {
     // Non-DOM context (SSR/tests); the stored pref still applies on mount.
   }
+}
+
+function syncResolvedColorMode() {
+  const explicit = document.documentElement.getAttribute("data-color-mode");
+  if (explicit === "light" || explicit === "dark") {
+    resolvedColorMode.set(explicit);
+    return;
+  }
+  resolvedColorMode.set(
+    window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+  );
+}
+
+function installResolvedColorModeTracking() {
+  if (appearanceModeTrackingInstalled || typeof window === "undefined") return;
+  appearanceModeTrackingInstalled = true;
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  media.addEventListener("change", syncResolvedColorMode);
+  new MutationObserver(syncResolvedColorMode).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-color-mode"],
+  });
+  syncResolvedColorMode();
 }
 
 export function applyBoardTheme(board: BoardTheme) {
@@ -399,6 +436,7 @@ function rememberAppearanceCacheUser() {
 // Re-apply the stored prefs (mount-time belt to the app.html suspenders, and
 // the recovery path when the boot script could not run).
 export function initAppearance() {
+  installResolvedColorModeTracking();
   applyColorMode(loadColorMode());
   applyBoardTheme(loadBoardTheme());
   applyMessageLayout(loadMessageLayout());

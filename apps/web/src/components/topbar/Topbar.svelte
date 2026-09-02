@@ -2,6 +2,7 @@
   import { dmTitle } from "../../lib/chat/people";
   import { channelDisplayTitle, safeExternalChannelURL } from "../../lib/chat/channels";
   import type { Channel, ChannelNotificationPreference, DirectConversation } from "../../lib/types";
+  import ThemeToggle from "./ThemeToggle.svelte";
 
   type Props = {
     selectedDirect?: DirectConversation;
@@ -58,25 +59,6 @@
       <h1 class="dm"><span class="title-glyph">@</span>{dmTitle(selectedDirect, currentUserID)}</h1>
     {:else if selectedChannel}
       <h1 class="channel"><span class="title-glyph">#</span>{channelDisplayTitle(selectedChannel)}</h1>
-      {#if channelNotifPreference}
-        <button
-          type="button"
-          class="notif-toggle"
-          title={notifTitle(channelNotifPreference)}
-          aria-label={notifTitle(channelNotifPreference)}
-          aria-busy={channelNotifSaving}
-          disabled={channelNotifSaving}
-          onclick={onToggleChannelNotifications}
-        >
-          {#if channelNotifPreference === "muted"}
-            <span aria-hidden="true">🔕</span>
-          {:else if channelNotifPreference === "mentions"}
-            <span aria-hidden="true">@</span>
-          {:else}
-            <span aria-hidden="true">🔔</span>
-          {/if}
-        </button>
-      {/if}
     {:else}
       <h1>ClickClack</h1>
     {/if}
@@ -106,6 +88,26 @@
     <button type="submit" class="search-submit">Search</button>
   </form>
   <div class="topbar-actions" aria-label="Channel tools">
+    <ThemeToggle />
+    {#if channelNotifPreference}
+      <button
+        type="button"
+        class="notif-toggle"
+        title={notifTitle(channelNotifPreference)}
+        aria-label={notifTitle(channelNotifPreference)}
+        aria-busy={channelNotifSaving}
+        disabled={channelNotifSaving}
+        onclick={onToggleChannelNotifications}
+      >
+        {#if channelNotifPreference === "muted"}
+          <span aria-hidden="true">🔕</span>
+        {:else if channelNotifPreference === "mentions"}
+          <span aria-hidden="true">@</span>
+        {:else}
+          <span aria-hidden="true">🔔</span>
+        {/if}
+      </button>
+    {/if}
     {#if externalHref}
       <a href={externalHref} target="_blank" rel="noopener" title="Open external channel" aria-label="Open external channel">
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
