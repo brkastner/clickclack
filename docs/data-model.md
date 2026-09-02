@@ -40,7 +40,7 @@ this ID on first use; replies never receive their own route ID.
 users                              identities
 workspaces                         workspace_members
 workspace_member_moderation
-channels
+channels                           channel_bot_assignments
 messages                           thread_state
 topics                             pinned_messages
 channel_notification_settings
@@ -59,9 +59,18 @@ and
 [`0002_auth.sql`](../apps/api/internal/store/sqlite/migrations/0002_auth.sql);
 later migrations add auth/session hardening, upload metadata, public route IDs,
 read receipts, bot records, Postgres parity, member moderation, channel
-notification preferences, resolved-mention event metadata, and pinned messages.
+notification preferences, resolved-mention event metadata, pinned messages, and
+bot-to-channel sidebar assignments.
 Full Postgres SQL is in
 [`apps/api/internal/store/postgres/migrations/0001_schema.sql`](../apps/api/internal/store/postgres/migrations/0001_schema.sql).
+
+## Bot identity invariants
+
+A visible bot is one `users` row with its own name, handle, avatar, and token.
+`messages.author_id` always identifies that canonical user. The
+`channel_bot_assignments` table stores only `(channel_id, bot_user_id)` plus
+update metadata; it controls sidebar grouping and stores no display or runtime
+routing data.
 
 ## Thread invariants
 

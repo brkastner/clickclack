@@ -256,15 +256,6 @@ export type Workspace = {
   role?: "owner" | "moderator" | "member" | "guest" | "bot";
 };
 
-export type ChannelBotPresentation = {
-  channel_id: string;
-  bot_user_id: string;
-  display_name: string;
-  avatar_url: string;
-  updated_by: string;
-  updated_at: string;
-};
-
 export type ChannelBotAssignment = {
   channel_id: string;
   bot_user_id: string;
@@ -283,7 +274,6 @@ export type Channel = {
   external_ref?: string;
   external_url?: string;
   sidebar_section?: string;
-  bot_presentations?: ChannelBotPresentation[];
   bot_assignments?: ChannelBotAssignment[];
   last_seq?: number;
   last_read_seq?: number;

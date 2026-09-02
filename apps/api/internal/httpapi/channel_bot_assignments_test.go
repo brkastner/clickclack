@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,6 +13,20 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
 )
+
+func putJSON[T any](t *testing.T, endpoint string, body any) T {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return doJSON[T](t, req)
+}
 
 func TestChannelBotAssignmentEndpointsAndHydration(t *testing.T) {
 	t.Parallel()

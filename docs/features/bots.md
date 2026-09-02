@@ -60,7 +60,8 @@ Rules:
 - A human has `owner_user_id = NULL`.
 - A service bot has `kind = bot` and `owner_user_id = NULL`.
 - A user bot has `kind = bot` and `owner_user_id = <human user id>`.
-- A bot can have its own `display_name`, `handle`, and `avatar_url`.
+- A bot has its own canonical `display_name`, `handle`, and `avatar_url`.
+- Channel sidebar assignments reference the bot user ID and never override its identity.
 - A bot may not own another bot.
 - Deleting a human owner revokes/deletes user-owned bots and tokens.
 - `messages.author_id` stays a plain `users.id`. Deleting a bot retires that

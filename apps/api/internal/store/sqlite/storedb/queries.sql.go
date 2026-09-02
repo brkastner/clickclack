@@ -500,24 +500,6 @@ func (q *Queries) DeleteChannelBotAssignment(ctx context.Context, arg DeleteChan
 	return result.RowsAffected()
 }
 
-const deleteChannelBotPresentation = `-- name: DeleteChannelBotPresentation :execrows
-DELETE FROM channel_bot_presentations
-WHERE channel_id = ?1 AND bot_user_id = ?2
-`
-
-type DeleteChannelBotPresentationParams struct {
-	ChannelID string `json:"channel_id"`
-	BotUserID string `json:"bot_user_id"`
-}
-
-func (q *Queries) DeleteChannelBotPresentation(ctx context.Context, arg DeleteChannelBotPresentationParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteChannelBotPresentation, arg.ChannelID, arg.BotUserID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const deleteDesktopOAuthGrant = `-- name: DeleteDesktopOAuthGrant :execrows
 DELETE FROM desktop_oauth_grants
 WHERE id = ?1 AND grant_hash = ?2
@@ -1220,35 +1202,6 @@ type GetChannelBotAssignmentTargetRow struct {
 func (q *Queries) GetChannelBotAssignmentTarget(ctx context.Context, arg GetChannelBotAssignmentTargetParams) (GetChannelBotAssignmentTargetRow, error) {
 	row := q.db.QueryRowContext(ctx, getChannelBotAssignmentTarget, arg.BotUserID, arg.ChannelID)
 	var i GetChannelBotAssignmentTargetRow
-	err := row.Scan(&i.WorkspaceID, &i.Kind, &i.IsWorkspaceMember)
-	return i, err
-}
-
-const getChannelBotPresentationTarget = `-- name: GetChannelBotPresentationTarget :one
-SELECT c.workspace_id, u.kind,
-       CAST(EXISTS (
-         SELECT 1 FROM workspace_members wm
-         WHERE wm.workspace_id = c.workspace_id AND wm.user_id = u.id
-       ) AS INTEGER) AS is_workspace_member
-FROM channels c
-JOIN users u ON u.id = ?1
-WHERE c.id = ?2
-`
-
-type GetChannelBotPresentationTargetParams struct {
-	BotUserID string `json:"bot_user_id"`
-	ChannelID string `json:"channel_id"`
-}
-
-type GetChannelBotPresentationTargetRow struct {
-	WorkspaceID       string `json:"workspace_id"`
-	Kind              string `json:"kind"`
-	IsWorkspaceMember int64  `json:"is_workspace_member"`
-}
-
-func (q *Queries) GetChannelBotPresentationTarget(ctx context.Context, arg GetChannelBotPresentationTargetParams) (GetChannelBotPresentationTargetRow, error) {
-	row := q.db.QueryRowContext(ctx, getChannelBotPresentationTarget, arg.BotUserID, arg.ChannelID)
-	var i GetChannelBotPresentationTargetRow
 	err := row.Scan(&i.WorkspaceID, &i.Kind, &i.IsWorkspaceMember)
 	return i, err
 }
@@ -3409,81 +3362,6 @@ func (q *Queries) ListChannelBotAssignmentsByWorkspace(ctx context.Context, work
 	for rows.Next() {
 		var i ListChannelBotAssignmentsByWorkspaceRow
 		if err := rows.Scan(&i.ChannelID, &i.BotUserID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listChannelBotPresentationsByChannel = `-- name: ListChannelBotPresentationsByChannel :many
-SELECT channel_id, bot_user_id, display_name, avatar_url, updated_by, updated_at
-FROM channel_bot_presentations
-WHERE channel_id = ?1
-ORDER BY bot_user_id
-`
-
-func (q *Queries) ListChannelBotPresentationsByChannel(ctx context.Context, channelID string) ([]ChannelBotPresentation, error) {
-	rows, err := q.db.QueryContext(ctx, listChannelBotPresentationsByChannel, channelID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ChannelBotPresentation
-	for rows.Next() {
-		var i ChannelBotPresentation
-		if err := rows.Scan(
-			&i.ChannelID,
-			&i.BotUserID,
-			&i.DisplayName,
-			&i.AvatarUrl,
-			&i.UpdatedBy,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listChannelBotPresentationsByWorkspace = `-- name: ListChannelBotPresentationsByWorkspace :many
-SELECT p.channel_id, p.bot_user_id, p.display_name, p.avatar_url, p.updated_by, p.updated_at
-FROM channel_bot_presentations p
-JOIN channels c ON c.id = p.channel_id
-WHERE c.workspace_id = ?1
-ORDER BY p.channel_id, p.bot_user_id
-`
-
-func (q *Queries) ListChannelBotPresentationsByWorkspace(ctx context.Context, workspaceID string) ([]ChannelBotPresentation, error) {
-	rows, err := q.db.QueryContext(ctx, listChannelBotPresentationsByWorkspace, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ChannelBotPresentation
-	for rows.Next() {
-		var i ChannelBotPresentation
-		if err := rows.Scan(
-			&i.ChannelID,
-			&i.BotUserID,
-			&i.DisplayName,
-			&i.AvatarUrl,
-			&i.UpdatedBy,
-			&i.UpdatedAt,
-		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -5841,47 +5719,6 @@ func (q *Queries) UpsertChannelBotAssignment(ctx context.Context, arg UpsertChan
 	)
 	var i UpsertChannelBotAssignmentRow
 	err := row.Scan(&i.ChannelID, &i.BotUserID)
-	return i, err
-}
-
-const upsertChannelBotPresentation = `-- name: UpsertChannelBotPresentation :one
-INSERT INTO channel_bot_presentations (channel_id, bot_user_id, display_name, avatar_url, updated_by, updated_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-ON CONFLICT(channel_id, bot_user_id) DO UPDATE SET
-  display_name = excluded.display_name,
-  avatar_url = excluded.avatar_url,
-  updated_by = excluded.updated_by,
-  updated_at = excluded.updated_at
-RETURNING channel_id, bot_user_id, display_name, avatar_url, updated_by, updated_at
-`
-
-type UpsertChannelBotPresentationParams struct {
-	ChannelID   string `json:"channel_id"`
-	BotUserID   string `json:"bot_user_id"`
-	DisplayName string `json:"display_name"`
-	AvatarUrl   string `json:"avatar_url"`
-	UpdatedBy   string `json:"updated_by"`
-	UpdatedAt   string `json:"updated_at"`
-}
-
-func (q *Queries) UpsertChannelBotPresentation(ctx context.Context, arg UpsertChannelBotPresentationParams) (ChannelBotPresentation, error) {
-	row := q.db.QueryRowContext(ctx, upsertChannelBotPresentation,
-		arg.ChannelID,
-		arg.BotUserID,
-		arg.DisplayName,
-		arg.AvatarUrl,
-		arg.UpdatedBy,
-		arg.UpdatedAt,
-	)
-	var i ChannelBotPresentation
-	err := row.Scan(
-		&i.ChannelID,
-		&i.BotUserID,
-		&i.DisplayName,
-		&i.AvatarUrl,
-		&i.UpdatedBy,
-		&i.UpdatedAt,
-	)
 	return i, err
 }
 

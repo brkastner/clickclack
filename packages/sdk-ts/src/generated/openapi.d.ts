@@ -752,22 +752,6 @@ export interface paths {
         patch: operations["updateChannel"];
         trace?: never;
     };
-    "/api/channels/{channel_id}/bot-presentations/{bot_user_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["upsertChannelBotPresentation"];
-        post?: never;
-        delete: operations["deleteChannelBotPresentation"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/channels/{channel_id}/bot-assignments/{bot_user_id}": {
         parameters: {
             query?: never;
@@ -1897,8 +1881,6 @@ export interface components {
             external_url?: string;
             /** @description Optional client sidebar grouping label. */
             sidebar_section?: string;
-            /** @description Manager-controlled visual aliases for bot authors in this channel. Authentication and handles remain unchanged. */
-            bot_presentations?: components["schemas"]["ChannelBotPresentation"][];
             /** @description Bots used to group this channel in the sidebar. */
             bot_assignments?: components["schemas"]["ChannelBotAssignment"][];
             /** Format: int64 */
@@ -1907,23 +1889,6 @@ export interface components {
             last_read_seq?: number;
             /** Format: int64 */
             unread_count?: number;
-        };
-        ChannelBotPresentation: {
-            channel_id: string;
-            bot_user_id: string;
-            display_name: string;
-            avatar_url: string;
-            updated_by: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        UpsertChannelBotPresentationRequest: {
-            display_name: string;
-            avatar_url?: string;
-        };
-        ChannelBotPresentationResponse: {
-            presentation: components["schemas"]["ChannelBotPresentation"];
-            event: components["schemas"]["Event"];
         };
         ChannelBotAssignment: {
             channel_id: string;
@@ -4060,54 +4025,6 @@ export interface operations {
         };
         responses: {
             /** @description Updated channel */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    upsertChannelBotPresentation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                channel_id: components["parameters"]["channel_id"];
-                bot_user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpsertChannelBotPresentationRequest"];
-            };
-        };
-        responses: {
-            /** @description Updated channel-scoped bot presentation */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChannelBotPresentationResponse"];
-                };
-            };
-        };
-    };
-    deleteChannelBotPresentation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                channel_id: components["parameters"]["channel_id"];
-                bot_user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Removed channel-scoped bot presentation */
             200: {
                 headers: {
                     [name: string]: unknown;

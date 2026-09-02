@@ -13,8 +13,9 @@ A ClickClack bot install is three things:
    watch.
 
 The token is the install secret. The bot user is the visible chat identity.
-The runtime is whatever process uses the token: OpenClaw, CI, a small SDK
-script, or a service daemon.
+Each visible bot needs its own user and token; channel assignment does not let
+one token post as another bot. The runtime is whatever process uses the token:
+OpenClaw, CI, a small SDK script, or a service daemon.
 
 ## Pick the bot shape
 

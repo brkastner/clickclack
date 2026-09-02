@@ -12,6 +12,13 @@ func TestChannelBotAssignmentsAuthorizationAndHydration(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	st := newTestStore(t)
+	var legacyTableCount int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'channel_bot_presentations'`).Scan(&legacyTableCount); err != nil {
+		t.Fatal(err)
+	}
+	if legacyTableCount != 0 {
+		t.Fatal("channel_bot_presentations table still exists")
+	}
 
 	owner, err := st.EnsureBootstrap(ctx, "Owner", "assignment-owner@example.com")
 	if err != nil {

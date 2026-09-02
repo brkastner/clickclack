@@ -85,32 +85,17 @@ placement. Section and Archived disclosure state is browser-local and persisted
 per workspace. `external_managed` adds a small row marker, while a safe HTTP(S)
 `external_url` adds an external-open action to the channel header.
 
-Managers can give a bot a channel-scoped visual identity with
-`PUT /api/channels/{channel_id}/bot-presentations/{bot_user_id}` and remove it
-with `DELETE` on the same path. The request accepts `{display_name, avatar_url?}`.
-Channel responses expose these entries as `bot_presentations`. They only change
-how that bot's messages are presented in the channel: the authenticated user ID,
-`@handle`, bot badge, profile, mentions, commands, and permissions stay attached
-to the underlying bot. Bot tokens cannot mutate presentations.
+Managers can group a channel under a bot with
+`PUT /api/channels/{channel_id}/bot-assignments/{bot_user_id}` and remove the
+assignment with `DELETE` on the same path. The endpoints accept no request body.
+Channel responses expose assignments as `bot_assignments`, containing only
+`channel_id` and `bot_user_id`. Assignments control sidebar grouping only. Bot
+names, handles, avatars, message authorship, mentions, and runtime routing all
+continue to use the canonical bot user.
 
-A presentation channel can also act as a sidebar profile. Its section key is
-`profile:{source_channel_id}`. The web client renders that opaque key as the
-profile's avatar and display name, nests assigned channels beneath it, and lets
-managers move ordinary channels between profiles by dragging them onto a profile
-header. Assignment copies the source bot presentation to the target channel;
-removing the profile removes that copied presentation. Self-referential source
-channels remain the canonical profile catalog and are not duplicated as
-shortcuts when their presentation is copied elsewhere.
-
-A profile's own source channel is represented by the group header rather than
-repeated as a row inside the group. Clicking the header expands the group and
-opens its target; the separate caret button collapses it. A profile whose label
-matches its bot's own display name is that bot's canonical identity, so its
-header opens the bot's direct conversation. Persona profiles, where several
-labels present one shared bot, open their own source channel instead. A
-canonical profile with no direct conversation falls back to its channel. The header carries
-the source channel's unread badge, so an unread profile channel stays visible
-while the group is collapsed.
+The sidebar renders each assigned bot from its `users` identity and opens that
+bot's direct conversation from the group header. Unassigned channels stay in
+the ordinary channel list. Bot tokens cannot mutate assignments.
 
 Profile groups render above ordinary alphabetized sections, in the viewer's own
 channel order keyed by each profile's source channel. Managers reorder them by

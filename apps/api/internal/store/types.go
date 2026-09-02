@@ -258,32 +258,22 @@ type Workspace struct {
 }
 
 type Channel struct {
-	ID               string                   `json:"id"`
-	RouteID          string                   `json:"route_id"`
-	WorkspaceID      string                   `json:"workspace_id"`
-	Name             string                   `json:"name"`
-	DisplayTitle     *string                  `json:"display_title,omitempty"`
-	Kind             string                   `json:"kind"`
-	CreatedAt        string                   `json:"created_at"`
-	ArchivedAt       *string                  `json:"archived_at,omitempty"`
-	ExternalManaged  bool                     `json:"external_managed"`
-	ExternalRef      *string                  `json:"external_ref,omitempty"`
-	ExternalURL      *string                  `json:"external_url,omitempty"`
-	SidebarSection   *string                  `json:"sidebar_section,omitempty"`
-	BotPresentations []ChannelBotPresentation `json:"bot_presentations,omitempty"`
-	BotAssignments   []ChannelBotAssignment   `json:"bot_assignments,omitempty"`
-	LastSeq          int64                    `json:"last_seq"`
-	LastReadSeq      int64                    `json:"last_read_seq"`
-	UnreadCount      int64                    `json:"unread_count"`
-}
-
-type ChannelBotPresentation struct {
-	ChannelID   string `json:"channel_id"`
-	BotUserID   string `json:"bot_user_id"`
-	DisplayName string `json:"display_name"`
-	AvatarURL   string `json:"avatar_url"`
-	UpdatedBy   string `json:"updated_by"`
-	UpdatedAt   string `json:"updated_at"`
+	ID              string                 `json:"id"`
+	RouteID         string                 `json:"route_id"`
+	WorkspaceID     string                 `json:"workspace_id"`
+	Name            string                 `json:"name"`
+	DisplayTitle    *string                `json:"display_title,omitempty"`
+	Kind            string                 `json:"kind"`
+	CreatedAt       string                 `json:"created_at"`
+	ArchivedAt      *string                `json:"archived_at,omitempty"`
+	ExternalManaged bool                   `json:"external_managed"`
+	ExternalRef     *string                `json:"external_ref,omitempty"`
+	ExternalURL     *string                `json:"external_url,omitempty"`
+	SidebarSection  *string                `json:"sidebar_section,omitempty"`
+	BotAssignments  []ChannelBotAssignment `json:"bot_assignments,omitempty"`
+	LastSeq         int64                  `json:"last_seq"`
+	LastReadSeq     int64                  `json:"last_read_seq"`
+	UnreadCount     int64                  `json:"unread_count"`
 }
 
 type ChannelBotAssignment struct {
@@ -910,20 +900,6 @@ type UpdateChannelInput struct {
 	SidebarSection  *string
 }
 
-type UpsertChannelBotPresentationInput struct {
-	ChannelID   string
-	BotUserID   string
-	DisplayName string
-	AvatarURL   string
-	ActorUserID string
-}
-
-type DeleteChannelBotPresentationInput struct {
-	ChannelID   string
-	BotUserID   string
-	ActorUserID string
-}
-
 type UpsertChannelBotAssignmentInput struct {
 	ChannelID   string
 	BotUserID   string
@@ -1314,8 +1290,6 @@ type Store interface {
 	GetChannel(ctx context.Context, channelID, userID string) (Channel, error)
 	CreateChannel(ctx context.Context, input CreateChannelInput) (Channel, Event, error)
 	UpdateChannel(ctx context.Context, input UpdateChannelInput) (Channel, Event, error)
-	UpsertChannelBotPresentation(ctx context.Context, input UpsertChannelBotPresentationInput) (ChannelBotPresentation, Event, error)
-	DeleteChannelBotPresentation(ctx context.Context, input DeleteChannelBotPresentationInput) (Event, error)
 	UpsertChannelBotAssignment(ctx context.Context, input UpsertChannelBotAssignmentInput) (ChannelBotAssignment, Event, error)
 	DeleteChannelBotAssignment(ctx context.Context, input DeleteChannelBotAssignmentInput) (Event, error)
 	ListTopics(ctx context.Context, workspaceID, requesterID string) ([]Topic, error)

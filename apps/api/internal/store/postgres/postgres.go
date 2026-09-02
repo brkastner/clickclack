@@ -528,10 +528,6 @@ func (s *Store) ListChannels(ctx context.Context, workspaceID, userID string) ([
 			out = append(out, channel)
 		}
 	}
-	out, err = s.hydrateChannelBotPresentations(ctx, out, workspaceID)
-	if err != nil {
-		return nil, err
-	}
 	return s.hydrateChannelBotAssignments(ctx, out, workspaceID)
 }
 
@@ -545,10 +541,6 @@ func (s *Store) GetChannel(ctx context.Context, channelID, userID string) (store
 		return store.Channel{}, err
 	}
 	if err := s.requireGuestChannelAccess(ctx, channel.WorkspaceID, channel.ID, userID); err != nil {
-		return store.Channel{}, err
-	}
-	channel, err = s.hydrateChannelBotPresentationsForChannel(ctx, channel)
-	if err != nil {
 		return store.Channel{}, err
 	}
 	return s.hydrateChannelBotAssignmentsForChannel(ctx, channel)
