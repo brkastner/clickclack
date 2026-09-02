@@ -44,10 +44,10 @@ export const COLOR_MODES: { id: ColorMode; label: string }[] = [
 ];
 
 export const BOARD_THEMES: { id: BoardTheme; label: string; blurb: string }[] = [
-  { id: "signal", label: "Signal", blurb: "Porcelain board, electric cyan" },
-  { id: "ember", label: "Ember", blurb: "Warm paper, ember coral" },
-  { id: "moss", label: "Moss", blurb: "Sage plate, verdant green" },
-  { id: "iris", label: "Iris", blurb: "Violet plate, twilight iris" },
+  { id: "signal", label: "Signal", blurb: "Pine by day, electric cyan by night" },
+  { id: "ember", label: "Ember", blurb: "Love by day, ember coral by night" },
+  { id: "moss", label: "Moss", blurb: "Pine by day, verdant green by night" },
+  { id: "iris", label: "Iris", blurb: "Iris by day, twilight violet by night" },
 ];
 
 export const MESSAGE_LAYOUTS: { id: MessageLayout; label: string; blurb: string }[] = [
