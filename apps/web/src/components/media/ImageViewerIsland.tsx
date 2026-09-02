@@ -8,7 +8,9 @@ import React, {
   useState,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { writeClipboardText } from "../../lib/clipboard";
 import type { ImageViewerItem } from "../../lib/uploads";
+import { copyAttachmentLink, copyViewerImage } from "../../lib/image-viewer-clipboard";
 
 type ImageViewerProps = {
   items: ImageViewerItem[];
@@ -23,6 +25,11 @@ type ErrorBoundaryProps = {
 
 type ErrorBoundaryState = {
   failed: boolean;
+};
+
+type ContextMenuPosition = {
+  x: number;
+  y: number;
 };
 
 class ImageViewerErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -70,17 +77,83 @@ function findFocusFallback(opener: HTMLElement | null): HTMLElement | null {
 
 function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
+  const [contextMenuStatus, setContextMenuStatus] = useState("");
+  const [copying, setCopying] = useState(false);
   const scrimRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const openerRef = useRef<HTMLElement | null>(
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
   );
   const current = items[currentIndex] ?? items[0];
+  const currentURL = current?.url ?? "";
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < items.length - 1;
 
   useEffect(() => setCurrentIndex(initialIndex), [initialIndex, items]);
+
+  const dismissContextMenu = useCallback(() => {
+    setContextMenu(null);
+    setContextMenuStatus("");
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    dismissContextMenu();
+    window.requestAnimationFrame(() => imageRef.current?.focus({ preventScroll: true }));
+  }, [dismissContextMenu]);
+
+  const showContextMenu = useCallback((x: number, y: number) => {
+    const menuWidth = 210;
+    const menuHeight = 108;
+    const margin = 8;
+    setContextMenu({
+      x: Math.max(margin, Math.min(x, window.innerWidth - menuWidth - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - menuHeight - margin)),
+    });
+    setContextMenuStatus("");
+  }, []);
+
+  const openContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLImageElement>) => {
+      event.preventDefault();
+      showContextMenu(event.clientX, event.clientY);
+    },
+    [showContextMenu],
+  );
+
+  const openContextMenuFromKeyboard = useCallback(
+    (event: React.KeyboardEvent<HTMLImageElement>) => {
+      if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+      event.preventDefault();
+      const bounds = event.currentTarget.getBoundingClientRect();
+      showContextMenu(bounds.left + Math.min(bounds.width / 2, 80), bounds.top + 24);
+    },
+    [showContextMenu],
+  );
+
+  const handleContextMenuKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const buttons = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>(
+        'button[role="menuitem"]:not([aria-disabled="true"])',
+      ),
+    );
+    if (buttons.length === 0) return;
+    const currentButton =
+      document.activeElement instanceof HTMLButtonElement
+        ? buttons.indexOf(document.activeElement)
+        : -1;
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    buttons[(currentButton + direction + buttons.length) % buttons.length]?.focus();
+  }, []);
+
+  const preventContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+  }, []);
 
   const showPrevious = useCallback(() => {
     setCurrentIndex((index) => Math.max(0, index - 1));
@@ -116,11 +189,31 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
   }, []);
 
   useEffect(() => {
+    if (!contextMenu) return;
+    const focusFrame = window.requestAnimationFrame(() => {
+      contextMenuRef.current?.querySelector<HTMLButtonElement>('button[role="menuitem"]')?.focus();
+    });
+    const dismiss = (event: PointerEvent) => {
+      if (!contextMenuRef.current?.contains(event.target as Node)) dismissContextMenu();
+    };
+    window.addEventListener("pointerdown", dismiss);
+    window.addEventListener("blur", dismissContextMenu);
+    window.addEventListener("resize", dismissContextMenu);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("blur", dismissContextMenu);
+      window.removeEventListener("resize", dismissContextMenu);
+    };
+  }, [contextMenu, dismissContextMenu]);
+
+  useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        onClose();
+        if (contextMenu) closeContextMenu();
+        else onClose();
         return;
       }
       if (event.key === "ArrowLeft" && currentIndex > 0) {
@@ -163,7 +256,39 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
     };
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
-  }, [currentIndex, items.length, onClose, showNext, showPrevious]);
+  }, [closeContextMenu, contextMenu, currentIndex, items.length, onClose, showNext, showPrevious]);
+
+  useEffect(() => dismissContextMenu(), [currentIndex, dismissContextMenu]);
+
+  const copyCurrentImage = useCallback(async () => {
+    if (copying) return;
+    setCopying(true);
+    setContextMenuStatus("");
+    try {
+      await copyViewerImage(currentURL);
+      setContextMenuStatus("Image copied");
+    } catch (error) {
+      console.error("Could not copy image", error);
+      setContextMenuStatus("Could not copy image");
+    } finally {
+      setCopying(false);
+    }
+  }, [copying, currentURL]);
+
+  const copyCurrentAttachmentLink = useCallback(async () => {
+    if (copying) return;
+    setCopying(true);
+    setContextMenuStatus("");
+    try {
+      await copyAttachmentLink(currentURL, writeClipboardText);
+      setContextMenuStatus("Attachment link copied");
+    } catch (error) {
+      console.error("Could not copy attachment link", error);
+      setContextMenuStatus("Could not copy attachment link");
+    } finally {
+      setCopying(false);
+    }
+  }, [copying, currentURL]);
 
   if (!current) return null;
 
@@ -230,7 +355,46 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
           </div>
         </header>
         <div className="image-viewer-stage">
-          <img src={current.url} alt={current.title} />
+          <img
+            ref={imageRef}
+            src={current.url}
+            alt={current.title}
+            tabIndex={0}
+            aria-haspopup="menu"
+            aria-keyshortcuts="Shift+F10"
+            onContextMenu={openContextMenu}
+            onKeyDown={openContextMenuFromKeyboard}
+          />
+          {contextMenu && (
+            <div
+              ref={contextMenuRef}
+              className="image-viewer__context-menu"
+              role="menu"
+              aria-label="Image options"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+              aria-busy={copying}
+              onContextMenu={preventContextMenu}
+              onKeyDown={handleContextMenuKeyDown}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                aria-disabled={copying}
+                onClick={copyCurrentImage}
+              >
+                Copy image
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                aria-disabled={copying}
+                onClick={copyCurrentAttachmentLink}
+              >
+                Copy attachment link
+              </button>
+              {contextMenuStatus && <p role="status">{contextMenuStatus}</p>}
+            </div>
+          )}
         </div>
       </div>
     </div>

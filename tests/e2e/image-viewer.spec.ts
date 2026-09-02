@@ -58,7 +58,7 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   });
   await expect(page.getByText(filename)).toBeVisible();
   await page.getByLabel("Message body").fill(messageText);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   const imageRow = page.locator(".message-row").filter({ hasText: messageText });
   const conversationTrigger = imageRow.getByRole("button", { name: `Open image ${filename}` });
@@ -91,7 +91,18 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   await expect(closeButton).toBeFocused();
 
   await page.keyboard.press("Tab");
-  await expect(openOriginal).toBeFocused();
+  await expect(displayedImage).toBeFocused();
+  await page.keyboard.press("Shift+F10");
+  const imageMenu = page.getByRole("menu", { name: "Image options" });
+  const copyImageItem = imageMenu.getByRole("menuitem", { name: "Copy image" });
+  const copyLinkItem = imageMenu.getByRole("menuitem", { name: "Copy attachment link" });
+  await expect(imageMenu).toBeVisible();
+  await expect(copyImageItem).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(copyLinkItem).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(imageMenu).toHaveCount(0);
+  await expect(displayedImage).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(closeButton).toBeFocused();
   await page.keyboard.press("Escape");
@@ -133,9 +144,10 @@ test("pages through image attachments with controls and arrow keys", async ({ pa
     { name: secondFilename, mimeType: "image/png", buffer: pixel },
   ]);
   await page.getByLabel("Message body").fill(messageText);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   const imageRow = page.locator(".message-row").filter({ hasText: messageText });
+  await imageRow.getByRole("button", { name: `Load preview for ${firstFilename}` }).click();
   await imageRow.getByRole("button", { name: `Open image ${firstFilename}` }).click();
 
   let dialog = page.getByRole("dialog", { name: `Image viewer: ${firstFilename}` });
@@ -173,7 +185,7 @@ test("scales a tall image to fit instead of cropping it", async ({ page }) => {
   });
   await expect(page.getByText(filename)).toBeVisible();
   await page.getByLabel("Message body").fill(messageText);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   const imageRow = page.locator(".message-row").filter({ hasText: messageText });
   await imageRow.getByRole("button", { name: `Open image ${filename}` }).click();
@@ -247,7 +259,7 @@ test("keeps a small image at its natural size without a stretched frame", async 
   });
   await expect(page.getByText(filename)).toBeVisible();
   await page.getByLabel("Message body").fill(messageText);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   const imageRow = page.locator(".message-row").filter({ hasText: messageText });
   await imageRow.getByRole("button", { name: `Open image ${filename}` }).click();
