@@ -6,6 +6,7 @@
   import { StarterKit } from "@tiptap/starter-kit";
   import {
     avatarInitial,
+    channelProfileMentionText,
     handleLabel,
     type ChannelProfileShortcut,
   } from "../../lib/chat/people";
@@ -444,7 +445,7 @@
       kind: "mention" as const,
       label: `@${profile.display_name}`,
       detail: `profile · inserts @${profile.handle}`,
-      insertText: `@${profile.handle} `,
+      insertText: channelProfileMentionText(profile, mentionPeople),
       sortText: `${profile.display_name} ${profile.channel_name} ${profile.handle}`.toLowerCase(),
     }));
     const seen = new Set<string>();

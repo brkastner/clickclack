@@ -11,7 +11,7 @@ export type MentionHighlightOptions = {
   attentionUserID?: string;
 };
 
-const MENTION_RE = /(^|[^A-Za-z0-9_@-])(@[A-Za-z0-9][A-Za-z0-9_-]{0,31})/gu;
+const MENTION_RE = /(^|[^\p{L}\p{N}_@-])(@[\p{L}\p{N}][\p{L}\p{N}_-]{0,31})/gu;
 
 export function mentionTargets(people: readonly User[]): Map<string, User> {
   const targets = new Map<string, User>();

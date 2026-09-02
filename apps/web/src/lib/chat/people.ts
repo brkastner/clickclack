@@ -42,6 +42,14 @@ export function userHandle(user?: User | null): string {
   return user?.handle || user?.former_handle || "";
 }
 
+export function channelProfileMentionText(
+  profile: ChannelProfileShortcut,
+  people: readonly User[],
+): string {
+  const person = people.find((candidate) => candidate.id === profile.bot_user_id);
+  return `@${person?.handle || profile.handle} `;
+}
+
 export function isDeletedBot(user?: User | null): boolean {
   return user?.kind === "bot" && !!user.deleted_at;
 }
