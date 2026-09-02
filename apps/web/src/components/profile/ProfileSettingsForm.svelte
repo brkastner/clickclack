@@ -41,6 +41,7 @@
   let displayName = $state("");
   let handle = $state("");
   let avatarURL = $state("");
+  let avatarURLLight = $state("");
   let status = $state("");
   let statusError = $state(false);
   let saving = $state(false);
@@ -52,6 +53,11 @@
     displayName = currentUser.display_name;
     handle = currentUser.handle ?? "";
     avatarURL = currentUser.avatar_url;
+    avatarURLLight = currentUser.avatar_url_light ?? "";
+  });
+
+  $effect(() => {
+    if (!avatarURL.trim()) avatarURLLight = "";
   });
 
   function normalizedHandleForSave(): string {
@@ -71,6 +77,7 @@
           display_name: displayName,
           handle: normalizedHandleForSave(),
           avatar_url: avatarURL,
+          avatar_url_light: avatarURLLight,
           notification_settings: currentUser.notification_settings,
         }),
       });
@@ -103,6 +110,7 @@
       id={currentUser.id}
       name={previewName}
       src={avatarURL}
+      lightSrc={avatarURLLight}
       size={52}
       loading="eager"
       fetchPriority="auto"
@@ -156,16 +164,16 @@
 
     <div class="settings-row2">
       <div class="settings-row2__desc">
-        <label class="settings-row2__label" for="profile-avatar-url">Profile photo</label>
-        <p class="settings-row2__hint">Paste a public image URL. Your initials show when empty.</p>
+        <label class="settings-row2__label" for="profile-avatar-url">Default / dark photo</label>
+        <p class="settings-row2__hint">Used in dark mode and as the fallback in light mode.</p>
       </div>
       <div class="settings-row2__control">
         <input
           id="profile-avatar-url"
           class="settings-input"
           bind:value={avatarURL}
-          aria-label="Avatar URL"
-          placeholder="https://example.com/avatar.png"
+          aria-label="Default or dark avatar URL"
+          placeholder="https://example.com/avatar-dark.png"
           inputmode="url"
         />
         {#if avatarURL}
@@ -174,6 +182,34 @@
             class="settings-linklike"
             onclick={clearAvatar}
             aria-label="Remove avatar"
+          >
+            Remove
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    <div class="settings-row2">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="profile-avatar-url-light">Light mode photo</label>
+        <p class="settings-row2__hint">Optional. Uses the default photo when empty.</p>
+      </div>
+      <div class="settings-row2__control">
+        <input
+          id="profile-avatar-url-light"
+          class="settings-input"
+          bind:value={avatarURLLight}
+          aria-label="Light mode avatar URL"
+          placeholder="https://example.com/avatar-light.png"
+          inputmode="url"
+          disabled={!avatarURL.trim()}
+        />
+        {#if avatarURLLight}
+          <button
+            type="button"
+            class="settings-linklike"
+            onclick={() => (avatarURLLight = "")}
+            aria-label="Remove light mode avatar"
           >
             Remove
           </button>

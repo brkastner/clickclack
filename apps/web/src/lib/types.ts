@@ -7,6 +7,7 @@ export type User = {
   former_handle?: string;
   deleted_at?: string;
   avatar_url: string;
+  avatar_url_light?: string;
   created_at: string;
   notification_settings?: NotificationSettings;
   appearance_preferences?: AppearancePreferences;
@@ -271,6 +272,7 @@ export type BotCommandBot = {
   handle: string;
   display_name: string;
   avatar_url: string;
+  avatar_url_light?: string;
 };
 
 export type WorkspaceBotCommand = {

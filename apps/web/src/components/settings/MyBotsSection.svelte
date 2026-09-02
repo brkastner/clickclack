@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { listMyBots, botLoadErrorMessage, type OwnedBotEntry } from "../../lib/bots";
   import { workspaceSettingsPath } from "../../lib/settings";
+  import Avatar from "../avatar/Avatar.svelte";
 
   type Props = {
     onClose: () => void;
@@ -36,12 +37,6 @@
 
   function formatHandle(handle: string): string {
     return handle.startsWith("@") ? handle : `@${handle}`;
-  }
-
-  function initials(name: string): string {
-    const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
-    return name.slice(0, 2).toUpperCase();
   }
 
   type Group = { workspace: OwnedBotEntry["workspace"]; entries: OwnedBotEntry[] };
@@ -94,16 +89,14 @@
         <ul class="ws-bots__my-rows">
           {#each group.entries as entry (entry.bot.id)}
             <li class="ws-bots__my-row">
-              <span
+              <Avatar
                 class="ws-members__avatar ws-members__avatar--bot"
-                aria-hidden="true"
-              >
-                {#if entry.bot.avatar_url}
-                  <img src={entry.bot.avatar_url} alt="" />
-                {:else}
-                  {initials(entry.bot.display_name || entry.bot.handle || "?")}
-                {/if}
-              </span>
+                id={entry.bot.id}
+                name={entry.bot.display_name || entry.bot.handle || "?"}
+                src={entry.bot.avatar_url}
+                lightSrc={entry.bot.avatar_url_light}
+                size={36}
+              />
               <div class="ws-bots__my-row-text">
                 <div class="ws-bots__my-row-name">{entry.bot.display_name || entry.bot.handle}</div>
                 <div class="ws-bots__my-row-meta">

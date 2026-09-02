@@ -21,7 +21,12 @@
     onSetStatus: () => void;
     onSaveBotProfile: (
       botUserID: string,
-      patch: { display_name?: string; handle?: string; avatar_url?: string },
+      patch: {
+        display_name?: string;
+        handle?: string;
+        avatar_url?: string;
+        avatar_url_light?: string;
+      },
     ) => Promise<void>;
   };
 
@@ -104,6 +109,7 @@
       id={profile.id}
       name={profile.display_name}
       src={profile.avatar_url}
+      lightSrc={profile.avatar_url_light}
       size={240}
       loading="eager"
       fetchPriority="auto"

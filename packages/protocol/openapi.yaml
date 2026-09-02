@@ -1921,7 +1921,10 @@ components:
           pattern: "^[a-zA-Z0-9@][a-zA-Z0-9_-]{1,32}$"
         avatar_url:
           type: string
-          format: uri
+          description: Public image URL, or an empty string to clear it. Clearing it also clears avatar_url_light.
+        avatar_url_light:
+          type: string
+          description: Optional light-mode avatar URL, or an empty string to clear it. Requires avatar_url.
         notification_settings:
           $ref: "#/components/schemas/NotificationSettings"
         appearance_preferences:
@@ -1952,6 +1955,9 @@ components:
           description: Present only when the immutable bot identity has been retired.
         avatar_url:
           type: string
+        avatar_url_light:
+          type: string
+          description: Optional light-mode avatar. Clients fall back to avatar_url when absent.
         created_at:
           type: string
           format: date-time
@@ -2050,6 +2056,8 @@ components:
         display_name:
           type: string
         avatar_url:
+          type: string
+        avatar_url_light:
           type: string
     WorkspaceBotCommand:
       type: object
@@ -2155,6 +2163,10 @@ components:
         avatar_url:
           type: string
           format: uri
+        avatar_url_light:
+          type: string
+          format: uri
+          description: Optional light-mode avatar. The primary avatar_url must be set first.
         token_name:
           type: string
         scopes:
@@ -2387,7 +2399,10 @@ components:
           pattern: "^[a-zA-Z0-9@][a-zA-Z0-9_-]{1,32}$"
         avatar_url:
           type: string
-          description: Public image URL, or an empty string to clear it.
+          description: Public image URL, or an empty string to clear it. Clearing it also clears avatar_url_light.
+        avatar_url_light:
+          type: string
+          description: Optional light-mode avatar URL, or an empty string to clear it. Requires avatar_url.
     BotProfileResponse:
       type: object
       required: [bot]

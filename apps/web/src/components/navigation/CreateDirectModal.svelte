@@ -63,6 +63,7 @@
               id={person.id}
               name={person.display_name}
               src={person.avatar_url}
+            lightSrc={person.avatar_url_light}
               size={32}
             />
             <span>

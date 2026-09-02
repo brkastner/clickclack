@@ -290,6 +290,7 @@
               id={person.id}
               name={person.display_name}
               src={person.avatar_url}
+            lightSrc={person.avatar_url_light}
               size={90}
             />
             <span class="sidebar-person-name">{person.display_name}</span>
@@ -364,6 +365,7 @@
         id={currentUser.id}
         name={currentUser.display_name}
         src={currentUser.avatar_url}
+          lightSrc={currentUser.avatar_url_light}
         size={28}
         loading="eager"
         fetchPriority="auto"

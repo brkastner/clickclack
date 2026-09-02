@@ -408,7 +408,7 @@ func (s *Store) directConversationMembersByConversationIDs(ctx context.Context, 
 			args = append(args, id)
 		}
 		rows, err := s.db.QueryContext(ctx, `
-			SELECT dcm.conversation_id, u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+			SELECT dcm.conversation_id, u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
 			       tombstone.former_handle, tombstone.deleted_at
 			FROM direct_conversation_members dcm
 			JOIN users u ON u.id = dcm.user_id
@@ -431,6 +431,7 @@ func (s *Store) directConversationMembersByConversationIDs(ctx context.Context, 
 				&member.DisplayName,
 				&member.Handle,
 				&member.AvatarURL,
+				&member.AvatarURLLight,
 				&member.CreatedAt,
 				&formerHandle,
 				&deletedAt,

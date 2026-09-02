@@ -404,7 +404,7 @@ func admin(args []string) error {
 			return adminBotTokenCreate(args[3:])
 		}
 		if len(args) < 2 || args[1] != "create" {
-			return fmt.Errorf("usage: clickclack admin bot create --workspace WORKSPACE_ID --created-by USER_ID --name NAME [--owner USER_ID] [--scopes bot:write]")
+			return fmt.Errorf("usage: clickclack admin bot create --workspace WORKSPACE_ID --created-by USER_ID --name NAME [--owner USER_ID] [--avatar-url URL] [--avatar-url-light URL] [--scopes bot:write]")
 		}
 		flags := flag.NewFlagSet("admin bot create", flag.ExitOnError)
 		data := flags.String("data", defaultData(), "data directory")
@@ -413,7 +413,8 @@ func admin(args []string) error {
 		ownerID := flags.String("owner", "", "human owner user id")
 		name := flags.String("name", "", "bot display name")
 		handle := flags.String("handle", "", "bot handle")
-		avatarURL := flags.String("avatar-url", "", "bot avatar URL")
+		avatarURL := flags.String("avatar-url", "", "default or dark-mode bot avatar URL")
+		avatarURLLight := flags.String("avatar-url-light", "", "optional light-mode bot avatar URL")
 		tokenName := flags.String("token-name", "default", "bot token label")
 		scopes := flags.String("scopes", "bot:write", "comma-separated scopes or bundle")
 		createdBy := flags.String("created-by", "", "human creator user id")
@@ -440,14 +441,15 @@ func admin(args []string) error {
 			return err
 		}
 		bot, token, err := st.CreateBot(ctx, store.CreateBotInput{
-			WorkspaceID: *workspaceID,
-			OwnerUserID: *ownerID,
-			DisplayName: *name,
-			Handle:      *handle,
-			AvatarURL:   *avatarURL,
-			TokenName:   *tokenName,
-			Scopes:      strings.Split(*scopes, ","),
-			CreatedBy:   *createdBy,
+			WorkspaceID:    *workspaceID,
+			OwnerUserID:    *ownerID,
+			DisplayName:    *name,
+			Handle:         *handle,
+			AvatarURL:      *avatarURL,
+			AvatarURLLight: *avatarURLLight,
+			TokenName:      *tokenName,
+			Scopes:         strings.Split(*scopes, ","),
+			CreatedBy:      *createdBy,
 		})
 		if err != nil {
 			return err

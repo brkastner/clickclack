@@ -143,6 +143,7 @@
                     id={user.id}
                     name={user.display_name}
                     src={user.avatar_url}
+                  lightSrc={user.avatar_url_light}
                     size={18}
                   />
                   <span class="settings-modal__rail-label">{user.display_name || section.label}</span>

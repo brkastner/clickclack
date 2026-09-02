@@ -60,7 +60,7 @@ Rules:
 - A human has `owner_user_id = NULL`.
 - A service bot has `kind = bot` and `owner_user_id = NULL`.
 - A user bot has `kind = bot` and `owner_user_id = <human user id>`.
-- A bot has its own canonical `display_name`, `handle`, and `avatar_url`.
+- A bot has its own canonical `display_name`, `handle`, `avatar_url`, and optional `avatar_url_light`.
 - Channel sidebar assignments reference the bot user ID and never override its identity.
 - A bot may not own another bot.
 - Deleting a human owner revokes/deletes user-owned bots and tokens.
@@ -77,6 +77,8 @@ API `User` payloads include:
   "owner_user_id": "usr_owner...", // omitted for humans and service bots
   "display_name": "Peter's OpenClaw",
   "handle": "peter-openclaw",
+  "avatar_url": "https://example.com/openclaw-dark.png",
+  "avatar_url_light": "https://example.com/openclaw-light.png",
 }
 ```
 
@@ -200,6 +202,8 @@ clickclack admin bot create \
   --created-by usr_manager \
   --name "OpenClaw Service" \
   --handle openclaw \
+  --avatar-url https://example.com/openclaw-dark.png \
+  --avatar-url-light https://example.com/openclaw-light.png \
   --scopes bot:write \
   --plain
 
@@ -250,7 +254,8 @@ installed in exactly one workspace.
 
 `POST /api/workspaces/{workspace_id}/bots` returns `{bot, bot_token}`. The
 `bot_token.token` field is the one-time raw `ccb_...` token and is never
-returned by list calls. Passing `"initial_token": false` skips the initial
+returned by list calls. Creation accepts `avatar_url` plus an optional
+`avatar_url_light`; the light-mode URL requires a non-empty primary URL. Passing `"initial_token": false` skips the initial
 token mint entirely — the response then contains only `{bot}` — for
 setup-code installs where the token is minted at claim time.
 `setup_nonce` works for both modes: tokenless retries return the same bot,
@@ -319,8 +324,8 @@ previous menu unchanged.
 
 Workspace members read the merged bot menus through
 `GET /api/workspaces/{workspace_id}/bot-commands`. Bot tokens need
-`workspaces:read` and must be bound to that workspace. Results embed the bot's
-ID, handle, display name, and avatar, and are sorted by bot handle then command.
+`workspaces:read` and must be bound to that workspace. Results embed the bot's ID, handle, display name, primary avatar, and optional
+light-mode avatar, and are sorted by bot handle then command.
 Removing a bot from a workspace deletes its menu in the same transaction.
 
 The TypeScript SDK exposes these endpoints as
@@ -344,7 +349,9 @@ workspace. The bot user row remains for history and future installs.
 
 A bot's own identity stays editable after creation through
 `PATCH /api/bots/{bot_user_id}`, which accepts any of `display_name`, `handle`,
-and `avatar_url` and leaves omitted fields unchanged. It requires a human
+`avatar_url`, and `avatar_url_light` and leaves omitted fields unchanged.
+`avatar_url_light` requires a primary avatar; clearing `avatar_url` clears both
+avatar variants. It requires a human
 session and uses the same authorization as deletion: a user-owned bot is
 editable only by its owner, and a service bot requires the requester to be an
 owner or moderator in every workspace where the bot still has active resources.
@@ -352,7 +359,8 @@ An orphaned service bot falls back to its historical workspaces so an ordinary
 member cannot rename a retired identity. Handles stay unique and normalized the
 same way `PATCH /api/me` normalizes them, and a taken handle answers with `400`.
 A successful edit publishes a `bot.updated` event to every workspace the bot
-belongs to, carrying `bot_user_id`, `display_name`, `handle`, and `avatar_url`.
+belongs to, carrying `bot_user_id`, `display_name`, `handle`, `avatar_url`, and
+`avatar_url_light`.
 
 The web client exposes this from the right-rail profile pane rather than a
 separate admin screen. See [Profiles](profiles.md) for the editor's shape.

@@ -11,6 +11,7 @@ export type User = {
   former_handle?: string;
   deleted_at?: string;
   avatar_url: string;
+  avatar_url_light?: string;
   created_at: string;
 };
 
@@ -104,6 +105,7 @@ export type BotCommandBot = {
   handle: string;
   display_name: string;
   avatar_url: string;
+  avatar_url_light?: string;
 };
 
 export type WorkspaceBotCommand = {
@@ -582,6 +584,7 @@ export class ClickClackClient {
     display_name: string;
     handle?: string;
     avatar_url?: string;
+    avatar_url_light?: string;
   }): Promise<User> {
     const data = await this.request<{ user: User }>("/api/me", {
       method: "PATCH",
@@ -688,6 +691,7 @@ export class ClickClackClient {
         owner_user_id?: string;
         handle?: string;
         avatar_url?: string;
+        avatar_url_light?: string;
         token_name?: string;
         scopes?: string[];
         setup_nonce?: string;
@@ -701,7 +705,12 @@ export class ClickClackClient {
     },
     updateProfile: async (
       botUserId: string,
-      input: { display_name?: string; handle?: string; avatar_url?: string },
+      input: {
+        display_name?: string;
+        handle?: string;
+        avatar_url?: string;
+        avatar_url_light?: string;
+      },
     ): Promise<User> => {
       const data = await this.request<{ bot: User }>(`/api/bots/${botUserId}`, {
         method: "PATCH",

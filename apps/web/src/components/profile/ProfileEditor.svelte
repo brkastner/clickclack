@@ -8,7 +8,12 @@
     onBack: () => void;
     onSaveBotProfile: (
       botUserID: string,
-      patch: { display_name?: string; handle?: string; avatar_url?: string },
+      patch: {
+        display_name?: string;
+        handle?: string;
+        avatar_url?: string;
+        avatar_url_light?: string;
+      },
     ) => Promise<void>;
   };
 
@@ -16,6 +21,7 @@
   let displayName = $state("");
   let handle = $state("");
   let avatarURL = $state("");
+  let avatarURLLight = $state("");
   let saving = $state(false);
   let status = $state("");
   let statusError = $state(false);
@@ -24,13 +30,19 @@
     displayName = profile.display_name;
     handle = profile.handle ?? "";
     avatarURL = profile.avatar_url ?? "";
+    avatarURLLight = profile.avatar_url_light ?? "";
+  });
+
+  $effect(() => {
+    if (!avatarURL.trim()) avatarURLLight = "";
   });
 
   const normalizedHandle = $derived(handle.trim().replace(/^@+/, ""));
   const identityDirty = $derived(
     displayName.trim() !== profile.display_name ||
       normalizedHandle !== (profile.handle ?? "") ||
-      avatarURL.trim() !== (profile.avatar_url ?? ""),
+      avatarURL.trim() !== (profile.avatar_url ?? "") ||
+      avatarURLLight.trim() !== (profile.avatar_url_light ?? ""),
   );
   const identityValid = $derived(displayName.trim().length > 0);
 
@@ -44,6 +56,7 @@
         display_name: displayName.trim(),
         handle: normalizedHandle ? `@${normalizedHandle}` : "",
         avatar_url: avatarURL.trim(),
+        avatar_url_light: avatarURLLight.trim(),
       });
       status = "Saved";
     } catch (error) {
@@ -66,13 +79,32 @@
       <p class="profile-note">You do not have permission to edit this profile.</p>
     {:else}
       <div class="profile-editor__avatar-row">
-        <Avatar id={profile.id} name={displayName || profile.display_name} src={avatarURL} size={88} loading="eager" fetchPriority="auto" />
+        <Avatar
+          id={profile.id}
+          name={displayName || profile.display_name}
+          src={avatarURL}
+          lightSrc={avatarURLLight}
+          size={88}
+          loading="eager"
+          fetchPriority="auto"
+        />
         <div class="profile-editor__avatar-controls">
           <label class="profile-editor__field">
-            <span>Avatar URL</span>
-            <input bind:value={avatarURL} placeholder="https://example.com/avatar.png" inputmode="url" aria-label="Avatar URL" />
+            <span>Default / dark avatar URL</span>
+            <input bind:value={avatarURL} placeholder="https://example.com/avatar-dark.png" inputmode="url" aria-label="Default or dark avatar URL" />
           </label>
           {#if avatarURL}<button type="button" class="text-action" onclick={() => (avatarURL = "")}>Remove</button>{/if}
+          <label class="profile-editor__field">
+            <span>Light mode avatar URL</span>
+            <input
+              bind:value={avatarURLLight}
+              placeholder="https://example.com/avatar-light.png"
+              inputmode="url"
+              aria-label="Light mode avatar URL"
+              disabled={!avatarURL.trim()}
+            />
+          </label>
+          {#if avatarURLLight}<button type="button" class="text-action" onclick={() => (avatarURLLight = "")}>Remove light avatar</button>{/if}
         </div>
       </div>
       <label class="profile-editor__field">

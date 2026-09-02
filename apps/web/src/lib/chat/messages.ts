@@ -8,6 +8,7 @@ export type MessageGroup = {
   authorName: string;
   authorHandle: string;
   authorAvatarURL: string;
+  authorAvatarURLLight: string;
   authorID: string;
   authorDeleted: boolean;
   timestamp: string;
@@ -101,6 +102,9 @@ export function groupMessages(
         authorName: message.author?.display_name || "Local User",
         authorHandle: userHandle(message.author),
         authorAvatarURL: isDeletedBot(message.author) ? "" : message.author?.avatar_url || "",
+        authorAvatarURLLight: isDeletedBot(message.author)
+          ? ""
+          : message.author?.avatar_url_light || "",
         authorID,
         authorDeleted: isDeletedBot(message.author),
         timestamp: message.created_at,

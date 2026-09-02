@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
+  import Avatar from "../../../../../../components/avatar/Avatar.svelte";
   import {
     listWorkspaceMembersPage,
     memberLoadErrorMessage,
@@ -166,14 +167,6 @@
     activeFetchID++;
   });
 
-  function initials(member: WorkspaceMember): string {
-    const source =
-      member.user.display_name?.trim() || member.user.handle?.trim() || member.user.id || "?";
-    const parts = source.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
-    return source.slice(0, 2).toUpperCase();
-  }
-
   function avatarVariant(member: WorkspaceMember): "" | "bot" {
     return member.user.kind === "bot" ? "bot" : "";
   }
@@ -302,16 +295,14 @@
         >
           {#snippet children(member: WorkspaceMember, _index: number)}
             <div class="ws-members__row" style="height: {ROW_HEIGHT}px">
-              <span
+              <Avatar
                 class="ws-members__avatar ws-members__avatar--{avatarVariant(member) || 'human'}"
-                aria-hidden="true"
-              >
-                {#if member.user.avatar_url}
-                  <img src={member.user.avatar_url} alt="" />
-                {:else}
-                  {initials(member)}
-                {/if}
-              </span>
+                id={member.user.id}
+                name={member.user.display_name || member.user.handle || "?"}
+                src={member.user.avatar_url}
+                lightSrc={member.user.avatar_url_light}
+                size={36}
+              />
               <div class="ws-members__main">
                 <div class="ws-members__name">{member.user.display_name || "Unknown"}</div>
                 <div class="ws-members__meta">

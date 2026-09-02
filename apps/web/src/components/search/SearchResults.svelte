@@ -110,6 +110,7 @@
                 id={author.id}
                 name={author.display_name}
                 src={isDeletedBot(author) ? undefined : author.avatar_url}
+        lightSrc={isDeletedBot(author) ? undefined : author.avatar_url_light}
                 size={30}
               />
               <div class="search-result-body">

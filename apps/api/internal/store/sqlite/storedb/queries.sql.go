@@ -702,7 +702,7 @@ func (q *Queries) DirectConversationMemberIDs(ctx context.Context, conversationI
 }
 
 const directConversationMembers = `-- name: DirectConversationMembers :many
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        COALESCE(tombstone.former_handle, '') AS former_handle,
        COALESCE(tombstone.deleted_at, '') AS deleted_at
 FROM users u
@@ -713,15 +713,16 @@ ORDER BY u.display_name
 `
 
 type DirectConversationMembersRow struct {
-	ID           string         `json:"id"`
-	Kind         string         `json:"kind"`
-	OwnerUserID  sql.NullString `json:"owner_user_id"`
-	DisplayName  string         `json:"display_name"`
-	Handle       string         `json:"handle"`
-	AvatarUrl    string         `json:"avatar_url"`
-	CreatedAt    string         `json:"created_at"`
-	FormerHandle string         `json:"former_handle"`
-	DeletedAt    string         `json:"deleted_at"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
+	FormerHandle   string         `json:"former_handle"`
+	DeletedAt      string         `json:"deleted_at"`
 }
 
 func (q *Queries) DirectConversationMembers(ctx context.Context, conversationID string) ([]DirectConversationMembersRow, error) {
@@ -740,6 +741,7 @@ func (q *Queries) DirectConversationMembers(ctx context.Context, conversationID 
 			&i.DisplayName,
 			&i.Handle,
 			&i.AvatarUrl,
+			&i.AvatarUrlLight,
 			&i.CreatedAt,
 			&i.FormerHandle,
 			&i.DeletedAt,
@@ -884,20 +886,21 @@ func (q *Queries) FindOneToOneDirectConversation(ctx context.Context, arg FindOn
 }
 
 const firstUser = `-- name: FirstUser :one
-SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at
+SELECT id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at
 FROM users
 ORDER BY created_at
 LIMIT 1
 `
 
 type FirstUserRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 func (q *Queries) FirstUser(ctx context.Context) (FirstUserRow, error) {
@@ -910,6 +913,7 @@ func (q *Queries) FirstUser(ctx context.Context) (FirstUserRow, error) {
 		&i.DisplayName,
 		&i.Handle,
 		&i.AvatarUrl,
+		&i.AvatarUrlLight,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -946,7 +950,7 @@ func (q *Queries) FirstWorkspace(ctx context.Context) (FirstWorkspaceRow, error)
 }
 
 const getActiveBotForDeletion = `-- name: GetActiveBotForDeletion :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM users u
 WHERE u.id = ?1
   AND u.kind = 'bot'
@@ -956,13 +960,14 @@ WHERE u.id = ?1
 `
 
 type GetActiveBotForDeletionRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 func (q *Queries) GetActiveBotForDeletion(ctx context.Context, botUserID string) (GetActiveBotForDeletionRow, error) {
@@ -975,6 +980,7 @@ func (q *Queries) GetActiveBotForDeletion(ctx context.Context, botUserID string)
 		&i.DisplayName,
 		&i.Handle,
 		&i.AvatarUrl,
+		&i.AvatarUrlLight,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -1068,7 +1074,7 @@ func (q *Queries) GetBotSetupCodeByHash(ctx context.Context, codeHash string) (B
 
 const getBotSetupRequest = `-- name: GetBotSetupRequest :one
 SELECT created_by, setup_nonce, bot_user_id, workspace_id, owner_user_id,
-       display_name, handle, avatar_url, created_at
+       display_name, handle, avatar_url, avatar_url_light, created_at
 FROM bot_setup_requests
 WHERE created_by = ?1
   AND setup_nonce = ?2
@@ -1091,13 +1097,14 @@ func (q *Queries) GetBotSetupRequest(ctx context.Context, arg GetBotSetupRequest
 		&i.DisplayName,
 		&i.Handle,
 		&i.AvatarUrl,
+		&i.AvatarUrlLight,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getBotTokenAuth = `-- name: GetBotTokenAuth :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        bt.id AS token_id, bt.workspace_id, bt.scopes_json
 FROM bot_tokens bt
 JOIN users u ON u.id = bt.bot_user_id
@@ -1109,16 +1116,17 @@ WHERE bt.token_hash = ?1
 `
 
 type GetBotTokenAuthRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
-	TokenID     string         `json:"token_id"`
-	WorkspaceID string         `json:"workspace_id"`
-	ScopesJson  string         `json:"scopes_json"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
+	TokenID        string         `json:"token_id"`
+	WorkspaceID    string         `json:"workspace_id"`
+	ScopesJson     string         `json:"scopes_json"`
 }
 
 func (q *Queries) GetBotTokenAuth(ctx context.Context, tokenHash string) (GetBotTokenAuthRow, error) {
@@ -1131,6 +1139,7 @@ func (q *Queries) GetBotTokenAuth(ctx context.Context, tokenHash string) (GetBot
 		&i.DisplayName,
 		&i.Handle,
 		&i.AvatarUrl,
+		&i.AvatarUrlLight,
 		&i.CreatedAt,
 		&i.TokenID,
 		&i.WorkspaceID,
@@ -1675,7 +1684,7 @@ func (q *Queries) GetOAuthTransactionForConsume(ctx context.Context, stateHash s
 }
 
 const getSessionUser = `-- name: GetSessionUser :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at, s.expires_at AS session_expires_at,
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at, s.expires_at AS session_expires_at,
        COALESCE(uns.pushover_enabled, 0) AS pushover_enabled,
        COALESCE(uns.pushover_user_key, '') AS pushover_user_key
 FROM sessions s
@@ -1692,6 +1701,7 @@ type GetSessionUserRow struct {
 	DisplayName      string         `json:"display_name"`
 	Handle           string         `json:"handle"`
 	AvatarUrl        string         `json:"avatar_url"`
+	AvatarUrlLight   string         `json:"avatar_url_light"`
 	CreatedAt        string         `json:"created_at"`
 	SessionExpiresAt string         `json:"session_expires_at"`
 	PushoverEnabled  int64          `json:"pushover_enabled"`
@@ -1708,6 +1718,7 @@ func (q *Queries) GetSessionUser(ctx context.Context, tokenHash string) (GetSess
 		&i.DisplayName,
 		&i.Handle,
 		&i.AvatarUrl,
+		&i.AvatarUrlLight,
 		&i.CreatedAt,
 		&i.SessionExpiresAt,
 		&i.PushoverEnabled,
@@ -1882,7 +1893,7 @@ func (q *Queries) GetUploadWorkspace(ctx context.Context, id string) (string, er
 }
 
 const getUser = `-- name: GetUser :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        COALESCE(tombstone.former_handle, '') AS former_handle,
        COALESCE(tombstone.deleted_at, '') AS deleted_at
 FROM users u
@@ -1891,15 +1902,16 @@ WHERE u.id = ?1
 `
 
 type GetUserRow struct {
-	ID           string         `json:"id"`
-	Kind         string         `json:"kind"`
-	OwnerUserID  sql.NullString `json:"owner_user_id"`
-	DisplayName  string         `json:"display_name"`
-	Handle       string         `json:"handle"`
-	AvatarUrl    string         `json:"avatar_url"`
-	CreatedAt    string         `json:"created_at"`
-	FormerHandle string         `json:"former_handle"`
-	DeletedAt    string         `json:"deleted_at"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
+	FormerHandle   string         `json:"former_handle"`
+	DeletedAt      string         `json:"deleted_at"`
 }
 
 func (q *Queries) GetUser(ctx context.Context, id string) (GetUserRow, error) {
@@ -1912,6 +1924,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (GetUserRow, error) {
 		&i.DisplayName,
 		&i.Handle,
 		&i.AvatarUrl,
+		&i.AvatarUrlLight,
 		&i.CreatedAt,
 		&i.FormerHandle,
 		&i.DeletedAt,
@@ -1920,7 +1933,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (GetUserRow, error) {
 }
 
 const getUserByIdentityEmail = `-- name: GetUserByIdentityEmail :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.email = ?1
@@ -1929,13 +1942,14 @@ LIMIT 1
 `
 
 type GetUserByIdentityEmailRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 func (q *Queries) GetUserByIdentityEmail(ctx context.Context, email string) (GetUserByIdentityEmailRow, error) {
@@ -1948,13 +1962,14 @@ func (q *Queries) GetUserByIdentityEmail(ctx context.Context, email string) (Get
 		&i.DisplayName,
 		&i.Handle,
 		&i.AvatarUrl,
+		&i.AvatarUrlLight,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByIdentityProviderSubject = `-- name: GetUserByIdentityProviderSubject :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.provider = ?1
@@ -1967,13 +1982,14 @@ type GetUserByIdentityProviderSubjectParams struct {
 }
 
 type GetUserByIdentityProviderSubjectRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 func (q *Queries) GetUserByIdentityProviderSubject(ctx context.Context, arg GetUserByIdentityProviderSubjectParams) (GetUserByIdentityProviderSubjectRow, error) {
@@ -1986,6 +2002,7 @@ func (q *Queries) GetUserByIdentityProviderSubject(ctx context.Context, arg GetU
 		&i.DisplayName,
 		&i.Handle,
 		&i.AvatarUrl,
+		&i.AvatarUrlLight,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -2176,24 +2193,25 @@ func (q *Queries) InsertBotSetupCode(ctx context.Context, arg InsertBotSetupCode
 const insertBotSetupRequest = `-- name: InsertBotSetupRequest :exec
 INSERT INTO bot_setup_requests (
   created_by, setup_nonce, bot_user_id, workspace_id, owner_user_id,
-  display_name, handle, avatar_url, created_at
+  display_name, handle, avatar_url, avatar_url_light, created_at
 ) VALUES (
   ?1, ?2, ?3,
   ?4, ?5, ?6,
-  ?7, ?8, ?9
+  ?7, ?8, ?9, ?10
 )
 `
 
 type InsertBotSetupRequestParams struct {
-	CreatedBy   string         `json:"created_by"`
-	SetupNonce  string         `json:"setup_nonce"`
-	BotUserID   sql.NullString `json:"bot_user_id"`
-	WorkspaceID string         `json:"workspace_id"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	CreatedBy      string         `json:"created_by"`
+	SetupNonce     string         `json:"setup_nonce"`
+	BotUserID      sql.NullString `json:"bot_user_id"`
+	WorkspaceID    string         `json:"workspace_id"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 func (q *Queries) InsertBotSetupRequest(ctx context.Context, arg InsertBotSetupRequestParams) error {
@@ -2206,6 +2224,7 @@ func (q *Queries) InsertBotSetupRequest(ctx context.Context, arg InsertBotSetupR
 		arg.DisplayName,
 		arg.Handle,
 		arg.AvatarUrl,
+		arg.AvatarUrlLight,
 		arg.CreatedAt,
 	)
 	return err
@@ -2268,17 +2287,18 @@ func (q *Queries) InsertBotTombstone(ctx context.Context, arg InsertBotTombstone
 }
 
 const insertBotUser = `-- name: InsertBotUser :exec
-INSERT INTO users (id, kind, owner_user_id, display_name, handle, avatar_url, created_at)
-VALUES (?1, 'bot', ?2, ?3, ?4, ?5, ?6)
+INSERT INTO users (id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at)
+VALUES (?1, 'bot', ?2, ?3, ?4, ?5, ?6, ?7)
 `
 
 type InsertBotUserParams struct {
-	ID          string         `json:"id"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	ID             string         `json:"id"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 func (q *Queries) InsertBotUser(ctx context.Context, arg InsertBotUserParams) error {
@@ -2288,6 +2308,7 @@ func (q *Queries) InsertBotUser(ctx context.Context, arg InsertBotUserParams) er
 		arg.DisplayName,
 		arg.Handle,
 		arg.AvatarUrl,
+		arg.AvatarUrlLight,
 		arg.CreatedAt,
 	)
 	return err
@@ -3238,6 +3259,7 @@ SELECT
   u.display_name,
   u.handle,
   u.avatar_url,
+  u.avatar_url_light,
   u.created_at,
   w.id AS workspace_id,
   COALESCE(w.route_id, '') AS workspace_route_id,
@@ -3266,6 +3288,7 @@ type ListBotsOwnedByRow struct {
 	DisplayName      string         `json:"display_name"`
 	Handle           string         `json:"handle"`
 	AvatarUrl        string         `json:"avatar_url"`
+	AvatarUrlLight   string         `json:"avatar_url_light"`
 	CreatedAt        string         `json:"created_at"`
 	WorkspaceID      string         `json:"workspace_id"`
 	WorkspaceRouteID string         `json:"workspace_route_id"`
@@ -3289,6 +3312,7 @@ func (q *Queries) ListBotsOwnedBy(ctx context.Context, ownerUserID sql.NullStrin
 			&i.DisplayName,
 			&i.Handle,
 			&i.AvatarUrl,
+			&i.AvatarUrlLight,
 			&i.CreatedAt,
 			&i.WorkspaceID,
 			&i.WorkspaceRouteID,
@@ -4074,7 +4098,7 @@ func (q *Queries) ListThreadStates(ctx context.Context, rootMessageIds []string)
 }
 
 const listUsersByIdentityEmailFold = `-- name: ListUsersByIdentityEmailFold :many
-SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE lower(i.email) = lower(?1)
@@ -4083,13 +4107,14 @@ LIMIT 2
 `
 
 type ListUsersByIdentityEmailFoldRow struct {
-	ID          string         `json:"id"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 // Case-insensitive twin of GetUserByIdentityEmail. Identity rows keep the
@@ -4111,6 +4136,7 @@ func (q *Queries) ListUsersByIdentityEmailFold(ctx context.Context, email string
 			&i.DisplayName,
 			&i.Handle,
 			&i.AvatarUrl,
+			&i.AvatarUrlLight,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -4246,7 +4272,8 @@ func (q *Queries) ListWorkspaceActiveServiceBotIDs(ctx context.Context, workspac
 const listWorkspaceBotCommands = `-- name: ListWorkspaceBotCommands :many
 SELECT bc.id, bc.workspace_id, bc.bot_user_id, bc.command, bc.description, bc.args_hint,
        bc.created_at, bc.updated_at, u.handle AS bot_handle,
-       u.display_name AS bot_display_name, u.avatar_url AS bot_avatar_url
+       u.display_name AS bot_display_name, u.avatar_url AS bot_avatar_url,
+       u.avatar_url_light AS bot_avatar_url_light
 FROM bot_commands bc
 JOIN users u ON u.id = bc.bot_user_id AND u.kind = 'bot'
 JOIN workspace_members wm
@@ -4258,17 +4285,18 @@ ORDER BY u.handle, bc.command
 `
 
 type ListWorkspaceBotCommandsRow struct {
-	ID             string `json:"id"`
-	WorkspaceID    string `json:"workspace_id"`
-	BotUserID      string `json:"bot_user_id"`
-	Command        string `json:"command"`
-	Description    string `json:"description"`
-	ArgsHint       string `json:"args_hint"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
-	BotHandle      string `json:"bot_handle"`
-	BotDisplayName string `json:"bot_display_name"`
-	BotAvatarUrl   string `json:"bot_avatar_url"`
+	ID                string `json:"id"`
+	WorkspaceID       string `json:"workspace_id"`
+	BotUserID         string `json:"bot_user_id"`
+	Command           string `json:"command"`
+	Description       string `json:"description"`
+	ArgsHint          string `json:"args_hint"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
+	BotHandle         string `json:"bot_handle"`
+	BotDisplayName    string `json:"bot_display_name"`
+	BotAvatarUrl      string `json:"bot_avatar_url"`
+	BotAvatarUrlLight string `json:"bot_avatar_url_light"`
 }
 
 func (q *Queries) ListWorkspaceBotCommands(ctx context.Context, workspaceID string) ([]ListWorkspaceBotCommandsRow, error) {
@@ -4292,6 +4320,7 @@ func (q *Queries) ListWorkspaceBotCommands(ctx context.Context, workspaceID stri
 			&i.BotHandle,
 			&i.BotDisplayName,
 			&i.BotAvatarUrl,
+			&i.BotAvatarUrlLight,
 		); err != nil {
 			return nil, err
 		}
@@ -4368,7 +4397,7 @@ func (q *Queries) ListWorkspaceBotTokenMetadata(ctx context.Context, workspaceID
 
 const listWorkspaceBots = `-- name: ListWorkspaceBots :many
 SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id,
-       u.display_name, u.handle, u.avatar_url, u.created_at
+       u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = ?1
@@ -4377,13 +4406,14 @@ ORDER BY wm.sort_name, wm.sort_handle, wm.user_id
 `
 
 type ListWorkspaceBotsRow struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	OwnerUserID string `json:"owner_user_id"`
-	DisplayName string `json:"display_name"`
-	Handle      string `json:"handle"`
-	AvatarUrl   string `json:"avatar_url"`
-	CreatedAt   string `json:"created_at"`
+	ID             string `json:"id"`
+	Kind           string `json:"kind"`
+	OwnerUserID    string `json:"owner_user_id"`
+	DisplayName    string `json:"display_name"`
+	Handle         string `json:"handle"`
+	AvatarUrl      string `json:"avatar_url"`
+	AvatarUrlLight string `json:"avatar_url_light"`
+	CreatedAt      string `json:"created_at"`
 }
 
 func (q *Queries) ListWorkspaceBots(ctx context.Context, workspaceID string) ([]ListWorkspaceBotsRow, error) {
@@ -4402,6 +4432,7 @@ func (q *Queries) ListWorkspaceBots(ctx context.Context, workspaceID string) ([]
 			&i.DisplayName,
 			&i.Handle,
 			&i.AvatarUrl,
+			&i.AvatarUrlLight,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -4418,7 +4449,7 @@ func (q *Queries) ListWorkspaceBots(ctx context.Context, workspaceID string) ([]
 }
 
 const listWorkspaceMemberPage = `-- name: ListWorkspaceMemberPage :many
-SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        wm.role, wm.created_at AS joined_at,
        CAST(wm.role_sort AS INTEGER) AS role_sort,
        wm.sort_name,
@@ -4450,18 +4481,19 @@ type ListWorkspaceMemberPageParams struct {
 }
 
 type ListWorkspaceMemberPageRow struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	OwnerUserID string `json:"owner_user_id"`
-	DisplayName string `json:"display_name"`
-	Handle      string `json:"handle"`
-	AvatarUrl   string `json:"avatar_url"`
-	CreatedAt   string `json:"created_at"`
-	Role        string `json:"role"`
-	JoinedAt    string `json:"joined_at"`
-	RoleSort    int64  `json:"role_sort"`
-	SortName    string `json:"sort_name"`
-	SortHandle  string `json:"sort_handle"`
+	ID             string `json:"id"`
+	Kind           string `json:"kind"`
+	OwnerUserID    string `json:"owner_user_id"`
+	DisplayName    string `json:"display_name"`
+	Handle         string `json:"handle"`
+	AvatarUrl      string `json:"avatar_url"`
+	AvatarUrlLight string `json:"avatar_url_light"`
+	CreatedAt      string `json:"created_at"`
+	Role           string `json:"role"`
+	JoinedAt       string `json:"joined_at"`
+	RoleSort       int64  `json:"role_sort"`
+	SortName       string `json:"sort_name"`
+	SortHandle     string `json:"sort_handle"`
 }
 
 func (q *Queries) ListWorkspaceMemberPage(ctx context.Context, arg ListWorkspaceMemberPageParams) ([]ListWorkspaceMemberPageRow, error) {
@@ -4489,6 +4521,7 @@ func (q *Queries) ListWorkspaceMemberPage(ctx context.Context, arg ListWorkspace
 			&i.DisplayName,
 			&i.Handle,
 			&i.AvatarUrl,
+			&i.AvatarUrlLight,
 			&i.CreatedAt,
 			&i.Role,
 			&i.JoinedAt,
@@ -4510,7 +4543,7 @@ func (q *Queries) ListWorkspaceMemberPage(ctx context.Context, arg ListWorkspace
 }
 
 const listWorkspaceMembersForModeration = `-- name: ListWorkspaceMembersForModeration :many
-SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        wm.role, COALESCE(m.timeout_until, '') AS timeout_until, COALESCE(m.blocked_at, '') AS blocked_at,
        COALESCE(m.moderation_note, '') AS moderation_note, COALESCE(m.moderation_by, '') AS moderation_by,
        COALESCE(m.moderation_at, '') AS moderation_at
@@ -4529,6 +4562,7 @@ type ListWorkspaceMembersForModerationRow struct {
 	DisplayName    string `json:"display_name"`
 	Handle         string `json:"handle"`
 	AvatarUrl      string `json:"avatar_url"`
+	AvatarUrlLight string `json:"avatar_url_light"`
 	CreatedAt      string `json:"created_at"`
 	Role           string `json:"role"`
 	TimeoutUntil   string `json:"timeout_until"`
@@ -4554,6 +4588,7 @@ func (q *Queries) ListWorkspaceMembersForModeration(ctx context.Context, workspa
 			&i.DisplayName,
 			&i.Handle,
 			&i.AvatarUrl,
+			&i.AvatarUrlLight,
 			&i.CreatedAt,
 			&i.Role,
 			&i.TimeoutUntil,
@@ -5238,7 +5273,8 @@ func (q *Queries) RevokeAllBotTokens(ctx context.Context, arg RevokeAllBotTokens
 
 const setProviderAvatarUnlessExplicit = `-- name: SetProviderAvatarUnlessExplicit :execrows
 UPDATE users
-SET avatar_url = ?1
+SET avatar_url = ?1,
+    avatar_url_light = CASE WHEN ?1 = '' THEN '' ELSE avatar_url_light END
 WHERE id = ?2
   AND (avatar_url = '' OR avatar_url = ?3)
 `
@@ -5553,7 +5589,8 @@ func (q *Queries) UpdateThreadState(ctx context.Context, arg UpdateThreadStatePa
 
 const updateUserAvatar = `-- name: UpdateUserAvatar :exec
 UPDATE users
-SET avatar_url = ?1
+SET avatar_url = ?1,
+    avatar_url_light = CASE WHEN ?1 = '' THEN '' ELSE avatar_url_light END
 WHERE id = ?2
 `
 
@@ -5564,6 +5601,22 @@ type UpdateUserAvatarParams struct {
 
 func (q *Queries) UpdateUserAvatar(ctx context.Context, arg UpdateUserAvatarParams) error {
 	_, err := q.db.ExecContext(ctx, updateUserAvatar, arg.AvatarUrl, arg.ID)
+	return err
+}
+
+const updateUserAvatarLight = `-- name: UpdateUserAvatarLight :exec
+UPDATE users
+SET avatar_url_light = ?1
+WHERE id = ?2
+`
+
+type UpdateUserAvatarLightParams struct {
+	AvatarUrlLight string `json:"avatar_url_light"`
+	ID             string `json:"id"`
+}
+
+func (q *Queries) UpdateUserAvatarLight(ctx context.Context, arg UpdateUserAvatarLightParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserAvatarLight, arg.AvatarUrlLight, arg.ID)
 	return err
 }
 
@@ -5603,7 +5656,8 @@ const updateUserProfile = `-- name: UpdateUserProfile :exec
 UPDATE users
 SET display_name = ?1,
     handle = ?2,
-    avatar_url = ?3
+    avatar_url = ?3,
+    avatar_url_light = CASE WHEN ?3 = '' THEN '' ELSE avatar_url_light END
 WHERE id = ?4
 `
 

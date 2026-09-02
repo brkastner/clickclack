@@ -18,8 +18,8 @@ func TestMentionsNotificationMigrationUpgradesExistingDatabase(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	applySQLiteMigrationsBefore(t, ctx, st, "0039_mentions_and_notifications.sql")
-	applySQLiteMigrations(t, ctx, st, "0042_channel_bot_presentations.sql", "0043_channel_bot_assignments.sql", "0044_drop_channel_bot_presentations.sql")
-	for _, name := range []string{"0042_channel_bot_presentations.sql", "0043_channel_bot_assignments.sql", "0044_drop_channel_bot_presentations.sql"} {
+	applySQLiteMigrations(t, ctx, st, "0042_channel_bot_presentations.sql", "0043_channel_bot_assignments.sql", "0044_drop_channel_bot_presentations.sql", "0047_light_mode_avatars.sql")
+	for _, name := range []string{"0042_channel_bot_presentations.sql", "0043_channel_bot_assignments.sql", "0044_drop_channel_bot_presentations.sql", "0047_light_mode_avatars.sql"} {
 		if _, err := st.db.ExecContext(ctx, `INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, name, now()); err != nil {
 			t.Fatal(err)
 		}

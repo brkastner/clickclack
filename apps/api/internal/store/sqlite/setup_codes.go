@@ -95,7 +95,7 @@ func (s *Store) CreateBotSetupCode(ctx context.Context, input store.CreateBotSet
 		return store.BotSetupCode{}, err
 	}
 	defer tx.Rollback()
-	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`, botUserID))
+	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at FROM users WHERE id = ?`, botUserID))
 	if err != nil {
 		return store.BotSetupCode{}, err
 	}
@@ -186,7 +186,7 @@ func (s *Store) ClaimBotSetupCode(ctx context.Context, code string) (store.BotSe
 	if err != nil || !time.Now().UTC().Before(expiresAt) {
 		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
 	}
-	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`, row.BotUserID))
+	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at FROM users WHERE id = ?`, row.BotUserID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.BotSetupCodeClaim{}, store.ErrSetupCodeInvalid
 	}

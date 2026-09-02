@@ -177,7 +177,8 @@ func pinnedMessageFromDB(row storedb.ListPinnedMessagesRow) store.Message {
 		Kind: row.MessageKind, TurnID: row.TurnID,
 		Author: &store.User{
 			ID: row.UserID, Kind: row.UserKind, DisplayName: row.DisplayName,
-			Handle: row.Handle, AvatarURL: row.AvatarUrl, CreatedAt: row.UserCreatedAt,
+			Handle: row.Handle, AvatarURL: row.AvatarUrl,
+			AvatarURLLight: row.AvatarUrlLight, CreatedAt: row.UserCreatedAt,
 		},
 	}
 	if row.ParentMessageID.Valid {
@@ -215,7 +216,8 @@ func pinnedMessageFromDB(row storedb.ListPinnedMessagesRow) store.Message {
 			ID: row.QuotedUserID.String, Kind: row.QuotedUserKind.String,
 			OwnerUserID: row.QuotedOwnerUserID.String, DisplayName: row.QuotedDisplayName.String,
 			Handle: row.QuotedHandle.String, AvatarURL: row.QuotedAvatarUrl.String,
-			CreatedAt: row.QuotedUserCreatedAt.String,
+			AvatarURLLight: row.QuotedAvatarUrlLight.String,
+			CreatedAt:      row.QuotedUserCreatedAt.String,
 		}
 		if row.QuotedFormerHandle.Valid {
 			message.QuotedAuthor.FormerHandle = row.QuotedFormerHandle.String

@@ -70,15 +70,16 @@ type BotSetupCode struct {
 }
 
 type BotSetupRequest struct {
-	CreatedBy   string         `json:"created_by"`
-	SetupNonce  string         `json:"setup_nonce"`
-	BotUserID   sql.NullString `json:"bot_user_id"`
-	WorkspaceID string         `json:"workspace_id"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
-	DisplayName string         `json:"display_name"`
-	Handle      string         `json:"handle"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
+	CreatedBy      string         `json:"created_by"`
+	SetupNonce     string         `json:"setup_nonce"`
+	BotUserID      sql.NullString `json:"bot_user_id"`
+	WorkspaceID    string         `json:"workspace_id"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
 }
 
 type BotToken struct {
@@ -403,13 +404,14 @@ type UploadQuotaReservation struct {
 }
 
 type User struct {
-	ID          string         `json:"id"`
-	DisplayName string         `json:"display_name"`
-	AvatarUrl   string         `json:"avatar_url"`
-	CreatedAt   string         `json:"created_at"`
-	Handle      string         `json:"handle"`
-	Kind        string         `json:"kind"`
-	OwnerUserID sql.NullString `json:"owner_user_id"`
+	ID             string         `json:"id"`
+	DisplayName    string         `json:"display_name"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
+	Handle         string         `json:"handle"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
 }
 
 type UserAppearancePreference struct {

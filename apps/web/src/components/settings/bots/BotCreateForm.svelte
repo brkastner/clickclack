@@ -40,6 +40,8 @@
   let displayName = $state("");
   let handle = $state("");
   let handleEdited = $state(false);
+  let avatarURL = $state("");
+  let avatarURLLight = $state("");
   let ownership = $state<Ownership>(untrack(() => (canCreateService ? "service" : "user")));
   let connect = $state<ConnectMethod>("code");
   let tokenName = $state("default");
@@ -52,6 +54,10 @@
     if (!handleEdited) {
       handle = suggestHandleFrom(displayName);
     }
+  });
+
+  $effect(() => {
+    if (!avatarURL.trim()) avatarURLLight = "";
   });
 
   function onHandleInput(event: Event) {
@@ -73,6 +79,8 @@
       const response = await createWorkspaceBot(workspaceID, {
         display_name: displayName.trim(),
         handle: handle.trim(),
+        avatar_url: avatarURL.trim() || undefined,
+        avatar_url_light: avatarURLLight.trim() || undefined,
         owner_user_id: ownership === "user" ? currentUserID : undefined,
         setup_nonce: setupNonce,
         // Code mode creates the bot without a credential; the setup code
@@ -125,6 +133,31 @@
           required
         />
       </div>
+    </label>
+  </div>
+
+  <div class="ws-bots__form-grid">
+    <label class="ws-bots__form-field">
+      <span class="ws-bots__form-label">Default / dark avatar URL</span>
+      <input
+        class="ws-bots__form-input"
+        type="url"
+        bind:value={avatarURL}
+        placeholder="https://example.com/avatar-dark.png"
+      />
+      <span class="ws-bots__form-hint">Used in dark mode and as the fallback in light mode.</span>
+    </label>
+
+    <label class="ws-bots__form-field">
+      <span class="ws-bots__form-label">Light mode avatar URL</span>
+      <input
+        class="ws-bots__form-input"
+        type="url"
+        bind:value={avatarURLLight}
+        placeholder="https://example.com/avatar-light.png"
+        disabled={!avatarURL.trim()}
+      />
+      <span class="ws-bots__form-hint">Optional. Set the default avatar first.</span>
     </label>
   </div>
 

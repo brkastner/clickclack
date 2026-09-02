@@ -2,6 +2,7 @@ CREATE TABLE users (
   id TEXT PRIMARY KEY,
   display_name TEXT NOT NULL,
   avatar_url TEXT NOT NULL DEFAULT '',
+  avatar_url_light TEXT NOT NULL DEFAULT '' CHECK (avatar_url_light = '' OR avatar_url <> ''),
   created_at TEXT NOT NULL,
   handle TEXT NOT NULL DEFAULT '',
   kind TEXT NOT NULL DEFAULT 'human',
@@ -399,6 +400,7 @@ CREATE TABLE bot_setup_requests (
   display_name TEXT NOT NULL,
   handle TEXT NOT NULL,
   avatar_url TEXT NOT NULL,
+  avatar_url_light TEXT NOT NULL DEFAULT '' CHECK (avatar_url_light = '' OR avatar_url <> ''),
   created_at TEXT NOT NULL,
   PRIMARY KEY (created_by, setup_nonce)
 );

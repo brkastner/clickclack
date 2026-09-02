@@ -87,6 +87,7 @@
     id={group.authorID}
     name={group.authorName}
     src={group.authorAvatarURL}
+    lightSrc={group.authorAvatarURLLight}
     size={76}
     buttonLabel={group.authorDeleted ? undefined : `View profile for ${group.authorName}`}
     onclick={() => onOpenProfile(group.messages[0]?.author)}

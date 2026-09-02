@@ -200,6 +200,7 @@ type User struct {
 	Handle               string                `json:"handle"`
 	FormerHandle         string                `json:"former_handle,omitempty"`
 	AvatarURL            string                `json:"avatar_url"`
+	AvatarURLLight       string                `json:"avatar_url_light,omitempty"`
 	CreatedAt            string                `json:"created_at"`
 	DeletedAt            *string               `json:"deleted_at,omitempty"`
 	NotificationSettings *NotificationSettings `json:"notification_settings,omitempty"`
@@ -396,15 +397,16 @@ type AddWorkspaceMemberResult struct {
 }
 
 type CreateBotInput struct {
-	WorkspaceID string
-	OwnerUserID string
-	DisplayName string
-	Handle      string
-	AvatarURL   string
-	TokenName   string
-	Scopes      []string
-	SetupNonce  string
-	CreatedBy   string
+	WorkspaceID    string
+	OwnerUserID    string
+	DisplayName    string
+	Handle         string
+	AvatarURL      string
+	AvatarURLLight string
+	TokenName      string
+	Scopes         []string
+	SetupNonce     string
+	CreatedBy      string
 	// SkipInitialToken creates the bot without minting a token, for
 	// installs that hand credentials over via a setup code instead.
 	SkipInitialToken bool
@@ -455,10 +457,11 @@ type BotCommand struct {
 }
 
 type BotCommandBot struct {
-	ID          string `json:"id"`
-	Handle      string `json:"handle"`
-	DisplayName string `json:"display_name"`
-	AvatarURL   string `json:"avatar_url"`
+	ID             string `json:"id"`
+	Handle         string `json:"handle"`
+	DisplayName    string `json:"display_name"`
+	AvatarURL      string `json:"avatar_url"`
+	AvatarURLLight string `json:"avatar_url_light,omitempty"`
 }
 
 type WorkspaceBotCommand struct {
@@ -825,20 +828,22 @@ type UpsertIdentityUserInput struct {
 }
 
 type UpdateUserProfileInput struct {
-	UserID      string
-	DisplayName string
-	Handle      string
-	AvatarURL   string
+	UserID         string
+	DisplayName    string
+	Handle         string
+	AvatarURL      string
+	AvatarURLLight string
 }
 
 // UpdateBotProfileInput patches a bot's identity. Nil fields are left alone so
 // a caller can send one field without clearing the others.
 type UpdateBotProfileInput struct {
-	BotUserID   string
-	RequesterID string
-	DisplayName *string
-	Handle      *string
-	AvatarURL   *string
+	BotUserID      string
+	RequesterID    string
+	DisplayName    *string
+	Handle         *string
+	AvatarURL      *string
+	AvatarURLLight *string
 }
 
 type UpdateUserProfileAndNotificationSettingsInput struct {
@@ -846,6 +851,7 @@ type UpdateUserProfileAndNotificationSettingsInput struct {
 	DisplayName          string
 	Handle               string
 	AvatarURL            string
+	AvatarURLLight       string
 	NotificationSettings *NotificationSettings
 }
 
@@ -854,6 +860,7 @@ type UpdateCurrentUserInput struct {
 	DisplayName           *string
 	Handle                *string
 	AvatarURL             *string
+	AvatarURLLight        *string
 	NotificationSettings  *NotificationSettings
 	AppearancePreferences *AppearancePreferencesPatch
 }
@@ -1038,15 +1045,16 @@ type SearchHighlight struct {
 }
 
 type SearchAuthor struct {
-	ID           string  `json:"id"`
-	Kind         string  `json:"kind"`
-	OwnerUserID  string  `json:"owner_user_id,omitempty"`
-	DisplayName  string  `json:"display_name"`
-	Handle       string  `json:"handle"`
-	FormerHandle string  `json:"former_handle,omitempty"`
-	AvatarURL    string  `json:"avatar_url"`
-	CreatedAt    string  `json:"created_at"`
-	DeletedAt    *string `json:"deleted_at,omitempty"`
+	ID             string  `json:"id"`
+	Kind           string  `json:"kind"`
+	OwnerUserID    string  `json:"owner_user_id,omitempty"`
+	DisplayName    string  `json:"display_name"`
+	Handle         string  `json:"handle"`
+	FormerHandle   string  `json:"former_handle,omitempty"`
+	AvatarURL      string  `json:"avatar_url"`
+	AvatarURLLight string  `json:"avatar_url_light,omitempty"`
+	CreatedAt      string  `json:"created_at"`
+	DeletedAt      *string `json:"deleted_at,omitempty"`
 }
 
 type SearchHit struct {

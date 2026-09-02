@@ -451,6 +451,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		DisplayName           *string                           `json:"display_name"`
 		Handle                *string                           `json:"handle"`
 		AvatarURL             *string                           `json:"avatar_url"`
+		AvatarURLLight        *string                           `json:"avatar_url_light"`
 		NotificationSettings  *store.NotificationSettings       `json:"notification_settings"`
 		AppearancePreferences *store.AppearancePreferencesPatch `json:"appearance_preferences"`
 	}
@@ -463,6 +464,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		DisplayName:           body.DisplayName,
 		Handle:                body.Handle,
 		AvatarURL:             body.AvatarURL,
+		AvatarURLLight:        body.AvatarURLLight,
 		NotificationSettings:  body.NotificationSettings,
 		AppearancePreferences: body.AppearancePreferences,
 	})

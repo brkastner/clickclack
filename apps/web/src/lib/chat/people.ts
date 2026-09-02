@@ -5,6 +5,7 @@ export type ChannelProfileShortcut = {
   bot_user_id: string;
   display_name: string;
   avatar_url: string;
+  avatar_url_light?: string;
   handle: string;
   unread_count: number;
 };
@@ -33,6 +34,29 @@ export function userHandle(user?: User | null): string {
 
 export function isDeletedBot(user?: User | null): boolean {
   return user?.kind === "bot" && !!user.deleted_at;
+}
+
+export function replaceCachedUser(candidate: User, updated: User): User {
+  return candidate.id === updated.id ? updated : candidate;
+}
+
+export function replaceMessageUsers(message: Message, updated: User): Message {
+  const author = message.author ? replaceCachedUser(message.author, updated) : undefined;
+  const quotedAuthor = message.quoted_author
+    ? replaceCachedUser(message.quoted_author, updated)
+    : undefined;
+  if (author === message.author && quotedAuthor === message.quoted_author) return message;
+  return { ...message, author, quoted_author: quotedAuthor };
+}
+
+export function replaceConversationUsers(
+  conversation: DirectConversation,
+  updated: User,
+): DirectConversation {
+  const members = conversation.members.map((member) => replaceCachedUser(member, updated));
+  return members.every((member, index) => member === conversation.members[index])
+    ? conversation
+    : { ...conversation, members };
 }
 
 export function userDisplayLabel(user?: User | null, fallback = "Local User"): string {
@@ -89,6 +113,7 @@ export function collectChannelProfileShortcuts(
       bot_user_id: bot.id,
       display_name: bot.display_name,
       avatar_url: bot.avatar_url,
+      ...(bot.avatar_url_light ? { avatar_url_light: bot.avatar_url_light } : {}),
       handle: userHandle(bot),
       unread_count: 0,
     }));

@@ -159,6 +159,7 @@ export type CreateBotInput = {
   display_name: string;
   handle?: string;
   avatar_url?: string;
+  avatar_url_light?: string;
   owner_user_id?: string;
   token_name?: string;
   scopes?: string[];
@@ -290,6 +291,7 @@ export type BotProfilePatch = {
   display_name?: string;
   handle?: string;
   avatar_url?: string;
+  avatar_url_light?: string;
 };
 
 /**

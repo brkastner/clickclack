@@ -61,6 +61,7 @@
           id={message.author?.id || message.author_id}
           name={authorName}
           src={message.author?.avatar_url}
+      lightSrc={message.author?.avatar_url_light}
           size={36}
           loading="eager"
           fetchPriority="auto"

@@ -97,14 +97,18 @@ func TestUpdateServiceBotProfileAsManager(t *testing.T) {
 	updated := patchJSONAsUser[struct {
 		Bot store.User `json:"bot"`
 	}](t, fixture.owner.ID, endpoint, map[string]string{
-		"display_name": "  рекрутер  ",
-		"avatar_url":   "https://example.com/kai.webp",
+		"display_name":     "  рекрутер  ",
+		"avatar_url":       "https://example.com/kai.webp",
+		"avatar_url_light": "https://example.com/kai-light.webp",
 	})
 	if updated.Bot.DisplayName != "рекрутер" {
 		t.Fatalf("display_name = %q, want %q", updated.Bot.DisplayName, "рекрутер")
 	}
 	if updated.Bot.AvatarURL != "https://example.com/kai.webp" {
 		t.Fatalf("avatar_url = %q", updated.Bot.AvatarURL)
+	}
+	if updated.Bot.AvatarURLLight != "https://example.com/kai-light.webp" {
+		t.Fatalf("avatar_url_light = %q", updated.Bot.AvatarURLLight)
 	}
 	// An omitted field must be left alone.
 	if updated.Bot.Handle != "kai" {
@@ -118,6 +122,10 @@ func TestUpdateServiceBotProfileAsManager(t *testing.T) {
 	for _, event := range events {
 		if event.Type == "bot.updated" {
 			foundBotUpdate = true
+			payload, ok := event.Payload.(map[string]any)
+			if !ok || payload["avatar_url_light"] != "https://example.com/kai-light.webp" {
+				t.Fatalf("bot.updated light avatar payload missing: %#v", event.Payload)
+			}
 		}
 	}
 	if !foundBotUpdate {
@@ -133,6 +141,23 @@ func TestUpdateServiceBotProfileAsManager(t *testing.T) {
 	}
 	if moderated.Bot.DisplayName != "рекрутер" {
 		t.Fatalf("display_name changed on handle-only patch: %q", moderated.Bot.DisplayName)
+	}
+	if moderated.Bot.AvatarURLLight != "https://example.com/kai-light.webp" {
+		t.Fatalf("light avatar changed on handle-only patch: %q", moderated.Bot.AvatarURLLight)
+	}
+
+	primaryChanged := patchJSONAsUser[struct {
+		Bot store.User `json:"bot"`
+	}](t, fixture.owner.ID, endpoint, map[string]string{"avatar_url": "https://example.com/kai-v2.webp"})
+	if primaryChanged.Bot.AvatarURLLight != "https://example.com/kai-light.webp" {
+		t.Fatalf("light avatar changed when omitted from primary-only patch: %q", primaryChanged.Bot.AvatarURLLight)
+	}
+
+	cleared := patchJSONAsUser[struct {
+		Bot store.User `json:"bot"`
+	}](t, fixture.owner.ID, endpoint, map[string]string{"avatar_url": ""})
+	if cleared.Bot.AvatarURL != "" || cleared.Bot.AvatarURLLight != "" {
+		t.Fatalf("clearing primary avatar must clear both URLs: %#v", cleared.Bot)
 	}
 }
 
@@ -255,6 +280,8 @@ func TestUpdateBotProfileRejectsInvalidInput(t *testing.T) {
 		"blank display name": {"display_name": "   "},
 		"bad handle":         {"handle": "not a handle"},
 		"bad avatar":         {"avatar_url": "javascript:alert(1)"},
+		"bad light avatar":   {"avatar_url_light": "javascript:alert(1)"},
+		"light without base": {"avatar_url_light": "https://example.com/light.png"},
 	} {
 		payload, err := json.Marshal(body)
 		if err != nil {

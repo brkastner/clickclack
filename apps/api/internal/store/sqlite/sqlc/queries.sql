@@ -29,7 +29,7 @@ WHERE id = sqlc.arg(id)
   );
 
 -- name: GetSessionUser :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at, s.expires_at AS session_expires_at,
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at, s.expires_at AS session_expires_at,
        COALESCE(uns.pushover_enabled, 0) AS pushover_enabled,
        COALESCE(uns.pushover_user_key, '') AS pushover_user_key
 FROM sessions s
@@ -101,7 +101,7 @@ DELETE FROM desktop_oauth_grants
 WHERE id = sqlc.arg(id) AND grant_hash = sqlc.arg(grant_hash);
 
 -- name: GetUserByIdentityEmail :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.email = sqlc.arg(email)
@@ -112,7 +112,7 @@ LIMIT 1;
 -- casing they were created with (admin user create stores the address as
 -- given), so an exact match cannot find them from a normalized lookup.
 -- name: ListUsersByIdentityEmailFold :many
-SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE lower(i.email) = lower(sqlc.arg(email))
@@ -120,7 +120,7 @@ ORDER BY u.created_at, u.id
 LIMIT 2;
 
 -- name: GetUserByIdentityProviderSubject :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.provider = sqlc.arg(provider)
@@ -162,7 +162,8 @@ WHERE id = sqlc.arg(id)
 -- Avatar URLs equal to the generated fallback remain fallback-equivalent.
 -- name: SetProviderAvatarUnlessExplicit :execrows
 UPDATE users
-SET avatar_url = sqlc.arg(avatar_url)
+SET avatar_url = sqlc.arg(avatar_url),
+    avatar_url_light = CASE WHEN sqlc.arg(avatar_url) = '' THEN '' ELSE avatar_url_light END
 WHERE id = sqlc.arg(id)
   AND (avatar_url = '' OR avatar_url = sqlc.arg(fallback_url));
 
@@ -178,13 +179,13 @@ INSERT INTO identities (id, user_id, provider, provider_subject, email, created_
 VALUES (sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(provider), sqlc.arg(provider_subject), sqlc.arg(email), sqlc.arg(created_at));
 
 -- name: FirstUser :one
-SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at
+SELECT id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at
 FROM users
 ORDER BY created_at
 LIMIT 1;
 
 -- name: GetUser :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        COALESCE(tombstone.former_handle, '') AS former_handle,
        COALESCE(tombstone.deleted_at, '') AS deleted_at
 FROM users u
@@ -195,7 +196,8 @@ WHERE u.id = sqlc.arg(id);
 UPDATE users
 SET display_name = sqlc.arg(display_name),
     handle = sqlc.arg(handle),
-    avatar_url = sqlc.arg(avatar_url)
+    avatar_url = sqlc.arg(avatar_url),
+    avatar_url_light = CASE WHEN sqlc.arg(avatar_url) = '' THEN '' ELSE avatar_url_light END
 WHERE id = sqlc.arg(id);
 
 -- name: UpdateUserDisplayName :exec
@@ -210,7 +212,13 @@ WHERE id = sqlc.arg(id);
 
 -- name: UpdateUserAvatar :exec
 UPDATE users
-SET avatar_url = sqlc.arg(avatar_url)
+SET avatar_url = sqlc.arg(avatar_url),
+    avatar_url_light = CASE WHEN sqlc.arg(avatar_url) = '' THEN '' ELSE avatar_url_light END
+WHERE id = sqlc.arg(id);
+
+-- name: UpdateUserAvatarLight :exec
+UPDATE users
+SET avatar_url_light = sqlc.arg(avatar_url_light)
 WHERE id = sqlc.arg(id);
 
 -- name: UpdateWorkspaceMemberSortKeys :exec
@@ -642,8 +650,8 @@ WHERE workspace_id = sqlc.arg(workspace_id)
   AND role IN ('owner', 'bot');
 
 -- name: InsertBotUser :exec
-INSERT INTO users (id, kind, owner_user_id, display_name, handle, avatar_url, created_at)
-VALUES (sqlc.arg(id), 'bot', sqlc.arg(owner_user_id), sqlc.arg(display_name), sqlc.arg(handle), sqlc.arg(avatar_url), sqlc.arg(created_at));
+INSERT INTO users (id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at)
+VALUES (sqlc.arg(id), 'bot', sqlc.arg(owner_user_id), sqlc.arg(display_name), sqlc.arg(handle), sqlc.arg(avatar_url), sqlc.arg(avatar_url_light), sqlc.arg(created_at));
 
 -- name: InsertBotToken :exec
 INSERT INTO bot_tokens (id, token_hash, bot_user_id, workspace_id, owner_user_id, name, scopes_json, created_by, setup_nonce, created_at)
@@ -652,23 +660,23 @@ VALUES (sqlc.arg(id), sqlc.arg(token_hash), sqlc.arg(bot_user_id), sqlc.arg(work
 -- name: InsertBotSetupRequest :exec
 INSERT INTO bot_setup_requests (
   created_by, setup_nonce, bot_user_id, workspace_id, owner_user_id,
-  display_name, handle, avatar_url, created_at
+  display_name, handle, avatar_url, avatar_url_light, created_at
 ) VALUES (
   sqlc.arg(created_by), sqlc.arg(setup_nonce), sqlc.arg(bot_user_id),
   sqlc.arg(workspace_id), sqlc.arg(owner_user_id), sqlc.arg(display_name),
-  sqlc.arg(handle), sqlc.arg(avatar_url), sqlc.arg(created_at)
+  sqlc.arg(handle), sqlc.arg(avatar_url), sqlc.arg(avatar_url_light), sqlc.arg(created_at)
 );
 
 -- name: GetBotSetupRequest :one
 SELECT created_by, setup_nonce, bot_user_id, workspace_id, owner_user_id,
-       display_name, handle, avatar_url, created_at
+       display_name, handle, avatar_url, avatar_url_light, created_at
 FROM bot_setup_requests
 WHERE created_by = sqlc.arg(created_by)
   AND setup_nonce = sqlc.arg(setup_nonce);
 
 -- name: ListWorkspaceBots :many
 SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id,
-       u.display_name, u.handle, u.avatar_url, u.created_at
+       u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = sqlc.arg(workspace_id)
@@ -695,6 +703,7 @@ SELECT
   u.display_name,
   u.handle,
   u.avatar_url,
+  u.avatar_url_light,
   u.created_at,
   w.id AS workspace_id,
   COALESCE(w.route_id, '') AS workspace_route_id,
@@ -716,7 +725,7 @@ WHERE u.kind = 'bot'
 ORDER BY w.name COLLATE NOCASE, u.display_name COLLATE NOCASE, u.id;
 
 -- name: GetBotTokenAuth :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        bt.id AS token_id, bt.workspace_id, bt.scopes_json
 FROM bot_tokens bt
 JOIN users u ON u.id = bt.bot_user_id
@@ -727,7 +736,7 @@ WHERE bt.token_hash = sqlc.arg(token_hash)
   );
 
 -- name: GetActiveBotForDeletion :one
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM users u
 WHERE u.id = sqlc.arg(bot_user_id)
   AND u.kind = 'bot'
@@ -885,7 +894,7 @@ FROM (
 ) AS guest_writes;
 
 -- name: ListWorkspaceMembersForModeration :many
-SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        wm.role, COALESCE(m.timeout_until, '') AS timeout_until, COALESCE(m.blocked_at, '') AS blocked_at,
        COALESCE(m.moderation_note, '') AS moderation_note, COALESCE(m.moderation_by, '') AS moderation_by,
        COALESCE(m.moderation_at, '') AS moderation_at
@@ -897,7 +906,7 @@ ORDER BY CASE wm.role WHEN 'owner' THEN 4 WHEN 'moderator' THEN 3 WHEN 'member' 
          u.display_name COLLATE NOCASE;
 
 -- name: ListWorkspaceMemberPage :many
-SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, COALESCE(u.owner_user_id, '') AS owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        wm.role, wm.created_at AS joined_at,
        CAST(wm.role_sort AS INTEGER) AS role_sort,
        wm.sort_name,
@@ -1272,7 +1281,7 @@ WHERE dcm.conversation_id = sqlc.arg(conversation_id)
 ORDER BY dcm.user_id;
 
 -- name: DirectConversationMembers :many
-SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
        COALESCE(tombstone.former_handle, '') AS former_handle,
        COALESCE(tombstone.deleted_at, '') AS deleted_at
 FROM users u
@@ -1686,7 +1695,8 @@ ORDER BY command;
 -- name: ListWorkspaceBotCommands :many
 SELECT bc.id, bc.workspace_id, bc.bot_user_id, bc.command, bc.description, bc.args_hint,
        bc.created_at, bc.updated_at, u.handle AS bot_handle,
-       u.display_name AS bot_display_name, u.avatar_url AS bot_avatar_url
+       u.display_name AS bot_display_name, u.avatar_url AS bot_avatar_url,
+       u.avatar_url_light AS bot_avatar_url_light
 FROM bot_commands bc
 JOIN users u ON u.id = bc.bot_user_id AND u.kind = 'bot'
 JOIN workspace_members wm

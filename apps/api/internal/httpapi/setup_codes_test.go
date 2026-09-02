@@ -260,7 +260,7 @@ func TestHTTPCreateBotWithoutInitialToken(t *testing.T) {
 	server, st, workspace, owner, _ := newSetupCodeTestServer(t)
 	ctx := context.Background()
 
-	requestBody := `{"display_name":"codeless bot","initial_token":false,"setup_nonce":"0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f"}`
+	requestBody := `{"display_name":"codeless bot","avatar_url":"https://example.com/bot-dark.png","avatar_url_light":"https://example.com/bot-light.png","initial_token":false,"setup_nonce":"0d4e8a1c-9f27-4f6e-8c35-1a2b3c4d5e6f"}`
 	resp, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		server.URL+"/api/workspaces/"+workspace.ID+"/bots",
 		strings.NewReader(requestBody))
@@ -288,6 +288,9 @@ func TestHTTPCreateBotWithoutInitialToken(t *testing.T) {
 	var bot store.User
 	if err := json.Unmarshal(created["bot"], &bot); err != nil {
 		t.Fatal(err)
+	}
+	if bot.AvatarURL != "https://example.com/bot-dark.png" || bot.AvatarURLLight != "https://example.com/bot-light.png" {
+		t.Fatalf("unexpected bot avatars: %#v", bot)
 	}
 	replayed := postJSONAsUser[map[string]json.RawMessage](
 		t,

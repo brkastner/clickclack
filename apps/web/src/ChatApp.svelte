@@ -44,6 +44,9 @@
     collectMentionPeople,
     collectRecentPeople,
     dmTitle,
+    replaceCachedUser,
+    replaceConversationUsers,
+    replaceMessageUsers,
     type ChannelProfileShortcut,
   } from "./lib/chat/people";
   import { updateBotProfile } from "./lib/bots";
@@ -2482,19 +2485,14 @@
     if (!author && !turnID) {
       const messageID = typeof payload.message_id === "string" ? payload.message_id : "";
       if (!messageID) return;
-      try {
-        const data = await api<{ message: Message }>(`/api/messages/${messageID}`);
-        authorID = data.message.author_id;
-        author = data.message.author ?? lookupUser(authorID);
-        turnID = data.message.turn_id || turnID;
-        conversationID =
-          data.message.direct_conversation_id || data.message.channel_id || conversationID;
-      } catch (err) {
-        // Realtime delivery is cursor-based. A transient hydration failure must
-        // fail this handler so the event is replayed rather than acknowledged
-        // without applying legacy completion.
-        throw err;
-      }
+      // Let hydration failures reject this handler so cursor replay can retry
+      // instead of acknowledging the event without applying legacy completion.
+      const data = await api<{ message: Message }>(`/api/messages/${messageID}`);
+      authorID = data.message.author_id;
+      author = data.message.author ?? lookupUser(authorID);
+      turnID = data.message.turn_id || turnID;
+      conversationID =
+        data.message.direct_conversation_id || data.message.channel_id || conversationID;
     }
     if (isFinalAgentMessageEvent(event, author)) {
       updateConversationAgentWork(conversationID, {
@@ -4200,37 +4198,103 @@
     }
   }
 
-  // A bot's identity changed elsewhere. Reload the roster that hydrates avatars
-  // and names, and refresh the open profile pane from the new data.
+  function applyCachedUserIdentity(updated: User) {
+    const updateMessages = (items: Message[]) =>
+      items.map((message) => replaceMessageUsers(message, updated));
+
+    if (user?.id === updated.id) user = updated;
+    workspaceMemberUsers = workspaceMemberUsers.map((member) =>
+      replaceCachedUser(member, updated),
+    );
+    moderationMembers = moderationMembers.map((member) => ({
+      ...member,
+      user: replaceCachedUser(member.user, updated),
+    }));
+    directConversations = directConversations.map((conversation) =>
+      replaceConversationUsers(conversation, updated),
+    );
+    messages = updateMessages(messages);
+    replies = updateMessages(replies);
+    pinnedMessages = updateMessages(pinnedMessages);
+    messageWindows = new Map(
+      [...messageWindows].map(([key, window]) => [
+        key,
+        { ...window, messages: updateMessages(window.messages) },
+      ]),
+    );
+    selectedThread = selectedThread ? replaceMessageUsers(selectedThread, updated) : null;
+    replyTarget = replyTarget ? replaceMessageUsers(replyTarget, updated) : null;
+    pendingDeleteMessage = pendingDeleteMessage
+      ? replaceMessageUsers(pendingDeleteMessage, updated)
+      : null;
+    selectedProfile = selectedProfile
+      ? replaceCachedUser(selectedProfile, updated)
+      : selectedProfile;
+    recoverableDraftMessages = new Map(
+      [...recoverableDraftMessages].map(([key, drafts]) => [key, updateMessages(drafts)]),
+    );
+    if (searchSession) {
+      searchSession = {
+        ...searchSession,
+        results: searchSession.results.map((result) => ({
+          ...result,
+          author: replaceCachedUser(result.author, updated),
+        })),
+      };
+    }
+    botCommands = botCommands.map((command) =>
+      command.bot.id === updated.id
+        ? {
+            ...command,
+            bot: {
+              ...command.bot,
+              handle: updated.handle,
+              display_name: updated.display_name,
+              avatar_url: updated.avatar_url,
+              avatar_url_light: updated.avatar_url_light,
+            },
+          }
+        : command,
+    );
+  }
+
+  // A bot's identity changed elsewhere. Reload the canonical rosters, then
+  // replace every cached copy used by messages, threads, DMs, search, and nav.
   async function handleBotUpdatedEvent(event: RealtimeEvent) {
     const botUserID = event.payload.bot_user_id || "";
     if (!botUserID) return;
-    await Promise.all([loadModerationMembers(), loadChannels(false, false, false)]);
-    if (selectedProfile?.id !== botUserID) return;
-    const refreshed = moderationMembers.find((member) => member.user.id === botUserID)?.user;
-    selectedProfile = refreshed ?? {
-      ...selectedProfile,
-      display_name: event.payload.display_name || selectedProfile.display_name,
-      handle: event.payload.handle ?? selectedProfile.handle,
-      avatar_url: event.payload.avatar_url ?? selectedProfile.avatar_url,
-    };
+    await Promise.all([
+      loadModerationMembers(),
+      loadWorkspaceMembers(),
+      loadChannels(false, false, false),
+    ]);
+    const cached =
+      moderationMembers.find((member) => member.user.id === botUserID)?.user ??
+      workspaceMemberUsers.find((member) => member.id === botUserID) ??
+      lookupUser(botUserID);
+    if (!cached) return;
+    applyCachedUserIdentity({
+      ...cached,
+      display_name: event.payload.display_name ?? cached.display_name,
+      handle: event.payload.handle ?? cached.handle,
+      avatar_url: event.payload.avatar_url ?? cached.avatar_url,
+      avatar_url_light: event.payload.avatar_url_light ?? cached.avatar_url_light,
+    });
   }
 
-  // Saves a bot's underlying identity, then reflects it locally so the pane and
-  // sidebar update without waiting for the realtime round trip.
+  // Saves a bot's underlying identity, then replaces every cached copy without
+  // waiting for the realtime round trip.
   async function saveBotProfile(
     botUserID: string,
-    patch: { display_name?: string; handle?: string; avatar_url?: string },
+    patch: {
+      display_name?: string;
+      handle?: string;
+      avatar_url?: string;
+      avatar_url_light?: string;
+    },
   ) {
     const updated = await updateBotProfile(botUserID, patch);
-    if (selectedProfile?.id === botUserID) selectedProfile = updated;
-    moderationMembers = moderationMembers.map((member) =>
-      member.user.id === botUserID ? { ...member, user: updated } : member,
-    );
-    directConversations = directConversations.map((conversation) => ({
-      ...conversation,
-      members: conversation.members.map((member) => (member.id === botUserID ? updated : member)),
-    }));
+    applyCachedUserIdentity(updated);
     await loadChannels(false, false, false);
   }
 

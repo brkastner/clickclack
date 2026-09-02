@@ -71,11 +71,12 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	profile := patchJSON[struct {
 		User store.User `json:"user"`
 	}](t, server.URL+"/api/me", map[string]string{
-		"display_name": "Peter Steinberger",
-		"handle":       "@steipete",
-		"avatar_url":   "https://example.com/avatar.png",
+		"display_name":     "Peter Steinberger",
+		"handle":           "@steipete",
+		"avatar_url":       "https://example.com/avatar.png",
+		"avatar_url_light": "https://example.com/avatar-light.png",
 	})
-	if profile.User.DisplayName != "Peter Steinberger" || profile.User.Handle != "steipete" || profile.User.AvatarURL == "" {
+	if profile.User.DisplayName != "Peter Steinberger" || profile.User.Handle != "steipete" || profile.User.AvatarURL == "" || profile.User.AvatarURLLight == "" {
 		t.Fatalf("unexpected profile response: %#v", profile.User)
 	}
 
@@ -1908,6 +1909,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	expectStatus(t, http.MethodPatch, server.URL+"/api/me", strings.NewReader("{"), http.StatusBadRequest)
 	expectStatus(t, http.MethodPatch, server.URL+"/api/me", strings.NewReader(`{"display_name":"Owner","handle":"x"}`), http.StatusBadRequest)
 	expectStatus(t, http.MethodPatch, server.URL+"/api/me", strings.NewReader(`{"display_name":"Owner","avatar_url":"ftp://example.com/a.png"}`), http.StatusBadRequest)
+	expectStatus(t, http.MethodPatch, server.URL+"/api/me", strings.NewReader(`{"avatar_url":"","avatar_url_light":"https://example.com/light.png"}`), http.StatusBadRequest)
 	expectStatus(t, http.MethodPost, server.URL+"/api/workspaces", strings.NewReader("{"), http.StatusBadRequest)
 	expectStatus(t, http.MethodPost, server.URL+"/api/auth/magic/request", strings.NewReader(`{"email":""}`), http.StatusBadRequest)
 	expectStatus(t, http.MethodPost, server.URL+"/api/auth/magic/consume", strings.NewReader(`{"token":"missing"}`), http.StatusBadRequest)

@@ -21,6 +21,7 @@
   } from "../../../../../../components/settings/bots/BotCreateForm.svelte";
   import BotTokenForm from "../../../../../../components/settings/bots/BotTokenForm.svelte";
   import TokenRevealPanel from "../../../../../../components/settings/bots/TokenRevealPanel.svelte";
+  import Avatar from "../../../../../../components/avatar/Avatar.svelte";
   import { untrack } from "svelte";
 
   let { data } = $props();
@@ -200,12 +201,6 @@
     return bot.handle ? formatHandle(bot.handle) : bot.display_name || "this bot";
   }
 
-  function initials(name: string): string {
-    const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
-    return name.slice(0, 2).toUpperCase();
-  }
-
   const countLabel = $derived(`${bots.length} ${bots.length === 1 ? "bot" : "bots"}`);
 </script>
 
@@ -311,16 +306,14 @@
             aria-expanded={expanded}
             onclick={() => toggleExpand(bot.id)}
           >
-            <span
+            <Avatar
               class="ws-members__avatar ws-members__avatar--{isServiceBot(bot) ? 'human' : 'bot'}"
-              aria-hidden="true"
-            >
-              {#if bot.avatar_url}
-                <img src={bot.avatar_url} alt="" />
-              {:else}
-                {initials(bot.display_name || bot.handle || "?")}
-              {/if}
-            </span>
+              id={bot.id}
+              name={bot.display_name || bot.handle || "?"}
+              src={bot.avatar_url}
+              lightSrc={bot.avatar_url_light}
+              size={36}
+            />
             <div class="ws-bots__row-text">
               <div class="ws-bots__row-name">{bot.display_name || bot.handle}</div>
               <div class="ws-bots__row-meta">

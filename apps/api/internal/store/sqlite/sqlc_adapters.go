@@ -77,24 +77,25 @@ func nullInt64FromPtr(value *int64) sql.NullInt64 {
 	return sqlInt64(*value)
 }
 
-func storeUserFromDB(id, kind string, ownerUserID sql.NullString, displayName, handle, avatarURL, createdAt string) store.User {
+func storeUserFromDB(id, kind string, ownerUserID sql.NullString, displayName, handle, avatarURL, avatarURLLight, createdAt string) store.User {
 	return store.User{
-		ID:          id,
-		Kind:        kind,
-		OwnerUserID: stringFromNull(ownerUserID),
-		DisplayName: displayName,
-		Handle:      handle,
-		AvatarURL:   avatarURL,
-		CreatedAt:   createdAt,
+		ID:             id,
+		Kind:           kind,
+		OwnerUserID:    stringFromNull(ownerUserID),
+		DisplayName:    displayName,
+		Handle:         handle,
+		AvatarURL:      avatarURL,
+		AvatarURLLight: avatarURLLight,
+		CreatedAt:      createdAt,
 	}
 }
 
 func storeUserFromFirstUser(row storedb.FirstUserRow) store.User {
-	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 }
 
 func storeUserFromGetUser(row storedb.GetUserRow) store.User {
-	user := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	user := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 	user.FormerHandle = row.FormerHandle
 	if row.DeletedAt != "" {
 		user.DeletedAt = &row.DeletedAt
@@ -103,7 +104,7 @@ func storeUserFromGetUser(row storedb.GetUserRow) store.User {
 }
 
 func storeUserFromGetSessionUser(row storedb.GetSessionUserRow) store.User {
-	user := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	user := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 	user.NotificationSettings = &store.NotificationSettings{
 		PushoverEnabled: row.PushoverEnabled != 0,
 		PushoverUserKey: row.PushoverUserKey,
@@ -112,19 +113,19 @@ func storeUserFromGetSessionUser(row storedb.GetSessionUserRow) store.User {
 }
 
 func storeUserFromIdentityEmail(row storedb.GetUserByIdentityEmailRow) store.User {
-	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 }
 
 func storeUserFromIdentityEmailFold(row storedb.ListUsersByIdentityEmailFoldRow) store.User {
-	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 }
 
 func storeUserFromIdentityProviderSubject(row storedb.GetUserByIdentityProviderSubjectRow) store.User {
-	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	return storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 }
 
 func storeUserFromDirectConversationMember(row storedb.DirectConversationMembersRow) store.User {
-	user := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	user := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 	user.FormerHandle = row.FormerHandle
 	if row.DeletedAt != "" {
 		user.DeletedAt = &row.DeletedAt
@@ -256,7 +257,7 @@ func storePushRecipient(userID, displayName, userKey string) store.PushNotificat
 
 func storeBotTokenAuthFromDB(row storedb.GetBotTokenAuthRow) store.BotTokenAuth {
 	return store.BotTokenAuth{
-		User:        storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt),
+		User:        storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt),
 		TokenID:     row.TokenID,
 		WorkspaceID: row.WorkspaceID,
 	}

@@ -174,7 +174,7 @@ func (s *Store) RevokeAppInstallation(ctx context.Context, installationID, reque
 	}
 	if options.RevokeBotTokens {
 		bot, err := scanUser(tx.QueryRowContext(ctx, `
-			SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at
+			SELECT id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at
 			FROM users
 			WHERE id = ?`, installation.BotUserID))
 		if err != nil {

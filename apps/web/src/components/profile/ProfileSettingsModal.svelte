@@ -89,6 +89,7 @@
           id={user.id}
           name={displayName}
           src={avatarURL}
+          lightSrc={user.avatar_url_light}
           size={56}
           loading="eager"
           fetchPriority="auto"

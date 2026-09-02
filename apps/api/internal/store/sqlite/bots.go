@@ -100,6 +100,13 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
 	}
+	avatarURLLight, err := normalizeAvatarURL(input.AvatarURLLight)
+	if err != nil {
+		return store.User{}, store.BotToken{}, err
+	}
+	if avatarURL == "" && avatarURLLight != "" {
+		return store.User{}, store.BotToken{}, errors.New("avatar_url is required before avatar_url_light")
+	}
 	scopes, err := normalizeBotScopes(input.Scopes)
 	if err != nil {
 		return store.User{}, store.BotToken{}, err
@@ -154,7 +161,8 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 					replayBot.Bot.OwnerUserID != ownerUserID ||
 					replayBot.Bot.DisplayName != displayName ||
 					replayBot.Bot.Handle != handle ||
-					replayBot.Bot.AvatarURL != avatarURL {
+					replayBot.Bot.AvatarURL != avatarURL ||
+					replayBot.Bot.AvatarURLLight != avatarURLLight {
 					return store.User{}, store.BotToken{}, store.ErrSetupNonceConflict
 				}
 				return replayBot.Bot, store.BotToken{}, tx.Commit()
@@ -177,7 +185,8 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 					replayBot.OwnerUserID != ownerUserID ||
 					replayBot.DisplayName != displayName ||
 					replayBot.Handle != handle ||
-					replayBot.AvatarURL != avatarURL {
+					replayBot.AvatarURL != avatarURL ||
+					replayBot.AvatarURLLight != avatarURLLight {
 					return store.User{}, store.BotToken{}, store.ErrSetupNonceConflict
 				}
 				replayToken, err = rotateSetupBotTokenTx(ctx, tx, replayToken)
@@ -200,21 +209,23 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 		}
 	}
 	bot := store.User{
-		ID:          newID("usr"),
-		Kind:        "bot",
-		OwnerUserID: ownerUserID,
-		DisplayName: displayName,
-		Handle:      handle,
-		AvatarURL:   avatarURL,
-		CreatedAt:   now(),
+		ID:             newID("usr"),
+		Kind:           "bot",
+		OwnerUserID:    ownerUserID,
+		DisplayName:    displayName,
+		Handle:         handle,
+		AvatarURL:      avatarURL,
+		AvatarURLLight: avatarURLLight,
+		CreatedAt:      now(),
 	}
 	if err := qtx.InsertBotUser(ctx, storedb.InsertBotUserParams{
-		ID:          bot.ID,
-		OwnerUserID: sqlOptionalText(bot.OwnerUserID),
-		DisplayName: bot.DisplayName,
-		Handle:      bot.Handle,
-		AvatarUrl:   bot.AvatarURL,
-		CreatedAt:   bot.CreatedAt,
+		ID:             bot.ID,
+		OwnerUserID:    sqlOptionalText(bot.OwnerUserID),
+		DisplayName:    bot.DisplayName,
+		Handle:         bot.Handle,
+		AvatarUrl:      bot.AvatarURL,
+		AvatarUrlLight: bot.AvatarURLLight,
+		CreatedAt:      bot.CreatedAt,
 	}); err != nil {
 		if strings.Contains(err.Error(), "idx_users_handle") || strings.Contains(err.Error(), "users.handle") {
 			return store.User{}, store.BotToken{}, errors.New("handle is already taken")
@@ -232,15 +243,16 @@ func (s *Store) CreateBot(ctx context.Context, input store.CreateBotInput) (stor
 	if input.SkipInitialToken {
 		if setupNonce != "" {
 			if err := qtx.InsertBotSetupRequest(ctx, storedb.InsertBotSetupRequestParams{
-				CreatedBy:   createdBy,
-				SetupNonce:  setupNonce,
-				BotUserID:   sqlText(bot.ID),
-				WorkspaceID: workspaceID,
-				OwnerUserID: sqlOptionalText(ownerUserID),
-				DisplayName: displayName,
-				Handle:      handle,
-				AvatarUrl:   avatarURL,
-				CreatedAt:   bot.CreatedAt,
+				CreatedBy:      createdBy,
+				SetupNonce:     setupNonce,
+				BotUserID:      sqlText(bot.ID),
+				WorkspaceID:    workspaceID,
+				OwnerUserID:    sqlOptionalText(ownerUserID),
+				DisplayName:    displayName,
+				Handle:         handle,
+				AvatarUrl:      avatarURL,
+				AvatarUrlLight: avatarURLLight,
+				CreatedAt:      bot.CreatedAt,
 			}); err != nil {
 				return store.User{}, store.BotToken{}, err
 			}
@@ -351,13 +363,14 @@ func (s *Store) ListBots(ctx context.Context, workspaceID, requesterID string) (
 		}
 		out = append(out, store.BotWithTokens{
 			Bot: store.User{
-				ID:          row.ID,
-				Kind:        row.Kind,
-				OwnerUserID: row.OwnerUserID,
-				DisplayName: row.DisplayName,
-				Handle:      row.Handle,
-				AvatarURL:   row.AvatarUrl,
-				CreatedAt:   row.CreatedAt,
+				ID:             row.ID,
+				Kind:           row.Kind,
+				OwnerUserID:    row.OwnerUserID,
+				DisplayName:    row.DisplayName,
+				Handle:         row.Handle,
+				AvatarURL:      row.AvatarUrl,
+				AvatarURLLight: row.AvatarUrlLight,
+				CreatedAt:      row.CreatedAt,
 			},
 			Tokens: tokens,
 		})
@@ -392,7 +405,7 @@ func (s *Store) CreateBotToken(ctx context.Context, input store.CreateBotTokenIn
 	if err != nil {
 		return store.BotToken{}, err
 	}
-	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`, botUserID))
+	bot, err := scanUser(tx.QueryRowContext(ctx, `SELECT id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at FROM users WHERE id = ?`, botUserID))
 	if err != nil {
 		return store.BotToken{}, err
 	}
@@ -582,7 +595,7 @@ func (s *Store) listBotTokensForBotWorkspace(ctx context.Context, botUserID, wor
 
 func (s *Store) getWorkspaceBot(ctx context.Context, workspaceID, botUserID string) (store.User, error) {
 	bot, err := scanUser(s.db.QueryRowContext(ctx, `
-		SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+		SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 		FROM users u
 		JOIN workspace_members wm ON wm.user_id = u.id
 		WHERE wm.workspace_id = ? AND u.id = ? AND u.kind = 'bot'`, workspaceID, botUserID))
@@ -733,7 +746,8 @@ func (s *Store) UpdateBotProfileWithEvents(ctx context.Context, input store.Upda
 	events := make([]store.Event, 0, len(workspaces))
 	for _, workspace := range workspaces {
 		event, err := insertEvent(ctx, tx, workspace.ID, "", "bot.updated", nil, map[string]string{
-			"bot_user_id": bot.ID, "display_name": bot.DisplayName, "handle": bot.Handle, "avatar_url": bot.AvatarURL,
+			"bot_user_id": bot.ID, "display_name": bot.DisplayName, "handle": bot.Handle,
+			"avatar_url": bot.AvatarURL, "avatar_url_light": bot.AvatarURLLight,
 		})
 		if err != nil {
 			return store.User{}, nil, err
@@ -759,12 +773,16 @@ func (s *Store) updateBotProfileTx(ctx context.Context, tx *sql.Tx, input store.
 	if err != nil {
 		return store.User{}, err
 	}
+	avatarURLLight, err := normalizeAvatarURLPatch(input.AvatarURLLight)
+	if err != nil {
+		return store.User{}, err
+	}
 	qtx := s.q.WithTx(tx)
 	row, err := qtx.GetActiveBotForDeletion(ctx, botUserID)
 	if err != nil {
 		return store.User{}, err
 	}
-	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 	if err := requireBotProfileManagerTx(ctx, tx, qtx, bot, requesterID); err != nil {
 		return store.User{}, err
 	}
@@ -783,7 +801,19 @@ func (s *Store) updateBotProfileTx(ctx context.Context, tx *sql.Tx, input store.
 			return store.User{}, err
 		}
 	}
-	if displayName == nil && handle == nil && avatarURL == nil {
+	resultingAvatarURL := bot.AvatarURL
+	if avatarURL != nil {
+		resultingAvatarURL = *avatarURL
+	}
+	if avatarURLLight != nil {
+		if *avatarURLLight != "" && resultingAvatarURL == "" {
+			return store.User{}, errors.New("avatar_url is required before avatar_url_light")
+		}
+		if err := qtx.UpdateUserAvatarLight(ctx, storedb.UpdateUserAvatarLightParams{AvatarUrlLight: *avatarURLLight, ID: bot.ID}); err != nil {
+			return store.User{}, err
+		}
+	}
+	if displayName == nil && handle == nil && avatarURL == nil && avatarURLLight == nil {
 		return bot, nil
 	}
 	updatedRow, err := qtx.GetUser(ctx, bot.ID)
@@ -864,7 +894,7 @@ func (s *Store) deleteBotTx(ctx context.Context, tx *sql.Tx, botUserID, requeste
 	if err != nil {
 		return store.DeletedBot{}, botDeletionCounts{}, err
 	}
-	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt)
+	bot := storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt)
 	governedWorkspaceIDs, err := qtx.ListBotGovernedWorkspaces(ctx, bot.ID)
 	if err != nil {
 		return store.DeletedBot{}, botDeletionCounts{}, err
@@ -982,7 +1012,7 @@ func (s *Store) ListBotsOwnedBy(ctx context.Context, ownerUserID string) ([]stor
 	out := make([]store.OwnedBotEntry, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, store.OwnedBotEntry{
-			Bot: storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.CreatedAt),
+			Bot: storeUserFromDB(row.ID, row.Kind, row.OwnerUserID, row.DisplayName, row.Handle, row.AvatarUrl, row.AvatarUrlLight, row.CreatedAt),
 			Workspace: store.OwnedBotWorkspace{
 				ID:      row.WorkspaceID,
 				RouteID: row.WorkspaceRouteID,
@@ -1138,7 +1168,7 @@ func getSetupBotTokenTx(ctx context.Context, tx *sql.Tx, createdBy, setupNonce s
 	}
 	bot, err := scanUser(tx.QueryRowContext(
 		ctx,
-		`SELECT id, kind, owner_user_id, display_name, handle, avatar_url, created_at FROM users WHERE id = ?`,
+		`SELECT id, kind, owner_user_id, display_name, handle, avatar_url, avatar_url_light, created_at FROM users WHERE id = ?`,
 		token.BotUserID,
 	))
 	return bot, token, err
@@ -1167,7 +1197,7 @@ func getTokenlessBotSetupTx(
 	}
 	bot, err := scanUser(tx.QueryRowContext(
 		ctx,
-		`SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at
+		`SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 		 FROM users u
 		 WHERE u.id = ?
 		   AND NOT EXISTS (SELECT 1 FROM bot_tombstones WHERE bot_user_id = u.id)`,

@@ -98,6 +98,7 @@
             id={dmUser?.id || conversation.id}
             name={dmUser?.display_name}
             src={isDeletedBot(dmUser) ? undefined : dmUser?.avatar_url}
+        lightSrc={isDeletedBot(dmUser) ? undefined : dmUser?.avatar_url_light}
             size={26}
           />
           <span class="nav-label">{dmTitle(conversation, currentUserID)}</span>

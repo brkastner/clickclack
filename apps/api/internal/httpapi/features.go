@@ -708,14 +708,15 @@ func (s *Server) createBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		OwnerUserID  string   `json:"owner_user_id"`
-		DisplayName  string   `json:"display_name"`
-		Handle       string   `json:"handle"`
-		AvatarURL    string   `json:"avatar_url"`
-		TokenName    string   `json:"token_name"`
-		Scopes       []string `json:"scopes"`
-		SetupNonce   string   `json:"setup_nonce"`
-		InitialToken *bool    `json:"initial_token"`
+		OwnerUserID    string   `json:"owner_user_id"`
+		DisplayName    string   `json:"display_name"`
+		Handle         string   `json:"handle"`
+		AvatarURL      string   `json:"avatar_url"`
+		AvatarURLLight string   `json:"avatar_url_light"`
+		TokenName      string   `json:"token_name"`
+		Scopes         []string `json:"scopes"`
+		SetupNonce     string   `json:"setup_nonce"`
+		InitialToken   *bool    `json:"initial_token"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -728,6 +729,7 @@ func (s *Server) createBot(w http.ResponseWriter, r *http.Request) {
 		DisplayName:      body.DisplayName,
 		Handle:           body.Handle,
 		AvatarURL:        body.AvatarURL,
+		AvatarURLLight:   body.AvatarURLLight,
 		TokenName:        body.TokenName,
 		Scopes:           body.Scopes,
 		SetupNonce:       body.SetupNonce,
@@ -943,20 +945,22 @@ func (s *Server) updateBotProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DisplayName *string `json:"display_name"`
-		Handle      *string `json:"handle"`
-		AvatarURL   *string `json:"avatar_url"`
+		DisplayName    *string `json:"display_name"`
+		Handle         *string `json:"handle"`
+		AvatarURL      *string `json:"avatar_url"`
+		AvatarURLLight *string `json:"avatar_url_light"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	bot, events, err := s.store.UpdateBotProfileWithEvents(r.Context(), store.UpdateBotProfileInput{
-		BotUserID:   chi.URLParam(r, "bot_user_id"),
-		RequesterID: act.user.ID,
-		DisplayName: body.DisplayName,
-		Handle:      body.Handle,
-		AvatarURL:   body.AvatarURL,
+		BotUserID:      chi.URLParam(r, "bot_user_id"),
+		RequesterID:    act.user.ID,
+		DisplayName:    body.DisplayName,
+		Handle:         body.Handle,
+		AvatarURL:      body.AvatarURL,
+		AvatarURLLight: body.AvatarURLLight,
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1137,10 +1141,11 @@ func (s *Server) publishBotUpdated(ctx context.Context, bot store.User) {
 			WorkspaceID: workspace.ID,
 			CreatedAt:   updatedAt,
 			Payload: map[string]string{
-				"bot_user_id":  bot.ID,
-				"display_name": bot.DisplayName,
-				"handle":       bot.Handle,
-				"avatar_url":   bot.AvatarURL,
+				"bot_user_id":      bot.ID,
+				"display_name":     bot.DisplayName,
+				"handle":           bot.Handle,
+				"avatar_url":       bot.AvatarURL,
+				"avatar_url_light": bot.AvatarURLLight,
 			},
 		})
 	}

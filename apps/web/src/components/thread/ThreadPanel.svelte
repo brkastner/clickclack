@@ -444,6 +444,7 @@
       id={rootAuthor?.id || root.author_id}
       name={rootAuthor?.display_name}
       src={isDeletedBot(rootAuthor) ? undefined : rootAuthor?.avatar_url}
+      lightSrc={isDeletedBot(rootAuthor) ? undefined : rootAuthor?.avatar_url_light}
       size={38}
     />
     <div class="group-body">
@@ -606,6 +607,7 @@
           id={replyAuthor?.id || reply.author_id}
           name={replyAuthor?.display_name}
           src={isDeletedBot(replyAuthor) ? undefined : replyAuthor?.avatar_url}
+      lightSrc={isDeletedBot(replyAuthor) ? undefined : replyAuthor?.avatar_url_light}
           size={30}
         />
         <div class="group-body">

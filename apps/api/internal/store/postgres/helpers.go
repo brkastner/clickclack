@@ -27,7 +27,7 @@ type scanner interface {
 func scanUser(row scanner) (store.User, error) {
 	var user store.User
 	var owner sql.NullString
-	if err := row.Scan(&user.ID, &user.Kind, &owner, &user.DisplayName, &user.Handle, &user.AvatarURL, &user.CreatedAt); err != nil {
+	if err := row.Scan(&user.ID, &user.Kind, &owner, &user.DisplayName, &user.Handle, &user.AvatarURL, &user.AvatarURLLight, &user.CreatedAt); err != nil {
 		return store.User{}, err
 	}
 	user.OwnerUserID = stringFromNull(owner)
@@ -50,10 +50,10 @@ func getMessageTx(ctx context.Context, tx *sql.Tx, id string) (store.Message, er
 func messageSelect() string {
 	return `SELECT m.id, COALESCE(m.route_id, ''), m.workspace_id, COALESCE(m.channel_id, ''), COALESCE(m.direct_conversation_id, ''), m.author_id, m.parent_message_id, m.thread_root_id, COALESCE(m.topic_id, ''), m.channel_seq, m.thread_seq,
 		       m.body, m.body_format, m.created_at, m.edited_at, m.deleted_at,
-		       u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.created_at,
+		       u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
 		       author_tombstone.former_handle, author_tombstone.deleted_at,
 		       m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id,
-		       qu.id, qu.kind, qu.owner_user_id, qu.display_name, qu.handle, qu.avatar_url, qu.created_at,
+		       qu.id, qu.kind, qu.owner_user_id, qu.display_name, qu.handle, qu.avatar_url, qu.avatar_url_light, qu.created_at,
 		       quoted_tombstone.former_handle, quoted_tombstone.deleted_at,
 		       m.client_nonce, m.kind, COALESCE(m.turn_id, '')
 		FROM messages m
@@ -70,16 +70,16 @@ func scanMessage(row scanner) (store.Message, error) {
 	var author store.User
 	var quotedMessageID, quotedAuthorID sql.NullString
 	var authorOwnerID sql.NullString
-	var quAuthorID, quKind, quOwnerID, quDisplayName, quHandle, quAvatarURL, quCreatedAt sql.NullString
+	var quAuthorID, quKind, quOwnerID, quDisplayName, quHandle, quAvatarURL, quAvatarURLLight, quCreatedAt sql.NullString
 	var authorFormerHandle, authorDeletedAt, quFormerHandle, quDeletedAt sql.NullString
 	var nonce string
 	err := row.Scan(
 		&m.ID, &m.RouteID, &m.WorkspaceID, &m.ChannelID, &m.DirectConversationID, &m.AuthorID, &parent, &m.ThreadRootID, &m.TopicID, &channelSeq, &threadSeq,
 		&m.Body, &m.BodyFormat, &m.CreatedAt, &edited, &deleted,
-		&author.ID, &author.Kind, &authorOwnerID, &author.DisplayName, &author.Handle, &author.AvatarURL, &author.CreatedAt,
+		&author.ID, &author.Kind, &authorOwnerID, &author.DisplayName, &author.Handle, &author.AvatarURL, &author.AvatarURLLight, &author.CreatedAt,
 		&authorFormerHandle, &authorDeletedAt,
 		&quotedMessageID, &m.QuotedBodySnapshot, &quotedAuthorID,
-		&quAuthorID, &quKind, &quOwnerID, &quDisplayName, &quHandle, &quAvatarURL, &quCreatedAt,
+		&quAuthorID, &quKind, &quOwnerID, &quDisplayName, &quHandle, &quAvatarURL, &quAvatarURLLight, &quCreatedAt,
 		&quFormerHandle, &quDeletedAt,
 		&nonce, &m.Kind, &m.TurnID,
 	)
@@ -119,13 +119,14 @@ func scanMessage(row scanner) (store.Message, error) {
 	}
 	if quAuthorID.Valid {
 		m.QuotedAuthor = &store.User{
-			ID:          quAuthorID.String,
-			Kind:        quKind.String,
-			OwnerUserID: quOwnerID.String,
-			DisplayName: quDisplayName.String,
-			Handle:      quHandle.String,
-			AvatarURL:   quAvatarURL.String,
-			CreatedAt:   quCreatedAt.String,
+			ID:             quAuthorID.String,
+			Kind:           quKind.String,
+			OwnerUserID:    quOwnerID.String,
+			DisplayName:    quDisplayName.String,
+			Handle:         quHandle.String,
+			AvatarURL:      quAvatarURL.String,
+			AvatarURLLight: quAvatarURLLight.String,
+			CreatedAt:      quCreatedAt.String,
 		}
 		if quFormerHandle.Valid {
 			m.QuotedAuthor.FormerHandle = quFormerHandle.String

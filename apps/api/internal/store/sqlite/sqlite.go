@@ -231,46 +231,17 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (store.User, e
 }
 
 func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserProfileInput) (store.User, error) {
-	displayName, handle, avatarURL, err := normalizeUserProfile(input.DisplayName, input.Handle, input.AvatarURL)
+	result, err := s.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID:         input.UserID,
+		DisplayName:    &input.DisplayName,
+		Handle:         &input.Handle,
+		AvatarURL:      &input.AvatarURL,
+		AvatarURLLight: &input.AvatarURLLight,
+	})
 	if err != nil {
 		return store.User{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return store.User{}, err
-	}
-	defer tx.Rollback()
-	qtx := s.q.WithTx(tx)
-	if err := qtx.UpdateUserProfile(ctx, storedb.UpdateUserProfileParams{
-		DisplayName: displayName,
-		Handle:      handle,
-		AvatarUrl:   avatarURL,
-		ID:          input.UserID,
-	}); err != nil {
-		return store.User{}, profileUpdateError(err)
-	}
-	if avatarURL == "" {
-		fallbackURL, err := resolveProfileAvatarURL(ctx, qtx, input.UserID, "")
-		if err != nil {
-			return store.User{}, err
-		}
-		if fallbackURL != "" {
-			if err := qtx.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{ID: input.UserID, AvatarUrl: fallbackURL}); err != nil {
-				return store.User{}, err
-			}
-		}
-	}
-	if err := qtx.UpdateWorkspaceMemberSortKeys(ctx, storedb.UpdateWorkspaceMemberSortKeysParams{
-		DisplayName: displayName,
-		Handle:      handle,
-		UserID:      input.UserID,
-	}); err != nil {
-		return store.User{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return store.User{}, err
-	}
-	return s.GetUser(ctx, input.UserID)
+	return result.User, nil
 }
 
 func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, input store.UpdateUserProfileAndNotificationSettingsInput) (store.User, error) {
@@ -279,6 +250,7 @@ func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, in
 		DisplayName:          &input.DisplayName,
 		Handle:               &input.Handle,
 		AvatarURL:            &input.AvatarURL,
+		AvatarURLLight:       &input.AvatarURLLight,
 		NotificationSettings: input.NotificationSettings,
 	})
 	if err != nil {
@@ -291,6 +263,13 @@ func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrent
 	displayName, handle, avatarURL, err := normalizeUserProfilePatch(input.DisplayName, input.Handle, input.AvatarURL)
 	if err != nil {
 		return store.CurrentUserState{}, err
+	}
+	avatarURLLight, err := normalizeAvatarURLPatch(input.AvatarURLLight)
+	if err != nil {
+		return store.CurrentUserState{}, err
+	}
+	if avatarURL != nil && *avatarURL == "" && avatarURLLight != nil && *avatarURLLight != "" {
+		return store.CurrentUserState{}, errors.New("avatar_url is required before avatar_url_light")
 	}
 	var settings store.NotificationSettings
 	var settingsEnabled int64
@@ -318,7 +297,7 @@ func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrent
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
-	profileChanged := displayName != nil || handle != nil || avatarURL != nil
+	profileChanged := displayName != nil || handle != nil || avatarURL != nil || avatarURLLight != nil
 	if displayName != nil {
 		if err := qtx.UpdateUserDisplayName(ctx, storedb.UpdateUserDisplayNameParams{
 			DisplayName: *displayName,
@@ -352,6 +331,21 @@ func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrent
 			if err := qtx.SetUserAvatarIfEmpty(ctx, storedb.SetUserAvatarIfEmptyParams{ID: input.UserID, AvatarUrl: fallbackURL}); err != nil {
 				return store.CurrentUserState{}, err
 			}
+		}
+	}
+	if avatarURLLight != nil {
+		row, err := qtx.GetUser(ctx, input.UserID)
+		if err != nil {
+			return store.CurrentUserState{}, err
+		}
+		if *avatarURLLight != "" && row.AvatarUrl == "" {
+			return store.CurrentUserState{}, errors.New("avatar_url is required before avatar_url_light")
+		}
+		if err := qtx.UpdateUserAvatarLight(ctx, storedb.UpdateUserAvatarLightParams{
+			AvatarUrlLight: *avatarURLLight,
+			ID:             input.UserID,
+		}); err != nil {
+			return store.CurrentUserState{}, err
 		}
 	}
 	if profileChanged {
@@ -425,6 +419,17 @@ func normalizeUserProfilePatch(displayNameInput, handleInput, avatarURLInput *st
 		avatarURL = &normalized
 	}
 	return displayName, handle, avatarURL, nil
+}
+
+func normalizeAvatarURLPatch(input *string) (*string, error) {
+	if input == nil {
+		return nil, nil
+	}
+	normalized, err := normalizeAvatarURL(*input)
+	if err != nil {
+		return nil, err
+	}
+	return &normalized, nil
 }
 
 func normalizeUserProfile(displayNameInput, handleInput, avatarURLInput string) (string, string, string, error) {
