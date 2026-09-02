@@ -39,6 +39,7 @@
   let draggedGroupKey = $state("");
   let dropTargetID = $state("");
   let dropBefore = $state(true);
+  let dropGroupKey = $state("");
 
   const activeChannels = $derived(channels.filter((channel) => !channel.archived_at));
   const archivedChannels = $derived(channels.filter((channel) => Boolean(channel.archived_at)));
@@ -103,6 +104,34 @@
     onAssignProfile(channel.id, profile);
     void closeMoveMenu(true);
   }
+
+  // Dragging a channel onto another group's header or list reassigns it.
+  // Same-group drags stay row-level reorders.
+  function canDropOnGroup(groupKey: string): boolean {
+    return Boolean(draggedChannelID) && draggedGroupKey !== groupKey && draggedGroupKey !== "archived";
+  }
+
+  function groupDragOver(event: DragEvent, groupKey: string) {
+    if (!canDropOnGroup(groupKey)) return;
+    event.preventDefault();
+    dropGroupKey = groupKey;
+  }
+
+  function groupDrop(event: DragEvent, groupKey: string, profile: ChannelProfileShortcut | null) {
+    event.preventDefault();
+    const id = draggedChannelID;
+    const from = draggedGroupKey;
+    draggedChannelID = "";
+    draggedGroupKey = "";
+    dropGroupKey = "";
+    dropTargetID = "";
+    if (!id || !canDropOnGroupKey(from, groupKey)) return;
+    onAssignProfile(id, profile);
+  }
+
+  function canDropOnGroupKey(from: string, to: string): boolean {
+    return from !== to && from !== "archived";
+  }
 </script>
 
 {#snippet channelRow(channel: Channel, scope: Channel[], groupKey: string, subdued = false)}
@@ -110,7 +139,7 @@
   {@const index = scope.findIndex((candidate) => candidate.id === channel.id)}
   <div class="channel-row" class:subdued role="listitem" class:drop-before={dropTargetID === channel.id && dropBefore} class:drop-after={dropTargetID === channel.id && !dropBefore}
     ondragover={(event) => { if (!draggedChannelID || draggedGroupKey !== groupKey || draggedChannelID === channel.id) return; event.preventDefault(); dropTargetID = channel.id; dropBefore = event.clientY < (event.currentTarget as HTMLElement).getBoundingClientRect().top + (event.currentTarget as HTMLElement).offsetHeight / 2; }}
-    ondrop={(event) => { event.preventDefault(); if (draggedGroupKey === groupKey) moveChannel(draggedChannelID, channel.id, dropBefore); draggedChannelID = ""; }}>
+    ondrop={(event) => { if (draggedGroupKey !== groupKey) return; event.preventDefault(); event.stopPropagation(); moveChannel(draggedChannelID, channel.id, dropBefore); draggedChannelID = ""; dropTargetID = ""; }}>
     <button type="button" class="channel-drag-handle" draggable="true" aria-label={`Move #${channelDisplayTitle(channel)}`} title="Move channel" aria-haspopup="menu" aria-expanded={moveMenuChannelID === channel.id}
       onclick={(event) => void toggleMoveMenu(channel.id, event.currentTarget)}
       ondragstart={(event) => { draggedChannelID = channel.id; draggedGroupKey = groupKey; event.dataTransfer?.setData("text/plain", channel.id); }}
@@ -140,7 +169,10 @@
   <div class="sidebar-profile-groups">
     {#each botGroups as group (group.profile.bot_user_id)}
       {@const conversation = directConversationForUser(directConversations, group.profile.bot_user_id)}
-      <section class="channel-subgroup profile-channel-group" role="group">
+      <section class="channel-subgroup profile-channel-group" role="group" class:profile-drop-target={dropGroupKey === `bot:${group.profile.bot_user_id}`}
+        ondragover={(event) => groupDragOver(event, `bot:${group.profile.bot_user_id}`)}
+        ondragleave={() => { if (dropGroupKey === `bot:${group.profile.bot_user_id}`) dropGroupKey = ""; }}
+        ondrop={(event) => groupDrop(event, `bot:${group.profile.bot_user_id}`, group.profile)}>
         <div class="channel-subgroup-header profile-subgroup-header">
           <a href={conversation ? hrefForDirect(conversation.id) : "#"} class="channel-subgroup-toggle profile-source-link" class:active={conversation?.id === selectedDirectID}
             onclick={(event) => { event.preventDefault(); if (conversation) onSelectDirect(conversation.id); else onStartDirect(group.profile.bot_user_id); }}>
@@ -155,7 +187,10 @@
     {/each}
   </div>
 
-  <div class="section-title sidebar-channels-title" role="group">
+  <div class="section-title sidebar-channels-title" role="group" class:profile-drop-target={dropGroupKey === "unsectioned"}
+    ondragover={(event) => groupDragOver(event, "unsectioned")}
+    ondragleave={() => { if (dropGroupKey === "unsectioned") dropGroupKey = ""; }}
+    ondrop={(event) => groupDrop(event, "unsectioned", null)}>
     <button type="button" class="section-toggle" aria-expanded={expanded} aria-controls="sidebar-channels-list" onclick={onToggle}><span class="caret" aria-hidden="true">▾</span><span class="label">Channels</span></button>
     <button type="button" class="add-button" aria-label="Create channel" title="Create channel" onclick={onCreateChannel}>＋</button>
   </div>
