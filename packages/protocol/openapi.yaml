@@ -1146,6 +1146,35 @@ paths:
       responses:
         "200":
           description: Removed channel-scoped bot presentation
+  /api/channels/{channel_id}/bot-assignments/{bot_user_id}:
+    put:
+      operationId: upsertChannelBotAssignment
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Assigned a bot to the channel sidebar group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelBotAssignmentResponse"
+    delete:
+      operationId: deleteChannelBotAssignment
+      parameters:
+        - $ref: "#/components/parameters/channel_id"
+        - name: bot_user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Removed a bot from the channel sidebar group
   /api/channels/{channel_id}/messages:
     get:
       operationId: listMessages
@@ -3087,6 +3116,11 @@ components:
           description: Manager-controlled visual aliases for bot authors in this channel. Authentication and handles remain unchanged.
           items:
             $ref: "#/components/schemas/ChannelBotPresentation"
+        bot_assignments:
+          type: array
+          description: Bots used to group this channel in the sidebar.
+          items:
+            $ref: "#/components/schemas/ChannelBotAssignment"
         last_seq:
           type: integer
           format: int64
@@ -3133,6 +3167,22 @@ components:
       properties:
         presentation:
           $ref: "#/components/schemas/ChannelBotPresentation"
+        event:
+          $ref: "#/components/schemas/Event"
+    ChannelBotAssignment:
+      type: object
+      required: [channel_id, bot_user_id]
+      properties:
+        channel_id:
+          type: string
+        bot_user_id:
+          type: string
+    ChannelBotAssignmentResponse:
+      type: object
+      required: [assignment, event]
+      properties:
+        assignment:
+          $ref: "#/components/schemas/ChannelBotAssignment"
         event:
           $ref: "#/components/schemas/Event"
     DirectConversation:

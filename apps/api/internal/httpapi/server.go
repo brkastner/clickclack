@@ -217,6 +217,8 @@ func (s *Server) Handler() http.Handler {
 		r.Patch("/channels/{channel_id}", s.updateChannel)
 		r.Put("/channels/{channel_id}/bot-presentations/{bot_user_id}", s.upsertChannelBotPresentation)
 		r.Delete("/channels/{channel_id}/bot-presentations/{bot_user_id}", s.deleteChannelBotPresentation)
+		r.Put("/channels/{channel_id}/bot-assignments/{bot_user_id}", s.upsertChannelBotAssignment)
+		r.Delete("/channels/{channel_id}/bot-assignments/{bot_user_id}", s.deleteChannelBotAssignment)
 		r.Get("/channels/{channel_id}/messages", s.listMessages)
 		r.Post("/channels/{channel_id}/messages", s.createMessage)
 		r.Get("/channels/{channel_id}/notification-settings", s.getChannelNotificationSettings)
