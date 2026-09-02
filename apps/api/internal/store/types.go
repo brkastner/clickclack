@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ErrQuotedMessageOutOfScope is returned when a message tries to quote another
@@ -733,12 +735,22 @@ func ParseMessageMentions(body string) []string {
 				continue
 			}
 		}
-		if body[i] != '@' || (i > 0 && !isMentionBoundary(body[i-1])) {
+		if body[i] != '@' {
 			continue
 		}
+		if i > 0 {
+			previous, _ := utf8.DecodeLastRuneInString(body[:i])
+			if !isMentionBoundary(previous) {
+				continue
+			}
+		}
 		j := i + 1
-		for j < len(body) && isMentionChar(body[j]) {
-			j++
+		for j < len(body) {
+			char, size := utf8.DecodeRuneInString(body[j:])
+			if !isMentionChar(char) {
+				break
+			}
+			j += size
 		}
 		if j == i+1 {
 			continue
@@ -793,15 +805,12 @@ func markdownLinkEnd(body string, labelStart int) int {
 	return targetStart + targetEndOffset
 }
 
-func isMentionBoundary(char byte) bool {
+func isMentionBoundary(char rune) bool {
 	return !isMentionChar(char) && char != '@'
 }
 
-func isMentionChar(char byte) bool {
-	return char >= 'a' && char <= 'z' ||
-		char >= 'A' && char <= 'Z' ||
-		char >= '0' && char <= '9' ||
-		char == '_' || char == '-'
+func isMentionChar(char rune) bool {
+	return unicode.IsLetter(char) || unicode.IsNumber(char) || char == '_' || char == '-'
 }
 
 type UpsertIdentityUserInput struct {

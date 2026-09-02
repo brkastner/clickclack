@@ -166,13 +166,16 @@ func sameQuotedMessageID(message store.Message, quotedID string) bool {
 	return message.QuotedMessageID != nil && *message.QuotedMessageID == quotedID
 }
 
-var handlePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,31}$`)
+var handlePattern = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N}_-]{1,31}$`)
 
 func normalizeHandle(value string) (string, error) {
 	handle := strings.ToLower(strings.TrimSpace(value))
-	handle = strings.TrimPrefix(handle, "@")
 	if handle == "" {
 		return "", nil
+	}
+	handle = strings.TrimPrefix(handle, "@")
+	if handle == "" {
+		return "", errors.New("handle must be 2-32 chars using letters, numbers, underscores, or dashes")
 	}
 	if !handlePattern.MatchString(handle) {
 		return "", errors.New("handle must be 2-32 chars using letters, numbers, underscores, or dashes")

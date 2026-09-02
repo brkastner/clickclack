@@ -79,6 +79,11 @@ func TestParseMessageMentions(t *testing.T) {
 			expected: []string{"alice", "bob"},
 		},
 		{
+			name:     "unicode mention",
+			body:     "привет @liz и @лиза",
+			expected: []string{"liz", "лиза"},
+		},
+		{
 			name:     "mention at start",
 			body:     "@alice look at this",
 			expected: []string{"alice"},
