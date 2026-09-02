@@ -418,6 +418,8 @@ type UserAppearancePreference struct {
 	BoardTheme    string `json:"board_theme"`
 	MessageLayout string `json:"message_layout"`
 	Density       string `json:"density"`
+	BotShelfOrder string `json:"bot_shelf_order"`
+	BotShelfLimit int64  `json:"bot_shelf_limit"`
 }
 
 type UserNotificationSetting struct {

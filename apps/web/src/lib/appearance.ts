@@ -4,6 +4,8 @@
 // and data attributes on <html> drive the active styles. The inline app.html
 // script reads these storage keys before hydration; keep them in sync.
 
+import { writable } from "svelte/store";
+
 import { api } from "./api";
 import { getEmbedHostThemeMode } from "./embed-theme";
 import type { AppearancePreferences, AppearancePreferencesPatch, User } from "./types";
@@ -242,6 +244,23 @@ export function setDensity(density: Density) {
   queueAppearancePatch({ density: density === DEFAULT_DENSITY ? "" : density });
 }
 
+// Bot shelf preferences are server-owned only; they have no local cache
+// because the shelf is meaningless before the workspace has loaded.
+export type BotShelfPreferences = { order: string[]; limit: number };
+export const DEFAULT_BOT_SHELF_LIMIT = 6;
+export const botShelfPreferences = writable<BotShelfPreferences>({ order: [], limit: 0 });
+
+export function setBotShelfOrder(order: string[]) {
+  botShelfPreferences.update((current) => ({ ...current, order }));
+  queueAppearancePatch({ bot_shelf_order: order });
+}
+
+export function setBotShelfLimit(limit: number) {
+  const normalized = Math.max(0, Math.floor(limit));
+  botShelfPreferences.update((current) => ({ ...current, limit: normalized }));
+  queueAppearancePatch({ bot_shelf_limit: normalized });
+}
+
 export function serializeAppearancePreferences(): AppearancePreferences {
   const colorMode = loadColorMode();
   const boardTheme = loadBoardTheme();
@@ -260,6 +279,10 @@ export function applyServerPreferences(preferences: AppearancePreferences) {
   setLocalBoardTheme(preferences.board_theme || DEFAULT_BOARD_THEME);
   setLocalMessageLayout(preferences.message_layout || DEFAULT_MESSAGE_LAYOUT);
   setLocalDensity(preferences.density || DEFAULT_DENSITY);
+  botShelfPreferences.set({
+    order: preferences.bot_shelf_order ?? [],
+    limit: preferences.bot_shelf_limit ?? 0,
+  });
 }
 
 export async function requestCurrentUser(init: RequestInit = {}): Promise<{ user: User }> {

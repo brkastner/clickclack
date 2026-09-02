@@ -22,6 +22,8 @@ export type AppearancePreferences = {
   board_theme?: "" | "ember" | "moss" | "iris";
   message_layout?: "" | "outlined";
   density?: "" | "compact";
+  bot_shelf_order?: string[];
+  bot_shelf_limit?: number;
 };
 
 export type AppearancePreferencesPatch = {
@@ -29,6 +31,8 @@ export type AppearancePreferencesPatch = {
   board_theme?: "" | "signal" | "ember" | "moss" | "iris";
   message_layout?: "" | "standard" | "outlined";
   density?: "" | "comfortable" | "compact";
+  bot_shelf_order?: string[];
+  bot_shelf_limit?: number;
 };
 
 export type Workspace = {

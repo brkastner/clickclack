@@ -234,7 +234,7 @@ FROM user_notification_settings
 WHERE user_id = sqlc.arg(user_id);
 
 -- name: GetAppearancePreferences :one
-SELECT color_mode, board_theme, message_layout, density
+SELECT color_mode, board_theme, message_layout, density, bot_shelf_order, bot_shelf_limit
 FROM user_appearance_preferences
 WHERE user_id = sqlc.arg(user_id);
 
@@ -261,6 +261,16 @@ WHERE user_id = sqlc.arg(user_id);
 -- name: UpdateAppearanceDensity :exec
 UPDATE user_appearance_preferences
 SET density = sqlc.arg(density)
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: UpdateAppearanceBotShelfOrder :exec
+UPDATE user_appearance_preferences
+SET bot_shelf_order = sqlc.arg(bot_shelf_order)
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: UpdateAppearanceBotShelfLimit :exec
+UPDATE user_appearance_preferences
+SET bot_shelf_limit = sqlc.arg(bot_shelf_limit)
 WHERE user_id = sqlc.arg(user_id);
 
 -- name: UpsertChannelNotificationSettings :exec

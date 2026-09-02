@@ -2735,6 +2735,17 @@ components:
         density:
           type: string
           enum: ["", compact]
+        bot_shelf_order:
+          type: array
+          description: Curated order of bot user IDs on the sidebar shelf. Bots not listed follow in recent-activity order.
+          maxItems: 64
+          items:
+            type: string
+        bot_shelf_limit:
+          type: integer
+          description: Maximum shelf bots to render. 0 shows all.
+          minimum: 0
+          maximum: 64
     AppearancePreferencesPatch:
       type: object
       description: Partial appearance update. Omitted properties are unchanged and empty strings reset to defaults.
@@ -2751,6 +2762,17 @@ components:
         density:
           type: string
           enum: ["", comfortable, compact]
+        bot_shelf_order:
+          type: array
+          description: Curated order of bot user IDs on the sidebar shelf. Bots not listed follow in recent-activity order.
+          maxItems: 64
+          items:
+            type: string
+        bot_shelf_limit:
+          type: integer
+          description: Maximum shelf bots to render. 0 shows all.
+          minimum: 0
+          maximum: 64
     CreateChannelRequest:
       type: object
       required: [name]

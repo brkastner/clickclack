@@ -139,3 +139,28 @@ func deref(p *string) string {
 	}
 	return *p
 }
+
+func TestNormalizeBotShelfPatch(t *testing.T) {
+	order := []string{" a ", "b", "a", "", "c"}
+	limit := 4
+	patch, err := NormalizeAppearancePreferencesPatch(AppearancePreferencesPatch{BotShelfOrder: &order, BotShelfLimit: &limit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := *patch.BotShelfOrder; len(got) != 3 || got[0] != "a" || got[1] != "b" || got[2] != "c" {
+		t.Fatalf("order = %v", got)
+	}
+	if *patch.BotShelfLimit != 4 {
+		t.Fatalf("limit = %d", *patch.BotShelfLimit)
+	}
+	bad := -1
+	if _, err := NormalizeAppearancePreferencesPatch(AppearancePreferencesPatch{BotShelfLimit: &bad}); err == nil {
+		t.Fatal("expected negative limit to be rejected")
+	}
+	if got := DecodeBotShelfOrder(EncodeBotShelfOrder([]string{"x", "y"})); len(got) != 2 || got[1] != "y" {
+		t.Fatalf("round trip = %v", got)
+	}
+	if DecodeBotShelfOrder("") != nil {
+		t.Fatal("empty should decode to nil")
+	}
+}

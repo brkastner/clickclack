@@ -361,7 +361,9 @@ CREATE TABLE user_appearance_preferences (
   color_mode TEXT NOT NULL DEFAULT '',
   board_theme TEXT NOT NULL DEFAULT '',
   message_layout TEXT NOT NULL DEFAULT '',
-  density TEXT NOT NULL DEFAULT ''
+  density TEXT NOT NULL DEFAULT '',
+  bot_shelf_order TEXT NOT NULL DEFAULT '',
+  bot_shelf_limit INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE bot_tokens (

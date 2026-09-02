@@ -1,6 +1,7 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
-  import { directConversationForUser, handleLabel, type ChannelProfileShortcut } from "../../lib/chat/people";
+  import { directConversationForUser, handleLabel, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
+  import { botShelfPreferences, DEFAULT_BOT_SHELF_LIMIT, setBotShelfLimit, setBotShelfOrder } from "../../lib/appearance";
   import type { Channel, DirectConversation, User, Workspace } from "../../lib/types";
   import ChannelList from "./ChannelList.svelte";
   import DirectMessageList from "./DirectMessageList.svelte";
@@ -84,7 +85,43 @@
     onOpenWorkspaceSettings,
   }: Props = $props();
 
-  const displayedRecentPeople = $derived(recentPeople.slice(0, 6));
+  // Shelf order: curated ids first (server preference), then any remaining
+  // recent people in activity order. Limit 0 means the default cap.
+  const shelfLimit = $derived($botShelfPreferences.limit || DEFAULT_BOT_SHELF_LIMIT);
+  const orderedShelfPeople = $derived.by(() => {
+    const byID = new Map(recentPeople.map((person) => [person.id, person]));
+    const curated = $botShelfPreferences.order.map((id) => byID.get(id)).filter((p): p is User => Boolean(p));
+    const seen = new Set(curated.map((p) => p.id));
+    return [...curated, ...recentPeople.filter((p) => !seen.has(p.id))];
+  });
+  const displayedRecentPeople = $derived(orderedShelfPeople.slice(0, shelfLimit));
+  const hiddenShelfCount = $derived(Math.max(0, orderedShelfPeople.length - shelfLimit));
+
+  let draggedPersonID = $state("");
+  let shelfDropTargetID = $state("");
+  let shelfDropBefore = $state(true);
+
+  function shelfDragOver(event: DragEvent, targetID: string) {
+    if (!draggedPersonID || draggedPersonID === targetID) return;
+    event.preventDefault();
+    const el = event.currentTarget as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    shelfDropTargetID = targetID;
+    shelfDropBefore = event.clientX < rect.left + rect.width / 2;
+  }
+
+  function shelfDrop(event: DragEvent, targetID: string) {
+    event.preventDefault();
+    const moving = draggedPersonID;
+    draggedPersonID = "";
+    shelfDropTargetID = "";
+    if (!moving || moving === targetID) return;
+    const fullOrder = orderedShelfPeople.map((p) => p.id);
+    setBotShelfOrder(moveChannelInOrder(fullOrder, moving, targetID, shelfDropBefore));
+  }
+
+  function shelfShowMore() { setBotShelfLimit(shelfLimit + 3); }
+  function shelfShowLess() { setBotShelfLimit(Math.max(1, shelfLimit - 3)); }
 
   type SectionState = { channels: boolean; directMessages: boolean };
   const SECTION_STORAGE_PREFIX = "clickclack:sidebar-sections:v1:";
@@ -227,8 +264,17 @@
             href={conversation ? hrefForDirect(conversation.id) : "#"}
             class="sidebar-person"
             class:active={conversation?.id === selectedDirectID || selectedProfile?.id === person.id}
+            class:shelf-drop-before={shelfDropTargetID === person.id && shelfDropBefore}
+            class:shelf-drop-after={shelfDropTargetID === person.id && !shelfDropBefore}
+            class:shelf-dragging={draggedPersonID === person.id}
             title={person.display_name}
             aria-label={person.display_name}
+            draggable="true"
+            ondragstart={(event) => { draggedPersonID = person.id; event.dataTransfer?.setData("text/plain", person.id); }}
+            ondragend={() => { draggedPersonID = ""; shelfDropTargetID = ""; }}
+            ondragover={(event) => shelfDragOver(event, person.id)}
+            ondragleave={() => { if (shelfDropTargetID === person.id) shelfDropTargetID = ""; }}
+            ondrop={(event) => shelfDrop(event, person.id)}
             onclick={(event) => {
               if (conversation) {
                 if (!shouldHandleClientNavigation(event)) return;
@@ -253,6 +299,16 @@
         <span class="sidebar-people-empty">No recent people</span>
       {/if}
     </section>
+    {#if orderedShelfPeople.length > 1}
+      <div class="sidebar-people-controls">
+        {#if hiddenShelfCount > 0}
+          <button type="button" class="sidebar-people-control" onclick={shelfShowMore}>show more ({hiddenShelfCount} hidden)</button>
+        {/if}
+        {#if shelfLimit > 1 && displayedRecentPeople.length > 1}
+          <button type="button" class="sidebar-people-control" onclick={shelfShowLess}>show fewer</button>
+        {/if}
+      </div>
+    {/if}
 
     <ChannelList
       {workspaceID}

@@ -1671,6 +1671,10 @@ export interface components {
             message_layout?: "" | "outlined";
             /** @enum {string} */
             density?: "" | "compact";
+            /** @description Curated order of bot user IDs on the sidebar shelf. Bots not listed follow in recent-activity order. */
+            bot_shelf_order?: string[];
+            /** @description Maximum shelf bots to render. 0 shows all. */
+            bot_shelf_limit?: number;
         };
         /** @description Partial appearance update. Omitted properties are unchanged and empty strings reset to defaults. */
         AppearancePreferencesPatch: {
@@ -1682,6 +1686,10 @@ export interface components {
             message_layout?: "" | "standard" | "outlined";
             /** @enum {string} */
             density?: "" | "comfortable" | "compact";
+            /** @description Curated order of bot user IDs on the sidebar shelf. Bots not listed follow in recent-activity order. */
+            bot_shelf_order?: string[];
+            /** @description Maximum shelf bots to render. 0 shows all. */
+            bot_shelf_limit?: number;
         };
         CreateChannelRequest: {
             name: string;

@@ -994,7 +994,7 @@ func (q *Queries) GetActiveSlashCommandWorkspace(ctx context.Context, id string)
 }
 
 const getAppearancePreferences = `-- name: GetAppearancePreferences :one
-SELECT color_mode, board_theme, message_layout, density
+SELECT color_mode, board_theme, message_layout, density, bot_shelf_order, bot_shelf_limit
 FROM user_appearance_preferences
 WHERE user_id = ?1
 `
@@ -1004,6 +1004,8 @@ type GetAppearancePreferencesRow struct {
 	BoardTheme    string `json:"board_theme"`
 	MessageLayout string `json:"message_layout"`
 	Density       string `json:"density"`
+	BotShelfOrder string `json:"bot_shelf_order"`
+	BotShelfLimit int64  `json:"bot_shelf_limit"`
 }
 
 func (q *Queries) GetAppearancePreferences(ctx context.Context, userID string) (GetAppearancePreferencesRow, error) {
@@ -1014,6 +1016,8 @@ func (q *Queries) GetAppearancePreferences(ctx context.Context, userID string) (
 		&i.BoardTheme,
 		&i.MessageLayout,
 		&i.Density,
+		&i.BotShelfOrder,
+		&i.BotShelfLimit,
 	)
 	return i, err
 }
@@ -5359,6 +5363,38 @@ type UpdateAppearanceBoardThemeParams struct {
 
 func (q *Queries) UpdateAppearanceBoardTheme(ctx context.Context, arg UpdateAppearanceBoardThemeParams) error {
 	_, err := q.db.ExecContext(ctx, updateAppearanceBoardTheme, arg.BoardTheme, arg.UserID)
+	return err
+}
+
+const updateAppearanceBotShelfLimit = `-- name: UpdateAppearanceBotShelfLimit :exec
+UPDATE user_appearance_preferences
+SET bot_shelf_limit = ?1
+WHERE user_id = ?2
+`
+
+type UpdateAppearanceBotShelfLimitParams struct {
+	BotShelfLimit int64  `json:"bot_shelf_limit"`
+	UserID        string `json:"user_id"`
+}
+
+func (q *Queries) UpdateAppearanceBotShelfLimit(ctx context.Context, arg UpdateAppearanceBotShelfLimitParams) error {
+	_, err := q.db.ExecContext(ctx, updateAppearanceBotShelfLimit, arg.BotShelfLimit, arg.UserID)
+	return err
+}
+
+const updateAppearanceBotShelfOrder = `-- name: UpdateAppearanceBotShelfOrder :exec
+UPDATE user_appearance_preferences
+SET bot_shelf_order = ?1
+WHERE user_id = ?2
+`
+
+type UpdateAppearanceBotShelfOrderParams struct {
+	BotShelfOrder string `json:"bot_shelf_order"`
+	UserID        string `json:"user_id"`
+}
+
+func (q *Queries) UpdateAppearanceBotShelfOrder(ctx context.Context, arg UpdateAppearanceBotShelfOrderParams) error {
+	_, err := q.db.ExecContext(ctx, updateAppearanceBotShelfOrder, arg.BotShelfOrder, arg.UserID)
 	return err
 }
 

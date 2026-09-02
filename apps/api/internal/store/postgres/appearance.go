@@ -22,6 +22,8 @@ func (s *Store) GetAppearancePreferences(ctx context.Context, userID string) (*s
 		BoardTheme:    row.BoardTheme,
 		MessageLayout: row.MessageLayout,
 		Density:       row.Density,
+		BotShelfOrder: store.DecodeBotShelfOrder(row.BotShelfOrder),
+		BotShelfLimit: int(row.BotShelfLimit),
 	}
 	return &preferences, nil
 }
@@ -80,6 +82,22 @@ func updateAppearancePreferences(ctx context.Context, q *storedb.Queries, userID
 		if err := q.UpdateAppearanceDensity(ctx, storedb.UpdateAppearanceDensityParams{
 			Density: *patch.Density,
 			UserID:  userID,
+		}); err != nil {
+			return err
+		}
+	}
+	if patch.BotShelfOrder != nil {
+		if err := q.UpdateAppearanceBotShelfOrder(ctx, storedb.UpdateAppearanceBotShelfOrderParams{
+			BotShelfOrder: store.EncodeBotShelfOrder(*patch.BotShelfOrder),
+			UserID:        userID,
+		}); err != nil {
+			return err
+		}
+	}
+	if patch.BotShelfLimit != nil {
+		if err := q.UpdateAppearanceBotShelfLimit(ctx, storedb.UpdateAppearanceBotShelfLimitParams{
+			BotShelfLimit: int32(*patch.BotShelfLimit),
+			UserID:        userID,
 		}); err != nil {
 			return err
 		}
