@@ -76,6 +76,7 @@
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
+    onResend?: (message: Message) => void;
     onLoadOlder?: () => void;
     onLoadNewer?: (source?: "scroll" | "wheel") => void;
     onJumpToUnread?: () => void;
@@ -130,6 +131,7 @@
     onJumpToQuote,
     onOpenImage,
     onOpenArtifact,
+    onResend,
     onLoadOlder,
     onLoadNewer,
     onJumpToUnread,
@@ -1054,6 +1056,7 @@
               {onJumpToQuote}
               {onOpenImage}
               {onOpenArtifact}
+              {onResend}
               {onRetry}
               {onDiscard}
               {onDeleteMessage}

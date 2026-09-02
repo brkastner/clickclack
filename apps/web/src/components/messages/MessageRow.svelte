@@ -53,6 +53,7 @@
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
+    onResend?: (message: Message) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
@@ -88,6 +89,7 @@
     onJumpToQuote,
     onOpenImage,
     onOpenArtifact,
+    onResend,
     onRetry,
     onDiscard,
     onDeleteMessage,
@@ -135,8 +137,12 @@
     canDeleteAnyMessage ||
       (Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID),
   );
-  let canEditMessage = $derived(
+  let isOwnMessage = $derived(
     Boolean(currentUserID) && (message.author?.id || message.author_id) === currentUserID,
+  );
+  let canEditMessage = $derived(isOwnMessage);
+  let canResendMessage = $derived(
+    isOwnMessage && !isDeleted && !isPending && !isFailed && Boolean(onResend),
   );
   // Consecutive tool rows become a synthetic collapsible preamble block.
   // Commentary rows remain ordinary text and split one turn into as many tool
@@ -783,6 +789,19 @@
         role="status"
         aria-live="polite"
       >{copyStatus === "copied" ? "Copied" : "Couldn't copy"}</span>
+    {/if}
+    {#if canResendMessage}
+      <button
+        type="button"
+        class="message-action-resend tooltip"
+        aria-label="Resend message"
+        data-tooltip="Resend message"
+        onclick={() => onResend?.(message)}
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.4-2.5L20 9M4 15l2.5 2.5A7 7 0 0 0 17.9 15"/>
+        </svg>
+      </button>
     {/if}
     <button
       type="button"

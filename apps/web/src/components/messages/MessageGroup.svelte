@@ -26,6 +26,7 @@
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
+    onResend?: (message: Message) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
     onDeleteMessage?: (message: Message) => void;
@@ -58,6 +59,7 @@
     onJumpToQuote,
     onOpenImage,
     onOpenArtifact,
+    onResend,
     onRetry,
     onDiscard,
     onDeleteMessage,
@@ -133,6 +135,7 @@
         {onJumpToQuote}
         {onOpenImage}
         {onOpenArtifact}
+        {onResend}
         {onRetry}
         {onDiscard}
         {onDeleteMessage}

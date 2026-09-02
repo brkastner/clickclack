@@ -9,6 +9,7 @@
     promoteDirectConversation,
   } from "./lib/directConversationRecency";
   import { probeMediaDimensions } from "./lib/media";
+  import { messageContentForResend } from "./lib/messageResend";
   import {
     DEFAULT_SIDEBAR_WIDTH,
     MAX_SIDEBAR_WIDTH,
@@ -2929,6 +2930,19 @@
     await dispatchDraft(draft);
   }
 
+  function resendMessage(message: Message) {
+    const content = messageContentForResend(message);
+    if (!content) return;
+    const draft: OutgoingDraft = {
+      ...content,
+      workspaceID: content.workspaceID || selectedWorkspaceID,
+      topicFilterID: activeTopicFilterID,
+      topicFilterGeneration,
+      viewKey: currentConversationKey(),
+    };
+    void dispatchDraft(draft);
+  }
+
   async function dispatchRegisteredCommand(
     channelID: string,
     command: string,
@@ -5261,6 +5275,7 @@
       onJumpToQuote={(message) => void jumpToQuotedMessage(message)}
       onOpenImage={openImageViewer}
       onOpenArtifact={openArtifactViewer}
+      onResend={resendMessage}
       onLoadOlder={requestOlderMessages}
       onLoadNewer={(source) => requestNewerMessages(source === "wheel")}
       onJumpToUnread={() => void jumpToUnreadBoundary()}
