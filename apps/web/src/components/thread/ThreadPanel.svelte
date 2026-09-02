@@ -9,6 +9,7 @@
   import { writeClipboardText } from "../../lib/clipboard";
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import { newestAutoLoadAttachmentID } from "../../lib/media-loading";
   import { uploadURL } from "../../lib/uploads";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Channel, Message, ThreadState, Upload, User } from "../../lib/types";
@@ -111,6 +112,7 @@
   }: Props = $props();
 
   let threadScroll = $state<HTMLDivElement>();
+  let autoLoadAttachmentID = $derived(newestAutoLoadAttachmentID([root, ...replies]));
   let editSession = $derived(editController?.session(editScope));
   let rootAuthor = $derived(root.author);
   const editReturnFocus = new Map<string, HTMLElement>();
@@ -579,6 +581,7 @@
               upload={attachment}
               url={uploadURL(attachment)}
               attachments={root.attachments}
+              eager={attachment.id === autoLoadAttachmentID}
               onOpenImage={onOpenImage}
               onOpenArtifact={onOpenArtifact}
             />
@@ -729,6 +732,7 @@
                   upload={attachment}
                   url={uploadURL(attachment)}
                   attachments={reply.attachments}
+                  eager={attachment.id === autoLoadAttachmentID}
                   onOpenImage={onOpenImage}
                   onOpenArtifact={onOpenArtifact}
                 />

@@ -6,6 +6,7 @@
     upload: Upload;
     url: string;
     attachments?: Upload[];
+    eager?: boolean;
     onOpenImage?: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact?: (upload: Upload) => void;
   };
@@ -14,6 +15,7 @@
     upload,
     url,
     attachments = [],
+    eager = true,
     onOpenImage = () => {},
     onOpenArtifact = () => {},
   }: Props = $props();
@@ -22,6 +24,8 @@
   const MIN_MEDIA_HEIGHT = 120;
 
   let videoEl: HTMLVideoElement | null = $state(null);
+  let manuallyLoaded = $state(false);
+  let mediaLoaded = $derived(eager || manuallyLoaded);
   let started = $state(false);
   let loadedDurationLabel = $state("");
   let durationLabel = $derived(loadedDurationLabel || formatDuration(upload.duration_ms ?? 0));
@@ -82,7 +86,23 @@
 
 </script>
 
-{#if isImage}
+{#if (isImage || isVideo || isAudio) && !mediaLoaded}
+  <button
+    type="button"
+    class="media-tile media-tile--deferred"
+    style={mediaStyle}
+    aria-label={`Load preview for ${upload.filename}`}
+    onclick={() => (manuallyLoaded = true)}
+  >
+    <span class="media-tile__deferred-icon" aria-hidden="true">
+      {isVideo ? "▶" : isAudio ? "♪" : "◫"}
+    </span>
+    <span class="media-tile__deferred-copy">
+      <strong>{upload.filename}</strong>
+      <small>Load preview · {formatBytes(upload.byte_size)}</small>
+    </span>
+  </button>
+{:else if isImage}
   <div class="media-tile media-tile--image">
     <button
       type="button"

@@ -32,6 +32,7 @@
   type Props = {
     message: Message;
     index: number;
+    autoLoadAttachmentID?: string;
     previousMessage?: Message;
     nextMessage?: Message;
     selected: boolean;
@@ -66,6 +67,7 @@
   let {
     message,
     index,
+    autoLoadAttachmentID,
     previousMessage,
     nextMessage,
     selected,
@@ -731,6 +733,7 @@
             upload={attachment}
             url={uploadURL(attachment)}
             attachments={message.attachments}
+            eager={attachment.id === autoLoadAttachmentID}
             onOpenImage={onOpenImage}
             onOpenArtifact={onOpenArtifact}
           />

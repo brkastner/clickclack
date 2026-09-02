@@ -10,6 +10,7 @@
 
   type Props = {
     group: MessageGroupType;
+    autoLoadAttachmentID?: string;
     currentUserID?: string;
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
@@ -41,6 +42,7 @@
 
   let {
     group,
+    autoLoadAttachmentID,
     currentUserID,
     reactionController,
     reactionsDisabled = false,
@@ -109,6 +111,7 @@
       <MessageRow
         {message}
         {index}
+        {autoLoadAttachmentID}
         previousMessage={group.messages[index - 1]}
         nextMessage={group.messages[index + 1]}
         selected={selectedThreadID === message.id}

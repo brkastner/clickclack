@@ -2,6 +2,7 @@
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { markdown, time } from "../../lib/format";
+  import { newestAutoLoadAttachmentID } from "../../lib/media-loading";
   import { uploadURL } from "../../lib/uploads";
   import type { Channel, Message, Topic, Upload, User } from "../../lib/types";
   import MediaAttachment from "../MediaAttachment.svelte";
@@ -40,6 +41,7 @@
     onUnpin,
     onSelectTopic,
   }: Props = $props();
+  let autoLoadAttachmentID = $derived(newestAutoLoadAttachmentID(messages));
   let unpinningMessageIDs = $state(new Set<string>());
   let actionError = $state("");
 
@@ -118,6 +120,7 @@
                     upload={attachment}
                     url={uploadURL(attachment)}
                     attachments={message.attachments}
+                    eager={attachment.id === autoLoadAttachmentID}
                     onOpenImage={onOpenImage}
                     onOpenArtifact={onOpenArtifact}
                   />
