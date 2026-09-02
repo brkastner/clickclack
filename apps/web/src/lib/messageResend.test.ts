@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { messageContentForResend } from "./messageResend";
+import { messageContentForResend } from "./messageResend.ts";
 import type { Message, Upload } from "./types";
 
 const upload: Upload = {
