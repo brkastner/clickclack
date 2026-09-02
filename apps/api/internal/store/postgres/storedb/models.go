@@ -119,6 +119,13 @@ type Channel struct {
 	SidebarSection  sql.NullString `json:"sidebar_section"`
 }
 
+type ChannelBotAssignment struct {
+	ChannelID string `json:"channel_id"`
+	BotUserID string `json:"bot_user_id"`
+	UpdatedBy string `json:"updated_by"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type ChannelBotPresentation struct {
 	ChannelID   string `json:"channel_id"`
 	BotUserID   string `json:"bot_user_id"`

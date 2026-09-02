@@ -271,6 +271,7 @@ type Channel struct {
 	ExternalURL      *string                  `json:"external_url,omitempty"`
 	SidebarSection   *string                  `json:"sidebar_section,omitempty"`
 	BotPresentations []ChannelBotPresentation `json:"bot_presentations,omitempty"`
+	BotAssignments   []ChannelBotAssignment   `json:"bot_assignments,omitempty"`
 	LastSeq          int64                    `json:"last_seq"`
 	LastReadSeq      int64                    `json:"last_read_seq"`
 	UnreadCount      int64                    `json:"unread_count"`
@@ -283,6 +284,11 @@ type ChannelBotPresentation struct {
 	AvatarURL   string `json:"avatar_url"`
 	UpdatedBy   string `json:"updated_by"`
 	UpdatedAt   string `json:"updated_at"`
+}
+
+type ChannelBotAssignment struct {
+	ChannelID string `json:"channel_id"`
+	BotUserID string `json:"bot_user_id"`
 }
 
 type ReactionSummary struct {
@@ -918,6 +924,18 @@ type DeleteChannelBotPresentationInput struct {
 	ActorUserID string
 }
 
+type UpsertChannelBotAssignmentInput struct {
+	ChannelID   string
+	BotUserID   string
+	ActorUserID string
+}
+
+type DeleteChannelBotAssignmentInput struct {
+	ChannelID   string
+	BotUserID   string
+	ActorUserID string
+}
+
 type CreateMessageInput struct {
 	ChannelID             string
 	AuthorID              string
@@ -1297,6 +1315,8 @@ type Store interface {
 	UpdateChannel(ctx context.Context, input UpdateChannelInput) (Channel, Event, error)
 	UpsertChannelBotPresentation(ctx context.Context, input UpsertChannelBotPresentationInput) (ChannelBotPresentation, Event, error)
 	DeleteChannelBotPresentation(ctx context.Context, input DeleteChannelBotPresentationInput) (Event, error)
+	UpsertChannelBotAssignment(ctx context.Context, input UpsertChannelBotAssignmentInput) (ChannelBotAssignment, Event, error)
+	DeleteChannelBotAssignment(ctx context.Context, input DeleteChannelBotAssignmentInput) (Event, error)
 	ListTopics(ctx context.Context, workspaceID, requesterID string) ([]Topic, error)
 	CreateTopic(ctx context.Context, input CreateTopicInput) (Topic, error)
 	ListMessages(ctx context.Context, channelID, userID string, page MessagePageRequest) (MessagePage, error)

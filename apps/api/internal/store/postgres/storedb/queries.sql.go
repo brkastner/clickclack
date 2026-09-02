@@ -485,6 +485,24 @@ func (q *Queries) DeleteBotSetupCodesForWorkspaceBot(ctx context.Context, arg De
 	return result.RowsAffected()
 }
 
+const deleteChannelBotAssignment = `-- name: DeleteChannelBotAssignment :execrows
+DELETE FROM channel_bot_assignments
+WHERE channel_id = $1 AND bot_user_id = $2
+`
+
+type DeleteChannelBotAssignmentParams struct {
+	ChannelID string `json:"channel_id"`
+	BotUserID string `json:"bot_user_id"`
+}
+
+func (q *Queries) DeleteChannelBotAssignment(ctx context.Context, arg DeleteChannelBotAssignmentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteChannelBotAssignment, arg.ChannelID, arg.BotUserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteChannelBotPresentation = `-- name: DeleteChannelBotPresentation :execrows
 DELETE FROM channel_bot_presentations
 WHERE channel_id = $1 AND bot_user_id = $2
@@ -1180,6 +1198,35 @@ func (q *Queries) GetChannel(ctx context.Context, id string) (GetChannelRow, err
 		&i.ExternalUrl,
 		&i.SidebarSection,
 	)
+	return i, err
+}
+
+const getChannelBotAssignmentTarget = `-- name: GetChannelBotAssignmentTarget :one
+SELECT c.workspace_id, u.kind,
+       EXISTS (
+         SELECT 1 FROM workspace_members wm
+         WHERE wm.workspace_id = c.workspace_id AND wm.user_id = u.id
+       ) AS is_workspace_member
+FROM channels c
+JOIN users u ON u.id = $1
+WHERE c.id = $2
+`
+
+type GetChannelBotAssignmentTargetParams struct {
+	BotUserID string `json:"bot_user_id"`
+	ChannelID string `json:"channel_id"`
+}
+
+type GetChannelBotAssignmentTargetRow struct {
+	WorkspaceID       string `json:"workspace_id"`
+	Kind              string `json:"kind"`
+	IsWorkspaceMember bool   `json:"is_workspace_member"`
+}
+
+func (q *Queries) GetChannelBotAssignmentTarget(ctx context.Context, arg GetChannelBotAssignmentTargetParams) (GetChannelBotAssignmentTargetRow, error) {
+	row := q.db.QueryRowContext(ctx, getChannelBotAssignmentTarget, arg.BotUserID, arg.ChannelID)
+	var i GetChannelBotAssignmentTargetRow
+	err := row.Scan(&i.WorkspaceID, &i.Kind, &i.IsWorkspaceMember)
 	return i, err
 }
 
@@ -3301,6 +3348,77 @@ func (q *Queries) ListBotsOwnedBy(ctx context.Context, ownerUserID sql.NullStrin
 			&i.WorkspaceName,
 			&i.ActiveTokenCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChannelBotAssignmentsByChannel = `-- name: ListChannelBotAssignmentsByChannel :many
+SELECT channel_id, bot_user_id
+FROM channel_bot_assignments
+WHERE channel_id = $1
+ORDER BY bot_user_id
+`
+
+type ListChannelBotAssignmentsByChannelRow struct {
+	ChannelID string `json:"channel_id"`
+	BotUserID string `json:"bot_user_id"`
+}
+
+func (q *Queries) ListChannelBotAssignmentsByChannel(ctx context.Context, channelID string) ([]ListChannelBotAssignmentsByChannelRow, error) {
+	rows, err := q.db.QueryContext(ctx, listChannelBotAssignmentsByChannel, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChannelBotAssignmentsByChannelRow
+	for rows.Next() {
+		var i ListChannelBotAssignmentsByChannelRow
+		if err := rows.Scan(&i.ChannelID, &i.BotUserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChannelBotAssignmentsByWorkspace = `-- name: ListChannelBotAssignmentsByWorkspace :many
+SELECT a.channel_id, a.bot_user_id
+FROM channel_bot_assignments a
+JOIN channels c ON c.id = a.channel_id
+WHERE c.workspace_id = $1
+ORDER BY a.channel_id, a.bot_user_id
+`
+
+type ListChannelBotAssignmentsByWorkspaceRow struct {
+	ChannelID string `json:"channel_id"`
+	BotUserID string `json:"bot_user_id"`
+}
+
+func (q *Queries) ListChannelBotAssignmentsByWorkspace(ctx context.Context, workspaceID string) ([]ListChannelBotAssignmentsByWorkspaceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listChannelBotAssignmentsByWorkspace, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChannelBotAssignmentsByWorkspaceRow
+	for rows.Next() {
+		var i ListChannelBotAssignmentsByWorkspaceRow
+		if err := rows.Scan(&i.ChannelID, &i.BotUserID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -5901,6 +6019,39 @@ func (q *Queries) UploadHasOtherDirectMessageAttachment(ctx context.Context, arg
 	var has_other_direct_message_attachment bool
 	err := row.Scan(&has_other_direct_message_attachment)
 	return has_other_direct_message_attachment, err
+}
+
+const upsertChannelBotAssignment = `-- name: UpsertChannelBotAssignment :one
+INSERT INTO channel_bot_assignments (channel_id, bot_user_id, updated_by, updated_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT(channel_id, bot_user_id) DO UPDATE SET
+  updated_by = excluded.updated_by,
+  updated_at = excluded.updated_at
+RETURNING channel_id, bot_user_id
+`
+
+type UpsertChannelBotAssignmentParams struct {
+	ChannelID string `json:"channel_id"`
+	BotUserID string `json:"bot_user_id"`
+	UpdatedBy string `json:"updated_by"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type UpsertChannelBotAssignmentRow struct {
+	ChannelID string `json:"channel_id"`
+	BotUserID string `json:"bot_user_id"`
+}
+
+func (q *Queries) UpsertChannelBotAssignment(ctx context.Context, arg UpsertChannelBotAssignmentParams) (UpsertChannelBotAssignmentRow, error) {
+	row := q.db.QueryRowContext(ctx, upsertChannelBotAssignment,
+		arg.ChannelID,
+		arg.BotUserID,
+		arg.UpdatedBy,
+		arg.UpdatedAt,
+	)
+	var i UpsertChannelBotAssignmentRow
+	err := row.Scan(&i.ChannelID, &i.BotUserID)
+	return i, err
 }
 
 const upsertChannelBotPresentation = `-- name: UpsertChannelBotPresentation :one

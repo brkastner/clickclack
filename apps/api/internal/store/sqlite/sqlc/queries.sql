@@ -579,6 +579,41 @@ RETURNING channel_id, bot_user_id, display_name, avatar_url, updated_by, updated
 DELETE FROM channel_bot_presentations
 WHERE channel_id = sqlc.arg(channel_id) AND bot_user_id = sqlc.arg(bot_user_id);
 
+-- name: ListChannelBotAssignmentsByWorkspace :many
+SELECT a.channel_id, a.bot_user_id
+FROM channel_bot_assignments a
+JOIN channels c ON c.id = a.channel_id
+WHERE c.workspace_id = sqlc.arg(workspace_id)
+ORDER BY a.channel_id, a.bot_user_id;
+
+-- name: ListChannelBotAssignmentsByChannel :many
+SELECT channel_id, bot_user_id
+FROM channel_bot_assignments
+WHERE channel_id = sqlc.arg(channel_id)
+ORDER BY bot_user_id;
+
+-- name: GetChannelBotAssignmentTarget :one
+SELECT c.workspace_id, u.kind,
+       CAST(EXISTS (
+         SELECT 1 FROM workspace_members wm
+         WHERE wm.workspace_id = c.workspace_id AND wm.user_id = u.id
+       ) AS INTEGER) AS is_workspace_member
+FROM channels c
+JOIN users u ON u.id = sqlc.arg(bot_user_id)
+WHERE c.id = sqlc.arg(channel_id);
+
+-- name: UpsertChannelBotAssignment :one
+INSERT INTO channel_bot_assignments (channel_id, bot_user_id, updated_by, updated_at)
+VALUES (sqlc.arg(channel_id), sqlc.arg(bot_user_id), sqlc.arg(updated_by), sqlc.arg(updated_at))
+ON CONFLICT(channel_id, bot_user_id) DO UPDATE SET
+  updated_by = excluded.updated_by,
+  updated_at = excluded.updated_at
+RETURNING channel_id, bot_user_id;
+
+-- name: DeleteChannelBotAssignment :execrows
+DELETE FROM channel_bot_assignments
+WHERE channel_id = sqlc.arg(channel_id) AND bot_user_id = sqlc.arg(bot_user_id);
+
 -- name: RequireMembership :one
 SELECT 1
 FROM workspace_members
