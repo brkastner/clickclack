@@ -64,6 +64,7 @@
 .thread > header strong {
   display: block;
   color: var(--text-strong);
+  font-family: var(--font-display);
   font-size: 14px;
 }
 

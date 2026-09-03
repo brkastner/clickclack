@@ -14,10 +14,9 @@
     "Segoe UI",
     sans-serif;
   font-feature-settings: "ss01", "cv11";
-  /* Display face for brand moments (workspace name, channel title, auth,
-     empty states). Body copy stays on Geist for reading density. */
-  --font-display:
-    "Bricolage Grotesque Variable", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  /* Oswald carries names and title hierarchy, including Cyrillic. Body copy
+     stays on Geist for reading density. */
+  --font-display: "Oswald Variable", "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Rosé Pine Dawn by day; ClickClack's existing anodized board by night.
      Alternate boards reuse the Dawn surfaces and shift only the daytime
@@ -387,6 +386,10 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
 }
 
 body {

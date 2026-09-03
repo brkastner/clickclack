@@ -3,6 +3,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError, voiceBaseURL } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
+  import { avatarSize } from "./lib/avatar-size";
   import { desktop } from "./lib/desktop";
   import {
     directConversationIDForRecencyEvent,
@@ -12,11 +13,14 @@
   import { messageContentForResend } from "./lib/messageResend";
   import {
     DEFAULT_SIDEBAR_WIDTH,
+    LARGE_AVATAR_MIN_SIDEBAR_WIDTH,
     MAX_SIDEBAR_WIDTH,
     MIN_SIDEBAR_WIDTH,
     SIDEBAR_WIDTH_STORAGE_KEY,
+    baseSidebarWidth,
     clampSidebarWidth,
     parseSidebarWidth,
+    renderedSidebarWidth,
     sidebarWidthFromKey,
   } from "./lib/sidebar-width";
   import {
@@ -45,6 +49,7 @@
     collectChannelProfileShortcuts,
     collectMentionPeople,
     collectRecentPeople,
+    dmAvatarUser,
     dmTitle,
     replaceCachedUser,
     replaceConversationUsers,
@@ -67,6 +72,7 @@
   import { ReactionController } from "./lib/reactions.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
   import ChatComposer from "./components/composer/ChatComposer.svelte";
+  import Avatar from "./components/avatar/Avatar.svelte";
   import ArtifactViewer from "./components/artifacts/ArtifactViewer.svelte";
   import ImageViewer from "./components/media/ImageViewer.svelte";
   import MessageList, {
@@ -125,7 +131,8 @@
   const SHOW_AGENT_ACTIVITY_STORAGE_KEY = "clickclack:show-agent-activity:v1";
   const HIDE_COMMENTARY_STORAGE_KEY = "clickclack:hide-commentary:v1";
   const HIDE_TOOL_CALLS_STORAGE_KEY = "clickclack:hide-tool-calls:v1";
-  const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v1";
+  // v2 drops the old build's poisoned value, which rewrote every session to right.
+  const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v2";
   const OTHER_ALIGN_STORAGE_KEY = "clickclack:other-align:v1";
   const appSessionStartedAt = Date.now();
   const integratedTitleBar = desktop?.integratedTitleBar === true;
@@ -183,6 +190,11 @@
   let artifactViewerElement: HTMLElement | null = null;
   let shellElement: HTMLElement | null = null;
   let sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
+  let sidebarMinWidth = MIN_SIDEBAR_WIDTH;
+  let effectiveSidebarWidth = DEFAULT_SIDEBAR_WIDTH;
+  $: sidebarMinWidth =
+    $avatarSize === "double" ? LARGE_AVATAR_MIN_SIDEBAR_WIDTH : MIN_SIDEBAR_WIDTH;
+  $: effectiveSidebarWidth = renderedSidebarWidth(sidebarWidth, $avatarSize === "double");
   let sidebarResizing = false;
   let sidebarResizePointerID: number | null = null;
   let artifactModalInertElements = new Set<HTMLElement>();
@@ -234,9 +246,9 @@
   // Default: show both. Persisted in localStorage like other client prefs.
   let hideCommentary = false;
   let hideToolCalls = false;
-  // Self messages use the accepted right-side layout. Clear older left-side
-  // preferences on load so returning sessions don't silently restore it.
-  let userAlign: "left" | "right" = "right";
+  // Keep the current user's alignment independent from other participants.
+  // Left is the default, and an explicit stored preference wins on load.
+  let userAlign: "left" | "right" = "left";
   let otherAlign: "left" | "right" = "left";
   let status = "loading";
   let authRequired = false;
@@ -335,6 +347,12 @@
   $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
   $: void loadChannelNotifPreference(selectedChannelID, selectedDirectID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
+  $: activePortraitUser = selectedDirect
+    ? dmAvatarUser(selectedDirect, user?.id)
+    : selectedChannel?.bot_assignments?.length === 1
+      ? lookupUser(selectedChannel.bot_assignments[0]?.bot_user_id || "")
+      : undefined;
+  $: activePortraitSource = activePortraitUser?.avatar_url || activePortraitUser?.avatar_url_light || "";
   $: selectedDirectWritable = selectedDirect?.can_send ?? true;
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
   $: syncVoiceDestinationWithFocus(
@@ -824,13 +842,12 @@
       const legacyHidden = window.localStorage.getItem(SHOW_AGENT_ACTIVITY_STORAGE_KEY) === "0";
       hideCommentary = window.localStorage.getItem(HIDE_COMMENTARY_STORAGE_KEY) === "1" || legacyHidden;
       hideToolCalls = window.localStorage.getItem(HIDE_TOOL_CALLS_STORAGE_KEY) === "1" || legacyHidden;
-      userAlign = "right";
-      window.localStorage.setItem(USER_ALIGN_STORAGE_KEY, "right");
+      userAlign = window.localStorage.getItem(USER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
       otherAlign = window.localStorage.getItem(OTHER_ALIGN_STORAGE_KEY) === "right" ? "right" : "left";
     } catch {
       hideCommentary = false;
       hideToolCalls = false;
-      userAlign = "right";
+      userAlign = "left";
       otherAlign = "left";
     }
     applyMessageAlignments();
@@ -4979,7 +4996,8 @@
 
   function updateSidebarWidthFromPointer(event: PointerEvent) {
     const shellLeft = shellElement?.getBoundingClientRect().left ?? 0;
-    sidebarWidth = clampSidebarWidth(event.clientX - shellLeft);
+    const renderedWidth = clampSidebarWidth(event.clientX - shellLeft, sidebarMinWidth);
+    sidebarWidth = baseSidebarWidth(renderedWidth, $avatarSize === "double");
   }
 
   function handleSidebarResizeStart(event: PointerEvent) {
@@ -5006,10 +5024,10 @@
   }
 
   function handleSidebarResizeKeydown(event: KeyboardEvent) {
-    const nextWidth = sidebarWidthFromKey(event.key, sidebarWidth);
+    const nextWidth = sidebarWidthFromKey(event.key, effectiveSidebarWidth, sidebarMinWidth);
     if (nextWidth === null) return;
     event.preventDefault();
-    sidebarWidth = nextWidth;
+    sidebarWidth = baseSidebarWidth(nextWidth, $avatarSize === "double");
     persistSidebarWidth();
   }
 
@@ -5083,7 +5101,7 @@
   class:artifact-open={selectedArtifact !== null}
   data-connected={connected}
   data-app-ready={connected && status === "ready"}
-  style={`--sidebar-width: ${sidebarWidth}px`}
+  style={`--sidebar-width: ${effectiveSidebarWidth}px`}
 >
   {#if integratedTitleBar && desktop}
     <DesktopTitlebar
@@ -5191,9 +5209,9 @@
       tabindex="0"
       aria-label="Resize sidebar"
       aria-orientation="vertical"
-      aria-valuemin={MIN_SIDEBAR_WIDTH}
+      aria-valuemin={sidebarMinWidth}
       aria-valuemax={MAX_SIDEBAR_WIDTH}
-      aria-valuenow={sidebarWidth}
+      aria-valuenow={effectiveSidebarWidth}
       title="Drag to resize sidebar. Double-click to reset."
       onpointerdown={handleSidebarResizeStart}
       onpointermove={handleSidebarResizeMove}
@@ -5206,6 +5224,21 @@
   {/if}
 
   <main class="timeline" inert={mobileNavOpen}>
+    {#if activePortraitUser && activePortraitSource}
+      {#key activePortraitUser.id}
+        <Avatar
+          class="chat-portrait-bleed"
+          id={activePortraitUser.id}
+          name={activePortraitUser.display_name}
+          src={activePortraitUser.avatar_url}
+          lightSrc={activePortraitUser.avatar_url_light}
+          size={480}
+          loading="eager"
+          fetchPriority="high"
+        />
+      {/key}
+    {/if}
+
     <!-- The integrated title bar owns the conversation title, so desktop drops
          this header row entirely. -->
     {#if !integratedTitleBar}

@@ -96,6 +96,10 @@
         if (ccDensity === "compact") {
           document.documentElement.setAttribute("data-density", ccDensity);
         }
+        var ccAvatarSize = localStorage.getItem("clickclack:avatar-size:v1");
+        if (ccAvatarSize === "double") {
+          document.documentElement.setAttribute("data-avatar-size", ccAvatarSize);
+        }
       } catch (e) {}
     </script>
     <link href="./_app/immutable/entry/start.PVk6RHCa.js" rel="modulepreload">
@@ -104,17 +108,17 @@
 		<link href="./_app/immutable/chunks/hePW80VL.js" rel="modulepreload">
 		<link href="./_app/immutable/chunks/Dt-HX3Vu.js" rel="modulepreload">
 		<link href="./_app/immutable/chunks/DgJCUmMz.js" rel="modulepreload">
-		<link href="./_app/immutable/entry/app.D2OmY-yz.js" rel="modulepreload">
+		<link href="./_app/immutable/entry/app.pIm_OzUh.js" rel="modulepreload">
 		<link href="./_app/immutable/chunks/HclGiUj8.js" rel="modulepreload">
 		<link href="./_app/immutable/chunks/xihTtKlq.js" rel="modulepreload">
-		<link href="./_app/immutable/nodes/0.Dza7SIM_.js" rel="modulepreload">
+		<link href="./_app/immutable/nodes/0.AtkD0qfP.js" rel="modulepreload">
 		<link href="./_app/immutable/chunks/DUtpwCTY.js" rel="modulepreload">
 		<link href="./_app/immutable/chunks/C9Ou999e.js" rel="modulepreload">
 		<link href="./_app/immutable/chunks/DnshVVRE.js" rel="modulepreload">
-		<link href="./_app/immutable/nodes/3.BBHInCg3.js" rel="modulepreload">
+		<link href="./_app/immutable/nodes/3.Du3LK_hQ.js" rel="modulepreload">
 		<link href="./_app/immutable/chunks/D-7Tqzbv.js" rel="modulepreload">
 
-		<link href="./_app/immutable/assets/0.Cz6jZqzS.css" rel="stylesheet">
+		<link href="./_app/immutable/assets/0.D117VSNL.css" rel="stylesheet">
 		<link href="./_app/immutable/assets/ProductSite.4q0lYJor.css" rel="stylesheet">
   </head>
   <body>
@@ -129,7 +133,7 @@
 
 					Promise.all([
 						import("./_app/immutable/entry/start.PVk6RHCa.js"),
-						import("./_app/immutable/entry/app.D2OmY-yz.js")
+						import("./_app/immutable/entry/app.pIm_OzUh.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});

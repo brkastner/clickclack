@@ -330,16 +330,18 @@
     <section class="sidebar-people-row" aria-label="Recent people">
       {#each displayedRecentPeople as person (person.id)}
           {@const conversation = directConversationForUser(directConversations, person.id)}
+          {@const unread = conversation?.unread_count || 0}
           {@const pinnedChannel = pinnedPersonaChannel(personaChannelPins, person.id, channels)}
           <a
             href={pinnedChannel ? hrefForChannel(pinnedChannel.id) : conversation ? hrefForDirect(conversation.id) : "#"}
             class="sidebar-person"
             class:active={pinnedChannel?.id === selectedChannelID || conversation?.id === selectedDirectID || selectedProfile?.id === person.id}
+            class:has-unread={unread > 0 && conversation?.id !== selectedDirectID}
             class:shelf-drop-before={shelfDropTargetID === person.id && shelfDropBefore}
             class:shelf-drop-after={shelfDropTargetID === person.id && !shelfDropBefore}
             class:shelf-dragging={draggedPersonID === person.id}
             title={person.display_name}
-            aria-label={person.display_name}
+            aria-label={`${person.display_name}${unread > 0 ? `, ${unread} unread message${unread === 1 ? "" : "s"}` : ""}`}
             draggable="true"
             ondragstart={(event) => { draggedPersonID = person.id; event.dataTransfer?.setData("text/plain", person.id); }}
             ondragend={() => { draggedPersonID = ""; shelfDropTargetID = ""; }}
@@ -369,6 +371,9 @@
             lightSrc={person.avatar_url_light}
               size={90}
             />
+            {#if unread > 0 && conversation?.id !== selectedDirectID}
+              <span class="sidebar-person-unread" aria-hidden="true">{unread > 99 ? "99+" : unread}</span>
+            {/if}
             <span class="sidebar-person-name">{person.display_name}</span>
           </a>
       {/each}

@@ -3005,7 +3005,7 @@
 /* ---------- ACCEPTED ASSISTANT THREAD PASS ---------- */
 
 .message-group {
-  width: min(100%, 1040px);
+  width: min(100%, 1240px);
   grid-template-columns: 80px minmax(0, 1fr);
   gap: 14px;
   margin: 0 auto;
@@ -3054,7 +3054,28 @@
 }
 
 .message-group .author-name {
+  font-family: var(--font-display);
   font-size: 15.5px;
+}
+
+:root[data-avatar-size="double"] .message-group .author-name {
+  font-size: 31px;
+}
+
+.message-group.is-self .author-name {
+  color: var(--rp-love);
+}
+
+.message-group.is-agent .author-name {
+  color: var(--rp-foam);
+}
+
+.message-group.is-self .author-name:hover {
+  color: var(--rp-love);
+}
+
+.message-group.is-agent .author-name:hover {
+  color: var(--rp-foam);
 }
 
 .message-group .author-handle {
@@ -3079,7 +3100,7 @@
 
 .message-row .message-content {
   width: fit-content;
-  max-width: min(100%, 900px);
+  max-width: min(100%, 1100px);
 }
 
 .message-row .markdown {
@@ -3153,6 +3174,7 @@
 }
 
 :root[data-user-align="left"] .message-group.is-self .message-content {
+  max-width: min(100%, 1100px);
   margin-right: auto;
   margin-left: 0;
   text-align: left;
@@ -3210,7 +3232,7 @@
 
 .message-group.is-agent .message-row.is-preamble:not(.before-final-message) .message-content,
 .message-group.is-agent .message-row.is-preamble.before-final-message .message-content {
-  width: min(100%, 900px);
+  width: min(100%, 1100px);
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 13px;

@@ -309,6 +309,7 @@
 }
 
 .settings-modal__content .settings-identity__name {
+  font-family: var(--font-display);
   font-size: 15px;
   font-weight: 700;
   color: var(--text-strong);
@@ -1431,6 +1432,7 @@
 }
 
 .ws-members__name {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   color: var(--text-strong, var(--text));
@@ -1690,6 +1692,7 @@
 }
 
 .ws-bots__row-name {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   color: var(--text-strong, var(--text));
@@ -2283,6 +2286,7 @@
 }
 
 .ws-bots__my-row-name {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   color: var(--text-strong, var(--text));

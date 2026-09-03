@@ -146,6 +146,7 @@
   width: 92px;
   height: 112px;
   place-items: center;
+  position: relative;
   border: 1px solid transparent;
   border-radius: 22px;
   color: inherit;
@@ -160,15 +161,41 @@
   font-size: 24px;
 }
 
+:root[data-avatar-size="double"] .sidebar-people-row {
+  grid-template-columns: repeat(2, 137px);
+  grid-template-rows: repeat(3, 165px);
+  min-height: 519px;
+}
+
+:root[data-avatar-size="double"] .sidebar-person {
+  grid-template-rows: 135px 24px;
+  width: 137px;
+  height: 165px;
+  border-radius: 30px;
+}
+
+:root[data-avatar-size="double"] .sidebar-person > .avatar {
+  width: 135px;
+  height: 135px;
+  border-radius: 30px;
+  font-size: 36px;
+}
+
 .sidebar-person-name {
   width: 100%;
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-family: var(--font-display);
+  font-size: 14px;
   line-height: 16px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+:root[data-avatar-size="double"] .sidebar-person-name {
+  font-size: 21px;
+  line-height: 24px;
 }
 
 .sidebar-person:hover,
@@ -184,6 +211,39 @@
 
 .sidebar-person.active .sidebar-person-name {
   color: var(--text-strong);
+}
+
+.sidebar-person.has-unread > .avatar {
+  border: 2px solid var(--rp-love);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--rp-love) 24%, transparent),
+    0 0 22px color-mix(in srgb, var(--rp-love) 58%, transparent);
+}
+
+.sidebar-person.has-unread .sidebar-person-name {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.sidebar-person-unread {
+  position: absolute;
+  z-index: 3;
+  top: -6px;
+  right: -7px;
+  display: grid;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  place-items: center;
+  border: 2px solid var(--panel);
+  border-radius: 999px;
+  background: var(--rp-love);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--rp-love) 55%, transparent);
 }
 
 .sidebar-people-empty {
@@ -209,6 +269,7 @@
   min-height: 36px;
   gap: 8px;
   padding: 4px 8px 4px 6px;
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0;
@@ -221,6 +282,19 @@
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
+}
+
+:root[data-avatar-size="double"] .sidebar-profile-groups .channel-subgroup-toggle {
+  min-height: 49px;
+  gap: 10px;
+  font-size: 21px;
+}
+
+:root[data-avatar-size="double"] .sidebar-profile-groups .channel-profile-avatar {
+  width: 39px;
+  height: 39px;
+  flex-basis: 39px;
+  font-size: 15px;
 }
 
 .sidebar-channels-title {
@@ -452,8 +526,8 @@
   margin-top: 4px;
 }
 
-/* Section labels read as silkscreened plate legends: mono, uppercase, wide
-   tracking. */
+/* Section labels share the condensed Oswald title face while retaining the
+   uppercase plate-label treatment. */
 .section-toggle {
   display: flex;
   align-items: center;
@@ -466,7 +540,7 @@
   background: transparent;
   color: var(--muted);
   text-transform: uppercase;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -1016,6 +1090,10 @@
   font-size: 15px;
 }
 
+.nav-item.dm .nav-label {
+  font-family: var(--font-display);
+}
+
 .dm-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 24px;
@@ -1151,6 +1229,20 @@
   overflow: hidden;
 }
 
+:root[data-avatar-size="double"] .dm-avatar {
+  width: 39px;
+  height: 39px;
+  font-size: 16px;
+}
+
+:root[data-avatar-size="double"] .nav-item.dm {
+  min-height: 51px;
+}
+
+:root[data-avatar-size="double"] .nav-item.dm .nav-label {
+  font-size: 22.5px;
+}
+
 .dm-avatar img,
 .avatar img {
   width: 100%;
@@ -1240,6 +1332,12 @@ button.ghost {
   width: 32px;
   height: 32px;
   font-size: 13px;
+}
+
+:root[data-avatar-size="double"] .user-card .dm-avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 19px;
 }
 
 .user-card .user-meta {
