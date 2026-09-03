@@ -3553,7 +3553,11 @@ components:
           type: string
         type:
           type: string
-          enum: [typing.started, typing.stopped, presence.changed, agent.progress]
+          enum: [typing.started, typing.stopped, presence.changed, agent.progress, workflow.run]
+          description: |
+            agent.progress and workflow.run are bot-token-only and must name
+            exactly one of channel_id or direct_conversation_id, so a private
+            turn or run can never broadcast to a whole workspace.
         payload:
           type: object
           additionalProperties: true

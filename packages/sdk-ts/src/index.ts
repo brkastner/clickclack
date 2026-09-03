@@ -471,6 +471,58 @@ export type AgentProgressPayload = {
   | { op: "clear"; line?: never }
 );
 
+/**
+ * One step a workflow run has taken.
+ *
+ * Identity, outcome, and timing only. Step prompts and node output stay on the
+ * host: they are execution detail, not display copy.
+ */
+export type WorkflowRunStep = {
+  attemptId: string;
+  nodeId: string;
+  nodeType: string;
+  outcome: "ok" | "timed_out" | "failed" | "cancelled";
+  startedAt: string;
+  finishedAt: string;
+};
+
+/** Live state of a workflow a bot is running for one conversation. */
+export type WorkflowRunFrame = {
+  runId: string;
+  workflowName: string;
+  revision: number;
+  status:
+    | "queued"
+    | "running"
+    | "waiting"
+    | "paused"
+    | "completed"
+    | "failed"
+    | "timed_out"
+    | "cancelled"
+    | "ambiguous";
+  /** Host-authored operator-facing explanation of the current status. */
+  reason: string | null;
+  live: boolean;
+  possiblyInterrupted: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  /** Steps taken so far, oldest first. May be a window rather than the whole run. */
+  steps: WorkflowRunStep[];
+  /** Total steps taken, which can exceed `steps.length`. */
+  stepTotal: number;
+};
+
+/**
+ * A workflow run frame.
+ *
+ * `run: null` means the conversation has no active run, which is how a finished
+ * or cleared run is reported.
+ */
+export type WorkflowRunPayload = {
+  run: WorkflowRunFrame | null;
+};
+
 type EphemeralEventTarget =
   | { channelId: string; directConversationId?: never }
   | { channelId?: never; directConversationId: string };
@@ -486,6 +538,10 @@ type TargetedEphemeralEventInput = {
     | {
         type: "agent.progress";
         payload: AgentProgressPayload;
+      }
+    | {
+        type: "workflow.run";
+        payload: WorkflowRunPayload;
       }
     | {
         type: "typing.started" | "typing.stopped";
