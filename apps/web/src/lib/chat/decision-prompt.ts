@@ -97,10 +97,23 @@ export function readDecisionPrompt(body: string): DecisionPrompt | null {
  * matched, it falls through as an ordinary message and starts an agent turn on
  * the body "1". Being conservative costs nothing, because the prose is still
  * there and typing still works.
+ *
+ * The list passed here must be the conversation's canonical message list, not a
+ * rendered or filtered view of it. A topic filter, a commentary-hiding
+ * preference, or a partially loaded window can all make a decision look newest
+ * while newer messages exist, and that is the one direction of error that is
+ * unsafe: buttons that look live after the bridge stopped matching them send
+ * "1" into an ordinary agent turn.
+ *
+ * `complete` is that guarantee, stated by the caller. When the conversation is
+ * showing anything other than its full latest window, pass false and no
+ * decision is live. Losing buttons is the harmless direction.
  */
 export function activeDecisionID(
   messages: readonly { id: string; kind?: string; turn_id?: string }[],
+  complete = true,
 ): string | null {
+  if (!complete) return null;
   const newest = messages[messages.length - 1];
   if (newest === undefined) return null;
   return isDecisionMessage(newest) ? newest.id : null;

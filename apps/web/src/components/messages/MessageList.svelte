@@ -91,6 +91,16 @@
     pinnedMessageIDs?: ReadonlySet<string>;
     onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
     onCopyLink?: (message: Message) => Promise<string>;
+    /**
+     * True when `messages` is the conversation's complete latest window: no
+     * newer page unloaded, no topic filter, no hidden commentary.
+     *
+     * Decision buttons are only live under that guarantee. A filtered or partial
+     * view can make a decision look newest while newer messages exist, and
+     * buttons that look live after the bridge stopped matching them would send
+     * "1" into an ordinary agent turn.
+     */
+    timelineComplete?: boolean;
     onDecisionAnswer?: (reply: string) => void;
     onDecisionPrefill?: (reply: string) => void;
     editController?: MessageEditController;
@@ -148,6 +158,7 @@
     pinnedMessageIDs = new Set<string>(),
     onTogglePin,
     onCopyLink,
+    timelineComplete = false,
     onDecisionAnswer,
     onDecisionPrefill,
     editController,
@@ -264,7 +275,9 @@
   // Which decision prompt, if any, is still waiting on an answer. This is a
   // whole-timeline question rather than a per-group one, so it is decided here
   // and passed down.
-  let liveDecisionID = $derived(onDecisionAnswer ? newestDecisionID(messages) : null);
+  let liveDecisionID = $derived(
+    onDecisionAnswer ? newestDecisionID(messages, timelineComplete) : null,
+  );
 
   let items = $derived.by<Item[]>(() => {
     const out: Item[] = [];

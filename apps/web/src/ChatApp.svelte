@@ -550,9 +550,17 @@
     lookupUser,
     (_userID, fallback) => fallback,
   );
+  // Decision buttons are live only when the timeline in view is the whole
+  // latest window. A topic filter, an unloaded newer page, or hidden commentary
+  // can each make a decision look newest while newer messages exist, and the
+  // bridge only matches a reply against the decision it is currently parked on.
+  // Losing buttons is harmless; offering a stale one sends "1" into an ordinary
+  // agent turn.
+  $: decisionTimelineComplete =
+    !activeHasNewer && activeTopicFilterID === "" && !hideCommentary;
   // The run being reported for the conversation in view, if any.
-  $: activeWorkflowRun = workflowRuns.get(activeConversationKeyForRuns) ?? null;
   $: activeConversationKeyForRuns = selectedDirectID || selectedChannelID || "";
+  $: activeWorkflowRun = workflowRuns.get(activeConversationKeyForRuns) ?? null;
   $: runPanelAvailable = activeWorkflowRun !== null;
   $: runWaiting = activeWorkflowRun !== null && isRunWaiting(activeWorkflowRun);
   // A run panel open in a conversation that stops reporting closes itself: the
@@ -5376,6 +5384,7 @@
       {pinnedMessageIDs}
       onTogglePin={toggleMessagePin}
       onCopyLink={ensureMessageLink}
+      timelineComplete={decisionTimelineComplete}
       onDecisionAnswer={answerDecision}
       onDecisionPrefill={prefillDecision}
       messages={renderedMessages}
