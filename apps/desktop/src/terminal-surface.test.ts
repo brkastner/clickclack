@@ -173,15 +173,23 @@ function createFixture(id = 1) {
   };
 }
 
-test("forces terminal color capability without inheriting the desktop NO_COLOR flag", () => {
+test("advertises terminal capabilities without inheriting the parent emulator identity", () => {
   const environment = terminalProcessEnvironment({
     HOME: "/home/test",
+    KITTY_WINDOW_ID: "1",
     NO_COLOR: "1",
     TERM: "dumb",
+    TERM_PROGRAM: "WezTerm",
+    TERM_PROGRAM_VERSION: "1",
+    WEZTERM_EXECUTABLE: "/usr/bin/wezterm-gui",
   });
 
   assert.equal(environment.NO_COLOR, undefined);
+  assert.equal(environment.KITTY_WINDOW_ID, undefined);
+  assert.equal(environment.WEZTERM_EXECUTABLE, undefined);
   assert.equal(environment.TERM, "xterm-256color");
+  assert.equal(environment.TERM_PROGRAM, "ClickClack");
+  assert.equal(environment.TERM_PROGRAM_VERSION, undefined);
   assert.equal(environment.COLORTERM, "truecolor");
   assert.equal(environment.HOME, "/home/test");
 });
@@ -208,6 +216,10 @@ test("partitions native content bounds between sibling views", () => {
     terminalSurfaceLayout({ height: 2_000, width: 1_400 }, true, "linux", false).terminal.height,
     380,
   );
+  assert.deepEqual(terminalSurfaceLayout({ height: 600, width: 800 }, true, "linux", true, 420), {
+    application: { height: 180, width: 800, x: 0, y: 0 },
+    terminal: { height: 420, width: 800, x: 0, y: 180 },
+  });
 });
 
 test("never overlays the application view", () => {
@@ -260,6 +272,23 @@ test("opens, hides, and reopens without terminating the session", () => {
   fixture.surface.open();
   assert.deepEqual(fixture.surface.start(fixture.terminalEvent), { state: "running", pid: 100 });
   assert.equal(fixture.processes.length, 1);
+});
+
+test("resizes the dock only for its authorized terminal renderer", () => {
+  const fixture = createFixture();
+  fixture.surface.open();
+
+  fixture.surface.resizeDock(fixture.applicationEvent, 420);
+  assert.deepEqual(fixture.terminalView.bounds, { height: 220, width: 800, x: 0, y: 380 });
+
+  fixture.surface.resizeDock(fixture.terminalEvent, 420);
+  assert.deepEqual(fixture.applicationView.bounds, { height: 180, width: 800, x: 0, y: 0 });
+  assert.deepEqual(fixture.terminalView.bounds, { height: 420, width: 800, x: 0, y: 180 });
+
+  fixture.surface.resizeDock(fixture.terminalEvent, 5_000);
+  assert.deepEqual(fixture.terminalView.bounds, { height: 420, width: 800, x: 0, y: 180 });
+  fixture.surface.resizeDock(fixture.terminalEvent, 159);
+  assert.deepEqual(fixture.terminalView.bounds, { height: 420, width: 800, x: 0, y: 180 });
 });
 
 test("queues terminal key input until xterm reports that it owns focus", () => {

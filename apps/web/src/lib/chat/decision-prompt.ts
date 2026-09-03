@@ -44,10 +44,7 @@ type RawBlock = {
 };
 
 /** True when this message is a workflow decision prompt awaiting an answer. */
-export function isDecisionMessage(message: {
-  kind?: string;
-  turn_id?: string;
-}): boolean {
+export function isDecisionMessage(message: { kind?: string; turn_id?: string }): boolean {
   if (message.kind !== "agent_commentary") return false;
   return typeof message.turn_id === "string" && message.turn_id.startsWith(DECISION_TURN_PREFIX);
 }

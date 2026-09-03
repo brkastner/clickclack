@@ -65,12 +65,7 @@ const runStatuses = new Set<string>([
 const stepOutcomes = new Set<string>(["ok", "timed_out", "failed", "cancelled"]);
 
 /** Statuses where the run is over and nothing further will happen. */
-const terminalStatuses = new Set<RunStatus>([
-  "completed",
-  "failed",
-  "timed_out",
-  "cancelled",
-]);
+const terminalStatuses = new Set<RunStatus>(["completed", "failed", "timed_out", "cancelled"]);
 
 export function isRunFinished(run: WorkflowRun): boolean {
   return terminalStatuses.has(run.status);

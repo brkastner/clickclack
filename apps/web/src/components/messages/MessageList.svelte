@@ -173,6 +173,7 @@
   const ANCHOR_THRESHOLD_PX = 1.5;
   const OLDER_LOAD_THRESHOLD_PX = 160;
   const NEWER_LOAD_THRESHOLD_PX = 260;
+  const RESTORE_FAIL_OPEN_MS = 3_000;
   const UNREAD_EXIT_MS = 180;
   const MIDDLE_MOUSE_BUTTON = 1;
   const MIDDLE_SCROLL_INTERACTIVE_TARGETS =
@@ -382,6 +383,13 @@
     return isCurrentView(key) && generation === scrollCommandGeneration;
   }
 
+  function interruptScroll() {
+    const generation = beginScrollCommand();
+    suppressPagination = false;
+    // Cancellation still releases pagination after the browser applies user input.
+    void emitSettledAfterFrames(viewKey, generation);
+  }
+
   function suppressProgrammaticPagination(frames = 2) {
     const generation = ++suppressPaginationGeneration;
     suppressPagination = true;
@@ -428,9 +436,9 @@
     onHistorySettled?.(viewportState());
   }
 
-  function notifyReachedBottom() {
-    if (hasNewer) return;
-    if (targetUnreadCount > 0) return;
+  function notifyReachedBottom(settledFollow = false) {
+    // A late list snapshot can add unread UI while following awaits layout.
+    if (hasNewer || (!settledFollow && targetUnreadCount > 0)) return;
     onReachedBottom?.();
   }
 
@@ -451,19 +459,19 @@
   }
 
   async function scrollLastItemIntoView(generation = beginScrollCommand()) {
-    if (!virtualizer || items.length === 0) return;
+    if (!virtualizer || !scrollEl || items.length === 0) return;
     const key = viewKey;
     if (document.activeElement === scrollEl) scrollEl.blur();
     let previousScrollSize = -1;
-    // A keyed virtual item can resize after its Svelte update, when virtua's
-    // ResizeObserver publishes the new measurement. Re-pin until that size is
-    // stable instead of trusting the first scrollToIndex calculation.
+    // Re-pin until virtua measures the keyed item's final size. All seeks write
+    // the viewport directly: virtua's imperative API retains resize callbacks
+    // that outlive this owner's command generation.
     for (let attempt = 0; attempt < 6; attempt += 1) {
-      if (!virtualizer || !isCurrentScrollCommand(key, generation)) return;
+      await tick();
+      if (!virtualizer || !scrollEl || !isCurrentScrollCommand(key, generation)) return;
       shouldStickToBottom = !hasNewer;
       suppressProgrammaticPagination(2);
-      virtualizer.scrollToIndex(items.length - 1, { align: "end" });
-      await tick();
+      scrollEl.scrollTop = scrollEl.scrollHeight;
       await nextFrame();
       if (!virtualizer || !isCurrentScrollCommand(key, generation)) return;
       const scrollSize = virtualizer.getScrollSize();
@@ -476,7 +484,7 @@
     shouldStickToBottom = !hasNewer;
     if (checkAtBottom()) {
       atBottom = true;
-      notifyReachedBottom();
+      notifyReachedBottom(true);
     }
     emitHistorySettled();
   }
@@ -496,7 +504,7 @@
   }
 
   function animateMiddleAutoscroll(timestamp: number) {
-    if (!middleAutoscrolling || !virtualizer) return;
+    if (!middleAutoscrolling || !scrollEl) return;
     const elapsed = middleAutoscrollTimestamp
       ? Math.min(50, timestamp - middleAutoscrollTimestamp)
       : 1000 / 60;
@@ -504,7 +512,7 @@
     const velocity = middleAutoscrollVelocity(
       middleAutoscrollCurrentY - middleAutoscrollAnchorY,
     );
-    if (velocity) virtualizer.scrollBy((velocity * elapsed) / 1000);
+    if (velocity) scrollEl.scrollTop += (velocity * elapsed) / 1000;
     middleAutoscrollFrame = window.requestAnimationFrame(animateMiddleAutoscroll);
   }
 
@@ -512,6 +520,7 @@
     if (event.button !== MIDDLE_MOUSE_BUTTON || !scrollEl || !virtualizer) return;
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest(MIDDLE_SCROLL_INTERACTIVE_TARGETS)) return;
+    interruptScroll();
     event.preventDefault();
     event.stopPropagation();
     stopMiddleAutoscroll();
@@ -556,14 +565,39 @@
     if (!scrollEl) return;
     const el = scrollEl;
     const onWheel = (event: WheelEvent) => {
-      if (event.deltaY > 0 && !pendingRestore && !suppressPagination && hasNewer && checkAtBottom()) {
+      if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0) return;
+      interruptScroll();
+      if (event.deltaY > 0 && hasNewer && checkAtBottom()) {
         newerEdgeConsumed = true;
         onLoadNewer?.("wheel");
       }
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        event.defaultPrevented ||
+        !(target instanceof HTMLElement) ||
+        target.isContentEditable ||
+        target.closest("input, textarea, select") ||
+        (event.key === " " && target.closest("button, [role=button]"))
+      ) return;
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) {
+        interruptScroll();
+      }
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (!event.defaultPrevented && event.touches.length === 1) interruptScroll();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      // Native scrollbar presses target the scrollport, not a message child.
+      if (event.target === el && event.button === 0) interruptScroll();
+      handleMiddlePointerDown(event);
+    };
     const onWindowBlur = () => stopMiddleAutoscroll();
     el.addEventListener("wheel", onWheel, { passive: true });
-    el.addEventListener("pointerdown", handleMiddlePointerDown);
+    el.addEventListener("keydown", onKeyDown);
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", handleMiddlePointerMove);
     el.addEventListener("pointerup", handleMiddlePointerEnd);
     el.addEventListener("pointercancel", handleMiddlePointerEnd);
@@ -573,7 +607,9 @@
     return () => {
       stopMiddleAutoscroll();
       el.removeEventListener("wheel", onWheel);
-      el.removeEventListener("pointerdown", handleMiddlePointerDown);
+      el.removeEventListener("keydown", onKeyDown);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", handleMiddlePointerMove);
       el.removeEventListener("pointerup", handleMiddlePointerEnd);
       el.removeEventListener("pointercancel", handleMiddlePointerEnd);
@@ -603,8 +639,9 @@
       const editable = target?.closest("input, textarea, select, [contenteditable='true']");
       if (editable && !target?.closest(".composer-editor__content")) return;
       event.preventDefault();
+      interruptScroll();
       const direction = event.key === "PageUp" ? -1 : 1;
-      virtualizer.scrollBy(pageScrollDelta(scrollEl.clientHeight, direction));
+      scrollEl.scrollTop += pageScrollDelta(scrollEl.clientHeight, direction);
     };
     window.addEventListener("keydown", handlePageKey);
     return () => window.removeEventListener("keydown", handlePageKey);
@@ -653,7 +690,7 @@
       // Skip the first measurement; initial mount is handled by restoration.
       if (prev > 0 && next !== prev) {
         const delta = next - prev;
-        if (virtualizer && virtualizer.getScrollOffset() > 0) virtualizer.scrollBy(delta);
+        if (scrollEl && scrollEl.scrollTop > 0) scrollEl.scrollTop += delta;
       }
     };
     apply();
@@ -701,12 +738,12 @@
   }
 
   function alignRenderedTarget(selector: string): boolean {
-    if (!scrollEl || !virtualizer) return false;
+    if (!scrollEl) return false;
     const target = scrollEl.querySelector<HTMLElement>(selector);
     if (!target) return false;
     const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
     if (Math.abs(delta) <= ANCHOR_THRESHOLD_PX) return true;
-    virtualizer.scrollBy(delta);
+    scrollEl.scrollTop += delta;
     return false;
   }
 
@@ -733,11 +770,11 @@
     const visible = visibleMessageBounds();
     if (targetIndex < 0 || !visible) return false;
     if (visible.first > targetIndex) {
-      virtualizer.scrollBy(-Math.max(80, scrollEl.clientHeight * 0.85));
+      scrollEl.scrollTop -= Math.max(80, scrollEl.clientHeight * 0.85);
       return true;
     }
     if (visible.last < targetIndex) {
-      virtualizer.scrollBy(Math.max(80, scrollEl.clientHeight * 0.85));
+      scrollEl.scrollTop += Math.max(80, scrollEl.clientHeight * 0.85);
       return true;
     }
     return false;
@@ -758,10 +795,16 @@
     for (let attempt = 0; attempt < 24; attempt++) {
       if (!isCurrentScrollCommand(key, generation)) return false;
       if (!virtualizer || !scrollEl) return false;
-      if (alignRenderedTarget(selector)) return true;
-      const idx = indexForTarget();
-      if (idx < 0) return false;
-      virtualizer.scrollToIndex(idx, { align: "start" });
+      const target = scrollEl.querySelector<HTMLElement>(selector);
+      if (target) {
+        const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
+        if (Math.abs(delta) <= ANCHOR_THRESHOLD_PX) return true;
+        scrollEl.scrollTop += delta;
+      } else {
+        const idx = indexForTarget();
+        if (idx < 0) return false;
+        scrollEl.scrollTop = historyLoaderHeight + virtualizer.getItemOffset(idx);
+      }
       await nextFrame();
       if (!isCurrentScrollCommand(key, generation)) return false;
       if (alignRenderedTarget(selector)) return true;
@@ -771,40 +814,45 @@
     return alignRenderedTarget(selector);
   }
 
-  function scrollToMessage(messageID: string): boolean {
-    if (!virtualizer) return false;
-    const idx = findMessageIndex(messageID);
-    if (idx < 0) return false;
+  function scrollToTarget(
+    indexForTarget: () => number,
+    selector: string,
+    targetMessageID = "",
+    onUnsettled?: () => void,
+  ): boolean {
+    if (!virtualizer || indexForTarget() < 0) return false;
     shouldStickToBottom = false;
     const key = viewKey;
     const generation = beginScrollCommand();
-    void settleVirtualTarget(
-      key,
-      generation,
+    void settleVirtualTarget(key, generation, indexForTarget, selector, targetMessageID).then(async (settled) => {
+      if (!isCurrentScrollCommand(key, generation)) return;
+      emitHistorySettled();
+      // Settling can remove the history loader above the target.
+      await tick();
+      if (!isCurrentScrollCommand(key, generation)) return;
+      if (settled) {
+        settled = await settleVirtualTarget(key, generation, indexForTarget, selector, targetMessageID);
+      }
+      if (!settled && isCurrentScrollCommand(key, generation)) onUnsettled?.();
+    });
+    return true;
+  }
+
+  function scrollToMessage(messageID: string): boolean {
+    return scrollToTarget(
       () => findMessageIndex(messageID),
       `[data-message-id="${CSS.escape(messageID)}"]`,
       messageID,
     );
-    return true;
   }
 
   function scrollToDivider(fallbackToAround = true): boolean {
-    if (!virtualizer) return false;
-    const idx = findDividerIndex();
-    if (idx < 0) return false;
-    shouldStickToBottom = false;
-    const key = viewKey;
-    const generation = beginScrollCommand();
-    void settleVirtualTarget(
-      key,
-      generation,
-      () => findDividerIndex(),
+    return scrollToTarget(
+      findDividerIndex,
       "[data-unread-divider='true']",
       firstUnreadMessageID(),
-    ).then((settled) => {
-      if (fallbackToAround && !settled && isCurrentScrollCommand(key, generation)) onJumpToUnread?.();
-    });
-    return true;
+      fallbackToAround ? onJumpToUnread : undefined,
+    );
   }
 
   function jumpToUnreadBoundary() {
@@ -866,8 +914,7 @@
       atBottom = true;
       revealed = false;
       newerEdgeConsumed = false;
-      pendingRestore = true;
-      void runRestore(key, restoreState, true);
+      startRestore(key, restoreState, true);
       return;
     }
 
@@ -877,15 +924,13 @@
       if (target.atBottom) {
         lastItemCount = count;
         lastPreambleLayoutRevision = layoutRevision;
-        pendingRestore = true;
-        void runRestore(key, target, true);
+        startRestore(key, target, true);
         return;
       }
       if (target.anchorMessageID) {
         lastItemCount = count;
         lastPreambleLayoutRevision = layoutRevision;
-        pendingRestore = true;
-        void runRestore(key, target, false);
+        startRestore(key, target, false);
         return;
       }
     }
@@ -901,17 +946,37 @@
     lastPreambleLayoutRevision = layoutRevision;
   });
 
-  async function emitSettledAfterFrames(key: string) {
+  async function emitSettledAfterFrames(key: string, generation = scrollCommandGeneration) {
     await tick();
     await nextFrame();
-    if (key === lastViewKey) emitHistorySettled();
+    if (isCurrentScrollCommand(key, generation)) emitHistorySettled();
+  }
+
+  function startRestore(key: string, target: MessageListState | undefined, fallbackToBottom: boolean) {
+    pendingRestore = true;
+    const restore = runRestore(key, target, fallbackToBottom);
+    const generation = scrollCommandGeneration;
+    const timeout = window.setTimeout(() => {
+      if (!pendingRestore || !isCurrentScrollCommand(key, generation)) return;
+      console.error("message history restore timed out");
+      beginScrollCommand();
+      emitHistorySettled();
+    }, RESTORE_FAIL_OPEN_MS);
+    void restore
+      .catch((error) => {
+        if (!isCurrentView(key)) return;
+        console.error("message history restore failed", error);
+        beginScrollCommand();
+        emitHistorySettled();
+      })
+      .finally(() => window.clearTimeout(timeout));
   }
 
   async function runRestore(key: string, target: MessageListState | undefined, fallbackToBottom: boolean) {
     const generation = beginScrollCommand(false);
     let restoredToUnreadDivider = false;
     await tick();
-    await new Promise((r) => requestAnimationFrame(r));
+    await nextFrame();
     if (!isCurrentScrollCommand(key, generation)) return;
     if (target && !target.atBottom && target.anchorMessageID) {
       const restored = await restoreToAnchor(
@@ -939,7 +1004,7 @@
         await scrollLastItemIntoView(generation);
       }
     }
-    await new Promise((r) => requestAnimationFrame(r));
+    await nextFrame();
     if (!isCurrentScrollCommand(key, generation)) return;
     pendingRestore = false;
     revealed = true;
@@ -962,11 +1027,11 @@
     const idx = findMessageIndex(messageID);
     if (idx < 0) return false;
     for (let attempt = 0; attempt < 8; attempt++) {
-      if (!virtualizer || !isCurrentScrollCommand(key, generation)) return false;
+      if (!virtualizer || !scrollEl || !isCurrentScrollCommand(key, generation)) return false;
       const desired = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
       suppressProgrammaticPagination();
-      virtualizer.scrollTo(desired);
-      await new Promise((r) => requestAnimationFrame(r));
+      scrollEl.scrollTop = desired;
+      await nextFrame();
       if (!isCurrentScrollCommand(key, generation)) return false;
       const recheck = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
       const current = virtualizer.getScrollOffset();

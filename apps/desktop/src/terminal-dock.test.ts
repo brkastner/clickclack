@@ -37,6 +37,30 @@ test("uses the full Rosé Pine Moon ANSI palette", () => {
   assert.doesNotMatch(source, /blue: color\("--info"/u);
 });
 
+test("loads Kitty graphics support into xterm", () => {
+  const source = readSource("./terminal-dock.tsx");
+  const packageJSON = readDesktopFile("package.json");
+
+  assert.match(source, /import \{ ImageAddon \} from "@xterm\/addon-image"/u);
+  assert.match(source, /new ImageAddon\(\{ kittySupport: true \}\)/u);
+  assert.match(source, /xterm\.loadAddon\(imageAddon\)/u);
+  assert.match(packageJSON, /"@xterm\/addon-image": "0\.10\.0-beta\.301"/u);
+});
+
+test("resizes the native terminal split with pointer and keyboard input", () => {
+  const source = readSource("./terminal-dock.tsx");
+  const preload = readSource("./terminal-preload.ts");
+  const main = readSource("./main.ts");
+
+  assert.match(source, /role="separator"/u);
+  assert.match(source, /aria-label="Resize terminal"/u);
+  assert.match(source, /event\.currentTarget\.setPointerCapture\(event\.pointerId\)/u);
+  assert.match(source, /event\.key === "ArrowUp"/u);
+  assert.match(source, /client\.resizeDock\(next\)/u);
+  assert.match(preload, /desktop:terminal-resize-dock/u);
+  assert.match(main, /terminalSurface\?\.resizeDock\(event, input\)/u);
+});
+
 test("mounts the local renderer only into its packaged root", () => {
   const renderer = readSource("./terminal-renderer.tsx");
   const dock = readSource("./terminal-dock.tsx");
@@ -123,6 +147,7 @@ test("builds and packages a locked-down local terminal document", () => {
   assert.match(build, /"terminal-preload": "src\/terminal-preload\.ts"/u);
   assert.match(build, /"terminal-renderer": "src\/terminal-renderer\.tsx"/u);
   assert.match(html, /default-src 'none'/u);
+  assert.match(html, /script-src 'self' 'wasm-unsafe-eval'/u);
   assert.match(html, /style-src 'self' 'unsafe-inline'/u);
   assert.match(html, /connect-src 'none'/u);
   assert.match(html, /frame-src 'none'/u);

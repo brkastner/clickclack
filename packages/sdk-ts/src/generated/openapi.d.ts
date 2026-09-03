@@ -2135,7 +2135,12 @@ export interface components {
        *
        * @enum {string}
        */
-      type: "typing.started" | "typing.stopped" | "presence.changed" | "agent.progress" | "workflow.run";
+      type:
+        | "typing.started"
+        | "typing.stopped"
+        | "presence.changed"
+        | "agent.progress"
+        | "workflow.run";
       payload?: {
         [key: string]: unknown;
       };

@@ -1,8 +1,11 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { ImageAddon } from "@xterm/addon-image";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import {
   Component,
   type ErrorInfo,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -10,7 +13,12 @@ import {
   useState,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { DesktopTerminalDimensions, DesktopTerminalStatus } from "./contract";
+import {
+  MAX_TERMINAL_DOCK_HEIGHT,
+  MIN_TERMINAL_DOCK_HEIGHT,
+  type DesktopTerminalDimensions,
+  type DesktopTerminalStatus,
+} from "./contract";
 import type { TerminalCommand, TerminalPresentation } from "./terminal-surface";
 
 export type TerminalClient = {
@@ -24,6 +32,7 @@ export type TerminalClient = {
   presentation(): Promise<TerminalPresentation>;
   readClipboard(): Promise<string | null>;
   resize(dimensions: DesktopTerminalDimensions): void;
+  resizeDock(height: number): void;
   start(): Promise<DesktopTerminalStatus>;
   status(): Promise<DesktopTerminalStatus>;
   terminate(): Promise<DesktopTerminalStatus>;
@@ -148,6 +157,10 @@ function TerminalDock({ client, open, onClose }: TerminalDockProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const lastDimensionsRef = useRef("");
+  const dockResizeRef = useRef<{ pointerId: number; screenY: number; height: number } | null>(null);
+  const [dockHeight, setDockHeight] = useState(() =>
+    Math.max(MIN_TERMINAL_DOCK_HEIGHT, Math.round(window.innerHeight)),
+  );
   const [hasOpened, setHasOpened] = useState(open);
   const [initialized, setInitialized] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -159,6 +172,9 @@ function TerminalDock({ client, open, onClose }: TerminalDockProps) {
     const xterm = terminalRef.current;
     const fitAddon = fitAddonRef.current;
     if (!host || !xterm || !fitAddon) return null;
+    if (window.innerHeight >= MIN_TERMINAL_DOCK_HEIGHT) {
+      setDockHeight(Math.round(window.innerHeight));
+    }
     const dimensions = proposedDimensions(host, xterm, fitAddon);
     if (!dimensions) return null;
     const key = `${dimensions.cols}:${dimensions.rows}`;
@@ -168,6 +184,60 @@ function TerminalDock({ client, open, onClose }: TerminalDockProps) {
     }
     return dimensions;
   }, [client]);
+
+  const requestDockHeight = useCallback(
+    (height: number) => {
+      const next = Math.max(
+        MIN_TERMINAL_DOCK_HEIGHT,
+        Math.min(MAX_TERMINAL_DOCK_HEIGHT, Math.round(height)),
+      );
+      client.resizeDock(next);
+    },
+    [client],
+  );
+
+  const handleDockResizePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    dockResizeRef.current = {
+      pointerId: event.pointerId,
+      screenY: event.screenY,
+      height: window.innerHeight,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+
+  const handleDockResizePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const resize = dockResizeRef.current;
+      if (!resize || resize.pointerId !== event.pointerId) return;
+      requestDockHeight(resize.height + resize.screenY - event.screenY);
+    },
+    [requestDockHeight],
+  );
+
+  const handleDockResizePointerEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = dockResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    dockResizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
+  const handleDockResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      let next = Math.max(MIN_TERMINAL_DOCK_HEIGHT, Math.round(window.innerHeight));
+      if (event.key === "ArrowUp") next += 24;
+      else if (event.key === "ArrowDown") next -= 24;
+      else if (event.key === "Home") next = MIN_TERMINAL_DOCK_HEIGHT;
+      else if (event.key === "End") next = MAX_TERMINAL_DOCK_HEIGHT;
+      else return;
+      event.preventDefault();
+      requestDockHeight(next);
+    },
+    [requestDockHeight],
+  );
 
   const startTerminal = useCallback(async () => {
     setStarting(true);
@@ -195,6 +265,17 @@ function TerminalDock({ client, open, onClose }: TerminalDockProps) {
   }, [open]);
 
   useEffect(() => {
+    const syncDockHeight = () => {
+      if (window.innerHeight >= MIN_TERMINAL_DOCK_HEIGHT) {
+        setDockHeight(Math.round(window.innerHeight));
+      }
+    };
+    syncDockHeight();
+    window.addEventListener("resize", syncDockHeight);
+    return () => window.removeEventListener("resize", syncDockHeight);
+  }, []);
+
+  useEffect(() => {
     if (!hasOpened || !hostRef.current) return;
     const host = hostRef.current;
     const xterm = new Terminal({
@@ -210,7 +291,9 @@ function TerminalDock({ client, open, onClose }: TerminalDockProps) {
       theme: terminalTheme(),
     });
     const fitAddon = new FitAddon();
+    const imageAddon = new ImageAddon({ kittySupport: true });
     xterm.loadAddon(fitAddon);
+    xterm.loadAddon(imageAddon);
     xterm.open(host);
     terminalRef.current = xterm;
     fitAddonRef.current = fitAddon;
@@ -281,6 +364,7 @@ function TerminalDock({ client, open, onClose }: TerminalDockProps) {
       removeDataListener();
       removeCommandListener();
       inputSubscription.dispose();
+      imageAddon.dispose();
       fitAddon.dispose();
       xterm.dispose();
       fitAddonRef.current = null;
@@ -310,6 +394,25 @@ function TerminalDock({ client, open, onClose }: TerminalDockProps) {
       aria-label="Terminal"
       data-terminal-state={starting ? "starting" : status.state}
     >
+      <div
+        className="terminal-dock__resize-handle"
+        role="separator"
+        tabIndex={0}
+        aria-label="Resize terminal"
+        aria-orientation="horizontal"
+        aria-valuemin={MIN_TERMINAL_DOCK_HEIGHT}
+        aria-valuemax={MAX_TERMINAL_DOCK_HEIGHT}
+        aria-valuenow={dockHeight}
+        title="Drag to resize terminal"
+        onKeyDown={handleDockResizeKeyDown}
+        onPointerDown={handleDockResizePointerDown}
+        onPointerMove={handleDockResizePointerMove}
+        onPointerUp={handleDockResizePointerEnd}
+        onPointerCancel={handleDockResizePointerEnd}
+        onLostPointerCapture={handleDockResizePointerEnd}
+      >
+        <span aria-hidden="true" />
+      </div>
       <div className="terminal-dock__header">
         <div className="terminal-dock__identity">
           <span className="terminal-dock__prompt" aria-hidden="true">

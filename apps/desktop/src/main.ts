@@ -564,6 +564,9 @@ function registerIPC() {
   );
   ipcMain.on("desktop:terminal-write", (event, input) => terminalSurface?.write(event, input));
   ipcMain.on("desktop:terminal-resize", (event, input) => terminalSurface?.resize(event, input));
+  ipcMain.on("desktop:terminal-resize-dock", (event, input) =>
+    terminalSurface?.resizeDock(event, input),
+  );
   ipcMain.on("desktop:terminal-output-ready", (event) => terminalSurface?.outputReady(event));
   ipcMain.on("desktop:terminal-output-ack", (event, input) =>
     terminalSurface?.acknowledgeOutput(event, input),

@@ -102,15 +102,36 @@ test("a malformed run clears rather than showing half a run", () => {
 });
 
 test("an unreadable step drops without dropping the run", () => {
-  const parsed = readWorkflowRunFrame(frame(rawRun({
-    steps: [
-      { attemptId: "a1", nodeId: "plan", nodeType: "agent", outcome: "ok", startedAt: "s", finishedAt: "f" },
-      { attemptId: "a2", nodeId: "bad", nodeType: "agent", outcome: "vibing", startedAt: "s", finishedAt: "f" },
-      "not a step",
-      null,
-    ],
-  })));
-  assert.deepEqual(parsed?.steps.map((step) => step.nodeId), ["plan"]);
+  const parsed = readWorkflowRunFrame(
+    frame(
+      rawRun({
+        steps: [
+          {
+            attemptId: "a1",
+            nodeId: "plan",
+            nodeType: "agent",
+            outcome: "ok",
+            startedAt: "s",
+            finishedAt: "f",
+          },
+          {
+            attemptId: "a2",
+            nodeId: "bad",
+            nodeType: "agent",
+            outcome: "vibing",
+            startedAt: "s",
+            finishedAt: "f",
+          },
+          "not a step",
+          null,
+        ],
+      }),
+    ),
+  );
+  assert.deepEqual(
+    parsed?.steps.map((step) => step.nodeId),
+    ["plan"],
+  );
 });
 
 test("a run with no steps is still a run", () => {

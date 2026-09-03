@@ -1,6 +1,8 @@
 import type { DesktopTerminalData, DesktopTerminalStatus } from "./contract";
 import {
+  MIN_TERMINAL_DOCK_HEIGHT,
   normalizeTerminalDimensions,
+  normalizeTerminalDockHeight,
   normalizeTerminalSequence,
   sanitizeTerminalInput,
 } from "./contract";
@@ -13,8 +15,9 @@ export type TerminalSurfaceLayout = {
   terminal: Rectangle;
 };
 
-export const TERMINAL_MIN_DOCK_HEIGHT = 220;
-export const TERMINAL_MAX_DOCK_HEIGHT = 380;
+const DEFAULT_TERMINAL_MIN_DOCK_HEIGHT = 220;
+const DEFAULT_TERMINAL_MAX_DOCK_HEIGHT = 380;
+const MIN_APPLICATION_HEIGHT = 180;
 const MAX_PENDING_INPUT_EVENTS = 32;
 
 export function terminalSurfaceLayout(
@@ -22,16 +25,20 @@ export function terminalSurfaceLayout(
   open: boolean,
   _platform: NodeJS.Platform,
   _integratedTitleBar: boolean,
+  requestedDockHeight?: number,
 ): TerminalSurfaceLayout {
   const width = Math.max(0, Math.floor(content.width));
   const height = Math.max(0, Math.floor(content.height));
   if (open) {
+    const defaultDockHeight = Math.min(
+      DEFAULT_TERMINAL_MAX_DOCK_HEIGHT,
+      Math.max(DEFAULT_TERMINAL_MIN_DOCK_HEIGHT, Math.round(height * 0.34)),
+    );
+    const minimumDockHeight = Math.min(height, MIN_TERMINAL_DOCK_HEIGHT);
+    const maximumDockHeight = Math.max(minimumDockHeight, height - MIN_APPLICATION_HEIGHT);
     const dockHeight = Math.min(
-      height,
-      Math.min(
-        TERMINAL_MAX_DOCK_HEIGHT,
-        Math.max(TERMINAL_MIN_DOCK_HEIGHT, Math.round(height * 0.34)),
-      ),
+      maximumDockHeight,
+      Math.max(minimumDockHeight, requestedDockHeight ?? defaultDockHeight),
     );
     const applicationHeight = Math.max(0, height - dockHeight);
     return {
@@ -96,11 +103,28 @@ export type TerminalCommand = "copy" | "paste";
 
 let nodePtyModule: typeof import("node-pty") | null = null;
 
+const INHERITED_TERMINAL_IDENTITY_VARIABLES = [
+  "GHOSTTY_RESOURCES_DIR",
+  "ITERM_SESSION_ID",
+  "KITTY_WINDOW_ID",
+  "KONSOLE_VERSION",
+  "TABBY_CONFIG_DIRECTORY",
+  "VSCODE_INJECTION",
+  "WARP_HONOR_PS1",
+  "WEZTERM_EXECUTABLE",
+  "WT_Session",
+] as const;
+
 export function terminalProcessEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const terminalEnvironment = { ...environment };
   delete terminalEnvironment.NO_COLOR;
+  for (const variable of INHERITED_TERMINAL_IDENTITY_VARIABLES) {
+    delete terminalEnvironment[variable];
+  }
   terminalEnvironment.COLORTERM = "truecolor";
   terminalEnvironment.TERM = "xterm-256color";
+  terminalEnvironment.TERM_PROGRAM = "ClickClack";
+  delete terminalEnvironment.TERM_PROGRAM_VERSION;
   return terminalEnvironment;
 }
 
@@ -124,6 +148,7 @@ export function createLocalTerminalProcessFactory(
 
 export class TerminalSurface {
   private disposed = false;
+  private dockHeight: number | undefined;
   private openState = false;
   private rendererReady = false;
   private readonly pendingInput: Electron.KeyboardInputEvent[] = [];
@@ -230,6 +255,7 @@ export class TerminalSurface {
       this.openState,
       this.options.platform,
       this.options.integratedTitleBar,
+      this.dockHeight,
     );
     this.options.applicationView.setBounds(bounds.application);
     this.options.terminalView.setBounds(bounds.terminal);
@@ -266,6 +292,14 @@ export class TerminalSurface {
     if (!this.owns(event)) return;
     const dimensions = normalizeTerminalDimensions(input);
     if (dimensions) this.terminalSession.resize(dimensions);
+  }
+
+  resizeDock(event: TerminalIPCEvent, input: unknown): void {
+    if (!this.owns(event) || !this.openState) return;
+    const height = normalizeTerminalDockHeight(input);
+    if (height === null) return;
+    this.dockHeight = height;
+    this.layout();
   }
 
   outputReady(event: TerminalIPCEvent): void {

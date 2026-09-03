@@ -19,6 +19,7 @@ import {
   mergeSettings,
   normalizeServerURL,
   normalizeTerminalDimensions,
+  normalizeTerminalDockHeight,
   normalizeTerminalSequence,
   safeAppRoute,
   sanitizeNotification,
@@ -232,6 +233,11 @@ test("validates terminal input, dimensions, and status payloads", () => {
   assert.equal(normalizeTerminalDimensions({ cols: 120, rows: 301 }), null);
   assert.equal(normalizeTerminalDimensions({ cols: 120.5, rows: 36 }), null);
   assert.equal(normalizeTerminalDimensions({ cols: "120", rows: 36 }), null);
+  assert.equal(normalizeTerminalDockHeight(160), 160);
+  assert.equal(normalizeTerminalDockHeight(420.4), 420);
+  assert.equal(normalizeTerminalDockHeight(159), null);
+  assert.equal(normalizeTerminalDockHeight(Number.POSITIVE_INFINITY), null);
+  assert.equal(normalizeTerminalDockHeight("420"), null);
 
   assert.equal(sanitizeTerminalInput("echo ready\r"), "echo ready\r");
   assert.equal(sanitizeTerminalInput("x".repeat(MAX_TERMINAL_INPUT_BYTES + 1)), null);
