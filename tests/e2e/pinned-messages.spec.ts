@@ -146,7 +146,7 @@ test("pins are shared, persistent, and removable through ClickClack", async ({ p
       response.url().endsWith(`/api/channels/${channel.id}/pins/${messageID}`),
   );
   await panel
-    .locator(".pinned-panel__item", { hasText: editedBody })
+    .locator(".pinned-item", { hasText: editedBody })
     .getByRole("button", { name: "Unpin message" })
     .click();
   const unpinResponse = await unpinResponsePromise;
@@ -155,7 +155,7 @@ test("pins are shared, persistent, and removable through ClickClack", async ({ p
   expect(unpinResult.event.type).toBe("pin.removed");
   await expect(panel.getByText(editedBody)).toHaveCount(0);
   await panel
-    .locator(".pinned-panel__item", { hasText: replyBody })
+    .locator(".pinned-item", { hasText: replyBody })
     .getByRole("button", { name: "Unpin message" })
     .click();
   await expect(panel.getByText(replyBody)).toHaveCount(0);
@@ -220,20 +220,20 @@ test("pinned items stay channel-wide across topic filters and retain message met
 
   await page.getByRole("button", { name: "Pinned items" }).click();
   const panel = page.getByRole("complementary", { name: "Pinned messages pane" });
-  await expect(panel.getByText("2 / 100 pinned", { exact: true })).toBeVisible();
+  await expect(panel.getByText("2 of 100", { exact: true })).toBeVisible();
   await expect(panel.getByText(firstBody)).toBeVisible();
   await expect(panel.getByText(secondBody)).toBeVisible();
   const secondPinnedItem = panel.locator(`[data-message-id="${secondMessage.message.id}"]`);
   await expect(secondPinnedItem.locator("mark[data-clickclack-mention='true']")).toHaveText(
     `@${mentionHandle}`,
   );
-  await expect(
-    secondPinnedItem.getByRole("button", { name: `Filter by topic ${secondTopic.topic.name}` }),
-  ).toBeVisible();
+  const pinnedTopic = secondPinnedItem.getByRole("button", {
+    name: secondTopic.topic.name,
+    exact: true,
+  });
+  await expect(pinnedTopic).toBeVisible();
 
-  await secondPinnedItem
-    .getByRole("button", { name: `Filter by topic ${secondTopic.topic.name}` })
-    .click();
+  await pinnedTopic.click();
   await expect(panel).toBeHidden();
   await expect(page.locator(".messages-scroll .markdown", { hasText: secondBody })).toBeVisible();
   await expect(page.locator(".messages-scroll .markdown", { hasText: firstBody })).toHaveCount(0);

@@ -30,7 +30,7 @@
   import { middleAutoscrollVelocity, pageScrollDelta } from "../../lib/chat/scrolling";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { messageAudioPlayback } from "../../lib/messageAudioPlayback";
-  import { newestAutoLoadAttachmentID } from "../../lib/media-loading";
+  import { recentAutoLoadAttachmentIDs } from "../../lib/media-loading";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Channel, DirectConversation, Message, Topic, Upload, User } from "../../lib/types";
   import HistoryLoader from "./HistoryLoader.svelte";
@@ -176,7 +176,7 @@
   let middleAutoscrollTimestamp = 0;
   let middleAutoscrollViewKey = $state("");
   let replyContext = $derived(selectedDirect ? "dm" : "channel");
-  let autoLoadAttachmentID = $derived(newestAutoLoadAttachmentID(messages));
+  let autoLoadAttachmentIDs = $derived(recentAutoLoadAttachmentIDs(messages));
   let dismissedUnreadViewKey = $state("");
   let dismissedUnreadBoundarySeq = $state(-1);
   let dismissedUnreadCount = $state(0);
@@ -1037,7 +1037,7 @@
           {:else if item.kind === "group"}
             <MessageGroup
               group={item.group}
-              {autoLoadAttachmentID}
+              {autoLoadAttachmentIDs}
               {currentUserID}
               {reactionController}
               {reactionsDisabled}

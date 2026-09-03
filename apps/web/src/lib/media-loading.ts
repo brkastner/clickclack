@@ -9,14 +9,36 @@ function isAutoLoadMedia(upload: Upload): boolean {
   );
 }
 
-export function newestAutoLoadAttachmentID(messages: readonly Message[]): string | undefined {
-  let newest: Upload | undefined;
+const AUTO_LOAD_ATTACHMENT_LIMIT = 10;
+
+function fractionalNanoseconds(timestamp: string): number {
+  const fraction = timestamp.match(/\.(\d{1,9})(?:Z|[+-]\d{2}:\d{2})$/)?.[1] ?? "";
+  return Number(fraction.padEnd(9, "0"));
+}
+
+export function recentAutoLoadAttachmentIDs(messages: readonly Message[]): ReadonlySet<string> {
+  const attachments: Array<{ upload: Upload; index: number }> = [];
   for (const message of messages) {
     if (message.deleted_at) continue;
     for (const attachment of message.attachments ?? []) {
-      if (!isAutoLoadMedia(attachment)) continue;
-      if (!newest || attachment.created_at >= newest.created_at) newest = attachment;
+      if (isAutoLoadMedia(attachment)) {
+        attachments.push({ upload: attachment, index: attachments.length });
+      }
     }
   }
-  return newest?.id;
+
+  attachments.sort((left, right) => {
+    const leftMilliseconds = Date.parse(left.upload.created_at);
+    const rightMilliseconds = Date.parse(right.upload.created_at);
+    if (Number.isFinite(leftMilliseconds) && Number.isFinite(rightMilliseconds)) {
+      if (leftMilliseconds !== rightMilliseconds) return rightMilliseconds - leftMilliseconds;
+      const fractionDifference =
+        fractionalNanoseconds(right.upload.created_at) -
+        fractionalNanoseconds(left.upload.created_at);
+      if (fractionDifference !== 0) return fractionDifference;
+    }
+    return right.index - left.index;
+  });
+
+  return new Set(attachments.slice(0, AUTO_LOAD_ATTACHMENT_LIMIT).map(({ upload }) => upload.id));
 }

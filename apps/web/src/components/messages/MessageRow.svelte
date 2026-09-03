@@ -32,7 +32,7 @@
   type Props = {
     message: Message;
     index: number;
-    autoLoadAttachmentID?: string;
+    autoLoadAttachmentIDs?: ReadonlySet<string>;
     previousMessage?: Message;
     nextMessage?: Message;
     selected: boolean;
@@ -68,7 +68,7 @@
   let {
     message,
     index,
-    autoLoadAttachmentID,
+    autoLoadAttachmentIDs,
     previousMessage,
     nextMessage,
     selected,
@@ -739,7 +739,7 @@
             upload={attachment}
             url={uploadURL(attachment)}
             attachments={message.attachments}
-            eager={attachment.id === autoLoadAttachmentID}
+            eager={autoLoadAttachmentIDs?.has(attachment.id) ?? false}
             onOpenImage={onOpenImage}
             onOpenArtifact={onOpenArtifact}
           />

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { newestAutoLoadAttachmentID } from "./media-loading.ts";
+import { recentAutoLoadAttachmentIDs } from "./media-loading.ts";
 import type { Message, Upload } from "./types.ts";
 
 function upload(id: string, createdAt: string, contentType = "image/png"): Upload {
@@ -30,37 +30,70 @@ function message(id: string, attachments: Upload[] = [], deleted = false): Messa
   };
 }
 
-test("newestAutoLoadAttachmentID chooses exactly the newest binary attachment", () => {
-  assert.equal(
-    newestAutoLoadAttachmentID([
-      message("older", [upload("old-image", "2026-09-02T00:00:00Z")]),
-      message("newer", [
-        upload("new-image", "2026-09-02T00:02:00Z"),
-        upload("older-video", "2026-09-02T00:01:00Z", "video/mp4"),
+test("recentAutoLoadAttachmentIDs returns previewable attachments from newest to oldest", () => {
+  assert.deepEqual(
+    [
+      ...recentAutoLoadAttachmentIDs([
+        message("older", [upload("old-image", "2026-09-02T00:00:00Z")]),
+        message("newer", [
+          upload("new-image", "2026-09-02T00:02:00Z"),
+          upload("older-video", "2026-09-02T00:01:00Z", "video/mp4"),
+        ]),
       ]),
-    ]),
-    "new-image",
+    ],
+    ["new-image", "older-video", "old-image"],
   );
 });
 
-test("newestAutoLoadAttachmentID follows attachments added to older messages", () => {
-  assert.equal(
-    newestAutoLoadAttachmentID([
-      message("older-message", [upload("late-image", "2026-09-02T00:03:00Z")]),
-      message("newer-message", [upload("earlier-image", "2026-09-02T00:02:00Z")]),
-    ]),
-    "late-image",
+test("recentAutoLoadAttachmentIDs orders RFC3339Nano timestamps chronologically", () => {
+  assert.deepEqual(
+    [
+      ...recentAutoLoadAttachmentIDs([
+        message("same-second", [
+          upload("fraction-120ms", "2026-09-02T00:00:00.12Z"),
+          upload("fraction-123ms", "2026-09-02T00:00:00.123Z"),
+          upload("fraction-123400us-first", "2026-09-02T00:00:00.1234Z"),
+          upload("fraction-123400us-last", "2026-09-02T00:00:00.1234Z"),
+        ]),
+      ]),
+    ],
+    ["fraction-123400us-last", "fraction-123400us-first", "fraction-123ms", "fraction-120ms"],
   );
 });
 
-test("newestAutoLoadAttachmentID ignores deleted messages and demand-loaded files", () => {
-  assert.equal(
-    newestAutoLoadAttachmentID([
-      message("visible", [upload("visible-image", "2026-09-02T00:00:00Z")]),
-      message("document", [upload("report", "2026-09-02T00:02:00Z", "application/pdf")]),
-      message("deleted", [upload("deleted-image", "2026-09-02T00:03:00Z")], true),
-    ]),
-    "visible-image",
+test("recentAutoLoadAttachmentIDs follows attachments added to older messages", () => {
+  assert.deepEqual(
+    [
+      ...recentAutoLoadAttachmentIDs([
+        message("older-message", [upload("late-image", "2026-09-02T00:03:00Z")]),
+        message("newer-message", [upload("earlier-image", "2026-09-02T00:02:00Z")]),
+      ]),
+    ],
+    ["late-image", "earlier-image"],
   );
-  assert.equal(newestAutoLoadAttachmentID([message("empty")]), undefined);
+});
+
+test("recentAutoLoadAttachmentIDs limits automatic previews to the ten newest attachments", () => {
+  const attachments = Array.from({ length: 12 }, (_, index) =>
+    upload(`image-${index}`, `2026-09-02T00:00:${String(index).padStart(2, "0")}Z`),
+  );
+
+  assert.deepEqual(
+    [...recentAutoLoadAttachmentIDs([message("gallery", attachments)])],
+    Array.from({ length: 10 }, (_, index) => `image-${11 - index}`),
+  );
+});
+
+test("recentAutoLoadAttachmentIDs ignores deleted messages and demand-loaded files", () => {
+  assert.deepEqual(
+    [
+      ...recentAutoLoadAttachmentIDs([
+        message("visible", [upload("visible-image", "2026-09-02T00:00:00Z")]),
+        message("document", [upload("report", "2026-09-02T00:02:00Z", "application/pdf")]),
+        message("deleted", [upload("deleted-image", "2026-09-02T00:03:00Z")], true),
+      ]),
+    ],
+    ["visible-image"],
+  );
+  assert.deepEqual([...recentAutoLoadAttachmentIDs([message("empty")])], []);
 });

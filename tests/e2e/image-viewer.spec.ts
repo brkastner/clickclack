@@ -147,8 +147,9 @@ test("pages through image attachments with controls and arrow keys", async ({ pa
   await page.getByRole("button", { name: "Send", exact: true }).click();
 
   const imageRow = page.locator(".message-row").filter({ hasText: messageText });
-  await imageRow.getByRole("button", { name: `Load preview for ${firstFilename}` }).click();
-  await imageRow.getByRole("button", { name: `Open image ${firstFilename}` }).click();
+  const firstImage = imageRow.getByRole("button", { name: `Open image ${firstFilename}` });
+  await expect(firstImage).toBeVisible();
+  await firstImage.click();
 
   let dialog = page.getByRole("dialog", { name: `Image viewer: ${firstFilename}` });
   await expect(dialog).toBeVisible();
