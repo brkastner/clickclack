@@ -1326,6 +1326,47 @@ test("keeps Markdown lists and blockquotes left-aligned in right-side messages",
   expect(layout.itemRightInset).toBe(0);
 });
 
+test("leaves detached code decorators under the rendering owner's control", async ({ page }) => {
+  const route = await createGeneralChannelRoute(page, "Detached code decorator", true);
+  const body = [
+    "Detached code decorator",
+    "",
+    "```ts",
+    "const answer = 42;",
+    "```",
+    "",
+    "Following paragraph",
+  ].join("\n");
+
+  await page.goto(route);
+  await waitForAppReady(page);
+  await pasteMarkdown(page.getByLabel("Message body"), body);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const markdown = page.locator(".markdown", {
+    has: page.getByText("Detached code decorator", { exact: true }),
+  });
+  await expect(markdown.locator(".code-block")).toHaveCount(1);
+
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const detached = await markdown.evaluate(async (element) => {
+    const wrapper = element.querySelector<HTMLElement>(".code-block");
+    const following = wrapper?.nextSibling;
+    const pre = wrapper?.querySelector("pre");
+    if (!wrapper || !following || !pre) return false;
+
+    following.remove();
+    wrapper.remove();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    return !element.contains(pre);
+  });
+
+  expect(detached).toBe(true);
+  expect(pageErrors).toEqual([]);
+  await expect(markdown.locator("pre")).toHaveCount(0);
+});
+
 test("browser notifications require explicit profile opt-in", async ({ page }) => {
   const meResponse = await page.request.get("/api/me");
   const me = (await meResponse.json()) as { user: { id: string } };
