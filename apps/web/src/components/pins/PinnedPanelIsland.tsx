@@ -1,13 +1,5 @@
-import React, {
-  Component,
-  type ErrorInfo,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { createRoot, type Root } from "react-dom/client";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createReactIsland, type ReactIsland } from "../../lib/react-island";
 import { enhanceMarkdown } from "../../lib/actions/markdown";
 import { enhanceMentions } from "../../lib/actions/mention-highlight";
 import { classifyArtifact, artifactKindLabel } from "../../lib/artifacts";
@@ -33,31 +25,15 @@ export type PinnedPanelProps = {
   onSelectTopic?: (topicID: string) => void;
 };
 
-type BoundaryProps = { children: ReactNode; onClose: () => void };
-type BoundaryState = { failed: boolean };
-
-class PinnedPanelErrorBoundary extends Component<BoundaryProps, BoundaryState> {
-  state: BoundaryState = { failed: false };
-
-  static getDerivedStateFromError(): BoundaryState {
-    return { failed: true };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Pinned messages failed to render", error, info);
-  }
-
-  render() {
-    if (!this.state.failed) return this.props.children;
-    return (
-      <section className="pinned-panel" role="alert">
-        <PanelHeader count={0} maxPins={100} onClose={this.props.onClose} />
-        <div className="pinned-panel__status pinned-panel__status--error">
-          Pinned messages couldn’t be displayed.
-        </div>
-      </section>
-    );
-  }
+function PinnedPanelFallback({ onClose, maxPins = 100 }: PinnedPanelProps) {
+  return (
+    <section className="pinned-panel" role="alert">
+      <PanelHeader count={0} maxPins={maxPins} onClose={onClose} />
+      <div className="pinned-panel__status pinned-panel__status--error">
+        Pinned messages couldn’t be displayed.
+      </div>
+    </section>
+  );
 }
 
 function PinIcon({ size = 16 }: { size?: number }) {
@@ -405,19 +381,10 @@ function PinnedPanel({
   );
 }
 
-export type PinnedPanelIsland = { render: (props: PinnedPanelProps) => void; unmount: () => void };
+export type PinnedPanelIsland = ReactIsland<PinnedPanelProps>;
 
-export function mountPinnedPanelIsland(
-  element: HTMLElement,
-  initialProps: PinnedPanelProps,
-): PinnedPanelIsland {
-  const root: Root = createRoot(element);
-  const render = (props: PinnedPanelProps) =>
-    root.render(
-      <PinnedPanelErrorBoundary onClose={props.onClose}>
-        <PinnedPanel {...props} />
-      </PinnedPanelErrorBoundary>,
-    );
-  render(initialProps);
-  return { render, unmount: () => root.unmount() };
-}
+export const mountPinnedPanelIsland = createReactIsland<PinnedPanelProps>({
+  name: "Pinned messages",
+  component: PinnedPanel,
+  fallback: PinnedPanelFallback,
+});

@@ -1,11 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import ReactIslandHost from "../ReactIslandHost.svelte";
   import type { Channel } from "../../lib/types";
-  import {
-    mountPinnedPanelIsland,
-    type PinnedPanelIsland,
-    type PinnedPanelProps,
-  } from "./PinnedPanelIsland";
+  import { mountPinnedPanelIsland, type PinnedPanelProps } from "./PinnedPanelIsland";
 
   type Props = PinnedPanelProps & {
     channel?: Channel;
@@ -27,36 +23,25 @@
     onSelectTopic,
   }: Props = $props();
 
-  let hostElement: HTMLDivElement | null = $state(null);
-  let island: PinnedPanelIsland | null = null;
-
-  function islandProps(): PinnedPanelProps {
-    return {
-      messages,
-      loading,
-      error,
-      topics,
-      mentionPeople,
-      mentionAttentionUserID,
-      maxPins,
-      onClose,
-      onOpenThread,
-      onOpenImage,
-      onOpenArtifact,
-      onUnpin,
-      onSelectTopic,
-    };
-  }
-
-  onMount(() => {
-    if (!hostElement) return;
-    island = mountPinnedPanelIsland(hostElement, islandProps());
-    return () => island?.unmount();
-  });
-
-  $effect(() => {
-    island?.render(islandProps());
+  const islandProps: PinnedPanelProps = $derived({
+    messages,
+    loading,
+    error,
+    topics,
+    mentionPeople,
+    mentionAttentionUserID,
+    maxPins,
+    onClose,
+    onOpenThread,
+    onOpenImage,
+    onOpenArtifact,
+    onUnpin,
+    onSelectTopic,
   });
 </script>
 
-<div class="pinned-panel-island" bind:this={hostElement}></div>
+<ReactIslandHost
+  mount={mountPinnedPanelIsland}
+  props={islandProps}
+  class="pinned-panel-island"
+/>

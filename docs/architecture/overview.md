@@ -27,7 +27,9 @@ or by reconnecting the websocket with a cursor.
 - `apps/api/internal/realtime` — in-process workspace event hub (`Hub`).
 - `apps/api/internal/config` — flag/env/file resolution.
 - `apps/api/internal/webassets` — `go:embed` for the built SPA.
-- `apps/web` — Svelte 5 SPA, API-only client behavior.
+- `apps/web` — Svelte 5 SPA, API-only client behavior. A few surfaces render as
+  React islands mounted into the Svelte tree; see
+  [react-islands.md](react-islands.md).
 - `packages/protocol` — OpenAPI contract, source of truth.
 - `packages/sdk-ts` — generated OpenAPI types plus framework-neutral
   TypeScript wrapper.
@@ -53,3 +55,5 @@ or by reconnecting the websocket with a cursor.
   events, cursor recovery.
 - [../features/auth.md](../features/auth.md) — auth resolution and
   precedence.
+- [react-islands.md](react-islands.md) — React surfaces inside the Svelte app
+  and the authority boundary they hold to.

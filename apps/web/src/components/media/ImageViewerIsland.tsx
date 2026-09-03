@@ -1,30 +1,13 @@
-import React, {
-  Component,
-  type ErrorInfo,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import { createRoot, type Root } from "react-dom/client";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createReactIsland, type ReactIsland } from "../../lib/react-island";
 import { writeClipboardText } from "../../lib/clipboard";
 import type { ImageViewerItem } from "../../lib/uploads";
 import { copyAttachmentLink, copyViewerImage } from "../../lib/image-viewer-clipboard";
 
-type ImageViewerProps = {
+export type ImageViewerProps = {
   items: ImageViewerItem[];
   initialIndex: number;
   onClose: () => void;
-};
-
-type ErrorBoundaryProps = {
-  children: ReactNode;
-  onClose: () => void;
-};
-
-type ErrorBoundaryState = {
-  failed: boolean;
 };
 
 type ContextMenuPosition = {
@@ -32,32 +15,19 @@ type ContextMenuPosition = {
   y: number;
 };
 
-class ImageViewerErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { failed: false };
-
-  static getDerivedStateFromError(): ErrorBoundaryState {
-    return { failed: true };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Image viewer failed to render", error, info);
-  }
-
-  render() {
-    if (!this.state.failed) return this.props.children;
-    return (
-      <div className="modal-scrim image-viewer-scrim" role="presentation">
-        <div className="image-viewer image-viewer--error" role="alertdialog" aria-modal="true">
-          <header>
-            <strong>Image unavailable</strong>
-            <button type="button" aria-label="Close image viewer" onClick={this.props.onClose}>
-              ×
-            </button>
-          </header>
-        </div>
+function ImageViewerFallback({ onClose }: ImageViewerProps) {
+  return (
+    <div className="modal-scrim image-viewer-scrim" role="presentation">
+      <div className="image-viewer image-viewer--error" role="alertdialog" aria-modal="true">
+        <header>
+          <strong>Image unavailable</strong>
+          <button type="button" aria-label="Close image viewer" onClick={onClose}>
+            ×
+          </button>
+        </header>
       </div>
-    );
-  }
+    </div>
+  );
 }
 
 function findFocusFallback(opener: HTMLElement | null): HTMLElement | null {
@@ -401,23 +371,10 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
   );
 }
 
-export type ImageViewerIsland = {
-  render: (props: ImageViewerProps) => void;
-  unmount: () => void;
-};
+export type ImageViewerIsland = ReactIsland<ImageViewerProps>;
 
-export function mountImageViewerIsland(
-  element: HTMLElement,
-  initialProps: ImageViewerProps,
-): ImageViewerIsland {
-  const root: Root = createRoot(element);
-  const render = (props: ImageViewerProps) => {
-    root.render(
-      <ImageViewerErrorBoundary onClose={props.onClose}>
-        <ImageViewer {...props} />
-      </ImageViewerErrorBoundary>,
-    );
-  };
-  render(initialProps);
-  return { render, unmount: () => root.unmount() };
-}
+export const mountImageViewerIsland = createReactIsland<ImageViewerProps>({
+  name: "Image viewer",
+  component: ImageViewer,
+  fallback: ImageViewerFallback,
+});

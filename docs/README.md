@@ -87,6 +87,8 @@ it for anything that isn't a local clone.
 
 - [Architecture](architecture/overview.md) — durable vs realtime, where each
   layer lives.
+- [React islands](architecture/react-islands.md) — React surfaces inside the
+  Svelte app, and what they are not allowed to own.
 - [API overview](api/overview.md) — REST/WebSocket surface, auth headers.
 - [Data model](data-model.md) — tables, IDs, thread invariants.
 - [SPEC.md](https://github.com/openclaw/clickclack/blob/main/SPEC.md) — locked

@@ -4,6 +4,13 @@ Question: can assistant-ui own ClickClack's thread and message interactions whil
 
 This is an architecture and interaction prototype, not production code.
 
+**Status: partly delivered.** The visual design below shipped, built in Svelte.
+The island migration described under "Production direction" did not happen, and
+the thread still renders on the original path. The mount contract the migration
+would use now exists and is used by two other panels
+(`docs/architecture/react-islands.md`). Whether to finish the migration or drop
+the intent is tracked as KAS-766.
+
 ## Run
 
 ```bash

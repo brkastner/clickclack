@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import ReactIslandHost from "../ReactIslandHost.svelte";
   import type { ImageViewerItem } from "../../lib/uploads";
   import {
     mountImageViewerIsland,
-    type ImageViewerIsland,
+    type ImageViewerProps,
   } from "./ImageViewerIsland";
 
   type Props = {
@@ -13,18 +13,12 @@
   };
 
   let { items, initialIndex = 0, onClose }: Props = $props();
-  let hostElement: HTMLDivElement | null = $state(null);
-  let island: ImageViewerIsland | null = null;
 
-  onMount(() => {
-    if (!hostElement) return;
-    island = mountImageViewerIsland(hostElement, { items, initialIndex, onClose });
-    return () => island?.unmount();
-  });
-
-  $effect(() => {
-    island?.render({ items, initialIndex, onClose });
-  });
+  const islandProps: ImageViewerProps = $derived({ items, initialIndex, onClose });
 </script>
 
-<div class="image-viewer-island" bind:this={hostElement}></div>
+<ReactIslandHost
+  mount={mountImageViewerIsland}
+  props={islandProps}
+  class="image-viewer-island"
+/>
