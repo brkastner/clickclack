@@ -31,11 +31,23 @@ test("message history handles page keys without stealing modal or editor navigat
   assert.match(messageList, /event\.key !== "PageUp" && event\.key !== "PageDown"/u);
   assert.match(messageList, /target\?\.closest\('\[role="dialog"\]'/u);
   assert.match(messageList, /\.composer-editor__content/u);
-  assert.match(messageList, /virtualizer\.scrollBy\(pageScrollDelta/u);
+  assert.match(messageList, /interruptScroll\(\);\s+const direction/u);
+  assert.match(messageList, /scrollEl\.scrollTop \+= pageScrollDelta/u);
+});
+
+test("message history owns viewport writes and fails open after restore errors", () => {
+  assert.doesNotMatch(messageList, /virtualizer\.(?:scrollTo|scrollToIndex|scrollBy)\(/u);
+  assert.match(messageList, /message history restore timed out/u);
+  assert.match(messageList, /message history restore failed/u);
+  assert.match(messageList, /beginScrollCommand\(\);\s+emitHistorySettled\(\);/u);
 });
 
 test("middle-button scrolling captures the pointer and cleans up on release", () => {
   assert.match(messageList, /event\.button !== MIDDLE_MOUSE_BUTTON/u);
+  assert.match(
+    messageList,
+    /MIDDLE_SCROLL_INTERACTIVE_TARGETS[\s\S]*?interruptScroll\(\);\s+event\.preventDefault\(\)/u,
+  );
   assert.match(messageList, /scrollEl\.setPointerCapture\(event\.pointerId\)/u);
   assert.match(messageList, /scrollEl\.releasePointerCapture\(pointerID\)/u);
   assert.match(messageList, /lostpointercapture/u);

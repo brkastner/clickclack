@@ -2188,11 +2188,14 @@
     const shouldLoadNewer =
       newerPageState === "settling" && pendingNewerPageIntent && state.nearNewer && activeHasNewer;
 
-    if (olderPageState === "settling") setHistoryEdgeState("older", "idle");
-    if (newerPageState === "settling") setHistoryEdgeState("newer", "idle");
-
-    pendingOlderPageIntent = false;
-    pendingNewerPageIntent = false;
+    if (olderPageState === "settling") {
+      setHistoryEdgeState("older", "idle");
+      pendingOlderPageIntent = false;
+    }
+    if (newerPageState === "settling") {
+      setHistoryEdgeState("newer", "idle");
+      pendingNewerPageIntent = false;
+    }
 
     if (shouldLoadOlder) requestOlderMessages();
     if (shouldLoadNewer) requestNewerMessages();
