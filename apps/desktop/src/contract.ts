@@ -53,6 +53,28 @@ export type DesktopNotification = {
   title: string;
 };
 
+export type DesktopTerminalDimensions = {
+  cols: number;
+  rows: number;
+};
+
+export type DesktopTerminalData = {
+  data: string;
+  sequence: number;
+};
+
+export type DesktopTerminalStatus =
+  | { state: "idle" }
+  | { state: "running"; pid: number }
+  | { state: "exited"; exitCode: number | null; signal: number | null }
+  | { state: "error"; message: string };
+
+export const MAX_TERMINAL_INPUT_BYTES = 64 * 1024;
+export const MIN_TERMINAL_COLUMNS = 2;
+export const MAX_TERMINAL_COLUMNS = 500;
+export const MIN_TERMINAL_ROWS = 1;
+export const MAX_TERMINAL_ROWS = 300;
+
 export type DesktopTitleBarOptions = {
   titleBarOverlay?: {
     color: string;
@@ -241,6 +263,68 @@ export function clampUnreadCount(input: unknown): number {
   const count = typeof input === "number" ? input : Number(input);
   if (!Number.isFinite(count)) return 0;
   return Math.max(0, Math.min(9999, Math.floor(count)));
+}
+
+export function normalizeTerminalDimensions(input: unknown): DesktopTerminalDimensions | null {
+  if (!input || typeof input !== "object") return null;
+  const record = input as Record<string, unknown>;
+  const cols = record.cols;
+  const rows = record.rows;
+  if (
+    typeof cols !== "number" ||
+    !Number.isInteger(cols) ||
+    cols < MIN_TERMINAL_COLUMNS ||
+    cols > MAX_TERMINAL_COLUMNS ||
+    typeof rows !== "number" ||
+    !Number.isInteger(rows) ||
+    rows < MIN_TERMINAL_ROWS ||
+    rows > MAX_TERMINAL_ROWS
+  ) {
+    return null;
+  }
+  return { cols, rows };
+}
+
+export function sanitizeTerminalInput(input: unknown): string | null {
+  return typeof input === "string" &&
+    new TextEncoder().encode(input).byteLength <= MAX_TERMINAL_INPUT_BYTES
+    ? input
+    : null;
+}
+
+export function isDesktopTerminalData(input: unknown): input is DesktopTerminalData {
+  if (!input || typeof input !== "object") return false;
+  const record = input as Record<string, unknown>;
+  return (
+    typeof record.data === "string" &&
+    typeof record.sequence === "number" &&
+    Number.isSafeInteger(record.sequence) &&
+    record.sequence > 0
+  );
+}
+
+export function normalizeTerminalSequence(input: unknown): number | null {
+  return typeof input === "number" && Number.isSafeInteger(input) && input > 0 ? input : null;
+}
+
+export function isDesktopTerminalStatus(input: unknown): input is DesktopTerminalStatus {
+  if (!input || typeof input !== "object") return false;
+  const record = input as Record<string, unknown>;
+  if (record.state === "idle") return true;
+  if (record.state === "running") {
+    return typeof record.pid === "number" && Number.isInteger(record.pid) && record.pid > 0;
+  }
+  if (record.state === "exited") {
+    return (
+      (record.exitCode === null ||
+        (typeof record.exitCode === "number" && Number.isInteger(record.exitCode))) &&
+      (record.signal === null ||
+        (typeof record.signal === "number" && Number.isInteger(record.signal)))
+    );
+  }
+  return (
+    record.state === "error" && typeof record.message === "string" && record.message.length <= 500
+  );
 }
 
 export function sanitizeNotification(input: unknown): DesktopNotification | null {

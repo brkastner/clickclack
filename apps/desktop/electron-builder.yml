@@ -2,6 +2,8 @@ appId: chat.clickclack.desktop
 productName: ClickClack
 copyright: Copyright © OpenClaw contributors
 asar: true
+asarUnpack:
+  - node_modules/node-pty/**/*
 compression: normal
 afterSign: scripts/after-sign.mjs
 directories:

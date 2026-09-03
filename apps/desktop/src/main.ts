@@ -1,5 +1,6 @@
 import {
   app,
+  BaseWindow,
   BrowserWindow,
   clipboard,
   dialog,
@@ -13,11 +14,15 @@ import {
   session,
   shell,
   Tray,
+  WebContentsView,
   type MenuItemConstructorOptions,
+  type Session,
+  type WebContents,
 } from "electron";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   appURL,
   clampUnreadCount,
@@ -42,13 +47,17 @@ import {
   type PublicDesktopSettings,
   type WindowState,
 } from "./contract";
+import { createLocalTerminalProcessFactory, TerminalSurface } from "./terminal-surface";
 
 const PROTOCOLS = [LEGACY_DESKTOP_PROTOCOL, DESKTOP_AUTH_PROTOCOL] as const;
 const SETTINGS_FILE = "desktop.json";
 const APP_NAME = "ClickClack";
 const MAX_CLIPBOARD_IMAGE_BYTES = 64 * 1024 * 1024;
 
-let mainWindow: BrowserWindow | null = null;
+let mainWindow: BaseWindow | null = null;
+let applicationView: WebContentsView | null = null;
+let terminalSurface: TerminalSurface | null = null;
+let applicationReady = false;
 let settingsWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let settings = defaultSettings();
@@ -131,10 +140,10 @@ function protocolURLFromArgs(args: readonly string[]): string | undefined {
   return args.find((argument) => PROTOCOLS.some((protocol) => argument.startsWith(`${protocol}:`)));
 }
 
-function createMainWindow(route = currentRoute): BrowserWindow {
+function createMainWindow(route = currentRoute): BaseWindow {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
   const saved = visibleWindowState(settings.window);
-  const window = new BrowserWindow({
+  const window = new BaseWindow({
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#131419" : "#f7f3ed",
     height: saved.height ?? 860,
     icon: assetPath("icon.png"),
@@ -148,6 +157,8 @@ function createMainWindow(route = currentRoute): BrowserWindow {
     width: saved.width ?? 1280,
     ...(saved.x === undefined ? {} : { x: saved.x }),
     ...(saved.y === undefined ? {} : { y: saved.y }),
+  });
+  const appView = new WebContentsView({
     webPreferences: {
       additionalArguments: [
         `${DESKTOP_SERVER_ORIGIN_ARG}${normalizeServerURL(settings.serverUrl)}`,
@@ -162,12 +173,73 @@ function createMainWindow(route = currentRoute): BrowserWindow {
       webSecurity: true,
     },
   });
-  mainWindow = window;
-  configureWebContents(window);
+  appView.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#131419" : "#f7f3ed");
 
-  window.once("ready-to-show", () => {
+  const terminalURL = pathToFileURL(resourcePath("terminal.html")).href;
+  const terminalPartition = `clickclack-terminal-${randomBytes(12).toString("hex")}`;
+  const terminalSession = session.fromPartition(terminalPartition, { cache: false });
+  const localTerminalView = new WebContentsView({
+    webPreferences: {
+      backgroundThrottling: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      partition: terminalPartition,
+      preload: distPath("terminal-preload.cjs"),
+      sandbox: true,
+      spellcheck: false,
+      webSecurity: true,
+      webviewTag: false,
+    },
+  });
+  localTerminalView.setBackgroundColor("#1f1d2e");
+  secureTerminalView(localTerminalView.webContents, terminalSession, terminalURL);
+
+  window.contentView.addChildView(appView);
+  window.contentView.addChildView(localTerminalView);
+  const surface = new TerminalSurface({
+    applicationView: appView,
+    createProcess: createLocalTerminalProcessFactory(
+      process.platform,
+      process.env,
+      app.getPath("home"),
+    ),
+    integratedTitleBar,
+    onOpenChanged: createApplicationMenu,
+    platform: process.platform,
+    readClipboard: () => clipboard.readText(),
+    terminalURL,
+    terminalView: localTerminalView,
+    window,
+    writeClipboard: (text) => clipboard.writeText(text),
+  });
+  appView.webContents.on("focus", createApplicationMenu);
+  localTerminalView.webContents.on("focus", createApplicationMenu);
+  localTerminalView.webContents.on("context-menu", () => {
+    Menu.buildFromTemplate([
+      { label: "Copy", click: () => surface.sendCommand("copy") },
+      { label: "Paste", click: () => surface.sendCommand("paste") },
+    ]).popup({ window });
+  });
+
+  mainWindow = window;
+  applicationView = appView;
+  terminalSurface = surface;
+  applicationReady = false;
+  configureWebContents(window, appView.webContents);
+  createApplicationMenu();
+
+  let applicationPresented = false;
+  const presentApplication = () => {
+    if (applicationPresented || mainWindow !== window || applicationView !== appView) return;
+    applicationPresented = true;
+    applicationReady = true;
     if (saved.maximized) window.maximize();
+    surface.layout();
     window.show();
+  };
+  appView.webContents.once("did-finish-load", presentApplication);
+  appView.webContents.once("did-fail-load", (_event, _code, _description, _url, isMainFrame) => {
+    if (isMainFrame) presentApplication();
   });
   window.on("close", (event) => {
     rememberWindowState();
@@ -177,20 +249,40 @@ function createMainWindow(route = currentRoute): BrowserWindow {
     }
   });
   window.on("closed", () => {
-    if (mainWindow === window) mainWindow = null;
+    surface.dispose();
+    if (!appView.webContents.isDestroyed()) appView.webContents.close();
+    if (mainWindow === window) {
+      mainWindow = null;
+      applicationView = null;
+      terminalSurface = null;
+      applicationReady = false;
+    }
   });
-  window.on("resize", scheduleWindowStateSave);
+  window.on("resize", () => {
+    surface.layout();
+    scheduleWindowStateSave();
+  });
   window.on("move", scheduleWindowStateSave);
-  window.on("maximize", scheduleWindowStateSave);
-  window.on("unmaximize", scheduleWindowStateSave);
-  window.webContents.on("did-navigate", (_event, url) => {
+  window.on("maximize", () => {
+    surface.layout();
+    scheduleWindowStateSave();
+  });
+  window.on("unmaximize", () => {
+    surface.layout();
+    scheduleWindowStateSave();
+  });
+  appView.webContents.on("did-navigate", (_event, url) => {
     const parsed = routeFromServerURL(url);
     if (parsed) currentRoute = parsed;
   });
-  window.webContents.on("render-process-gone", (_event, details) => {
-    if (details.reason !== "clean-exit") void window.webContents.reload();
+  appView.webContents.on("page-title-updated", (_event, title) => {
+    window.setTitle(title || APP_NAME);
   });
-  void window.loadURL(appURL(settings.serverUrl, route));
+  appView.webContents.on("render-process-gone", (_event, details) => {
+    if (details.reason !== "clean-exit") void appView.webContents.reload();
+  });
+  void surface.load().catch((error) => console.error("Could not load terminal surface", error));
+  void appView.webContents.loadURL(appURL(settings.serverUrl, route)).catch(presentApplication);
   return window;
 }
 
@@ -240,33 +332,62 @@ async function responsePrefix(response: Response): Promise<string> {
   return result + decoder.decode();
 }
 
-function configureWebContents(window: BrowserWindow) {
-  window.webContents.setWindowOpenHandler(({ url }) => {
+function secureTerminalView(contents: WebContents, terminalSession: Session, terminalURL: string) {
+  const allowedURLs = new Set([
+    terminalURL,
+    pathToFileURL(distPath("terminal-renderer.js")).href,
+    pathToFileURL(distPath("terminal-renderer.css")).href,
+  ]);
+  terminalSession.setPermissionRequestHandler((_contents, _permission, callback) =>
+    callback(false),
+  );
+  terminalSession.setPermissionCheckHandler(() => false);
+  terminalSession.on("will-download", (event, item) => {
+    event.preventDefault();
+    item.cancel();
+  });
+  terminalSession.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: !allowedURLs.has(details.url) });
+  });
+  contents.setWindowOpenHandler(() => ({ action: "deny" }));
+  contents.on("will-navigate", (event, url) => {
+    if (url !== terminalURL) event.preventDefault();
+  });
+  contents.on("will-frame-navigate", (event) => {
+    if (!event.isMainFrame || event.url !== terminalURL) event.preventDefault();
+  });
+  contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+    if (isMainFrame && url !== terminalURL) void contents.loadURL(terminalURL).catch(() => {});
+  });
+  contents.on("will-attach-webview", (event) => event.preventDefault());
+}
+
+function configureWebContents(window: BaseWindow, contents: WebContents) {
+  contents.setWindowOpenHandler(({ url }) => {
     if (isGitHubLoginStartURL(url)) {
       void beginDesktopOAuth();
     } else if (isAllowedMainWindowURL(url)) {
-      void window.loadURL(url);
+      void contents.loadURL(url);
     } else if (isExternalURL(url)) {
       void shell.openExternal(url);
     }
     return { action: "deny" };
   });
-  window.webContents.on("will-navigate", guardMainFrameNavigation);
-  window.webContents.on("will-redirect", guardMainFrameNavigation);
-  window.webContents.on("context-menu", (_event, params) => {
+  contents.on("will-navigate", guardMainFrameNavigation);
+  contents.on("will-redirect", guardMainFrameNavigation);
+  contents.on("context-menu", (_event, params) => {
     const template: MenuItemConstructorOptions[] = [];
     if (params.misspelledWord) {
       for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
         template.push({
           label: suggestion,
-          click: () => window.webContents.replaceMisspelling(suggestion),
+          click: () => contents.replaceMisspelling(suggestion),
         });
       }
       if (template.length > 0) template.push({ type: "separator" });
       template.push({
         label: `Learn “${params.misspelledWord}”`,
-        click: () =>
-          window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+        click: () => contents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
       });
     }
     if (params.isEditable) {
@@ -390,6 +511,9 @@ function registerIPC() {
   ipcMain.on("desktop:open-settings", (event) => {
     if (isMainSender(event)) createSettingsWindow();
   });
+  ipcMain.on("desktop:terminal-toggle", (event) => {
+    if (isMainSender(event)) terminalSurface?.toggle();
+  });
   ipcMain.handle("desktop:sign-in-with-github", async (event) => {
     if (!isMainSender(event)) return false;
     await beginDesktopOAuth();
@@ -425,6 +549,37 @@ function registerIPC() {
     clipboard.writeText(input);
     return true;
   });
+  ipcMain.handle(
+    "desktop:terminal-presentation",
+    (event) => terminalSurface?.presentation(event) ?? null,
+  );
+  ipcMain.on("desktop:terminal-hide", (event) => terminalSurface?.requestHide(event));
+  ipcMain.handle(
+    "desktop:terminal-start",
+    (event) => terminalSurface?.start(event) ?? terminalRequestRejected(),
+  );
+  ipcMain.handle(
+    "desktop:terminal-status",
+    (event) => terminalSurface?.status(event) ?? terminalRequestRejected(),
+  );
+  ipcMain.on("desktop:terminal-write", (event, input) => terminalSurface?.write(event, input));
+  ipcMain.on("desktop:terminal-resize", (event, input) => terminalSurface?.resize(event, input));
+  ipcMain.on("desktop:terminal-output-ready", (event) => terminalSurface?.outputReady(event));
+  ipcMain.on("desktop:terminal-output-ack", (event, input) =>
+    terminalSurface?.acknowledgeOutput(event, input),
+  );
+  ipcMain.handle(
+    "desktop:terminal-terminate",
+    (event) => terminalSurface?.terminate(event) ?? terminalRequestRejected(),
+  );
+  ipcMain.handle(
+    "desktop:terminal-read-clipboard",
+    (event) => terminalSurface?.readClipboard(event) ?? null,
+  );
+  ipcMain.handle(
+    "desktop:terminal-write-clipboard",
+    (event, input) => terminalSurface?.writeClipboard(event, input) ?? false,
+  );
 
   ipcMain.handle("settings:get", (event) => {
     requireSettingsSender(event.sender.id);
@@ -477,6 +632,10 @@ function registerIPC() {
   });
 }
 
+function terminalRequestRejected() {
+  return { state: "error", message: "Terminal request rejected" };
+}
+
 function settingsInfo() {
   return {
     closeToTray: settings.closeToTray,
@@ -492,8 +651,10 @@ function isMainSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent
   return Boolean(
     mainWindow &&
     !mainWindow.isDestroyed() &&
-    mainWindow.webContents.id === event.sender.id &&
-    event.senderFrame &&
+    applicationView &&
+    !applicationView.webContents.isDestroyed() &&
+    applicationView.webContents.id === event.sender.id &&
+    event.senderFrame === applicationView.webContents.mainFrame &&
     isSameServerURL(event.senderFrame.url),
   );
 }
@@ -515,8 +676,9 @@ function secureSession() {
       callback(
         Boolean(
           mainWindow &&
+          applicationView &&
           !mainWindow.isDestroyed() &&
-          mainWindow.webContents.id === webContents.id &&
+          applicationView.webContents.id === webContents.id &&
           desktopAudioPermissionAllowed(permission, securityOrigin, settings.serverUrl, mediaTypes),
         ),
       );
@@ -526,9 +688,10 @@ function secureSession() {
     (webContents, permission, requestingOrigin, details) =>
       Boolean(
         mainWindow &&
+        applicationView &&
         webContents &&
         !mainWindow.isDestroyed() &&
-        mainWindow.webContents.id === webContents.id &&
+        applicationView.webContents.id === webContents.id &&
         desktopAudioPermissionAllowed(
           permission,
           details.securityOrigin ?? requestingOrigin,
@@ -556,6 +719,29 @@ function installDownloadHandling() {
 }
 
 function createApplicationMenu() {
+  const terminalFocused = terminalSurface?.isFocused() ?? false;
+  const editItems: MenuItemConstructorOptions[] = terminalFocused
+    ? [
+        {
+          label: "Copy",
+          accelerator: process.platform === "darwin" ? "Cmd+C" : "Ctrl+Shift+C",
+          click: () => terminalSurface?.sendCommand("copy"),
+        },
+        {
+          label: "Paste",
+          accelerator: process.platform === "darwin" ? "Cmd+V" : "Ctrl+Shift+V",
+          click: () => terminalSurface?.sendCommand("paste"),
+        },
+      ]
+    : [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" },
+      ];
   const template: MenuItemConstructorOptions[] = [];
   if (process.platform === "darwin") {
     template.push({
@@ -590,27 +776,42 @@ function createApplicationMenu() {
             ]),
       ],
     },
-    {
-      label: "Edit",
-      submenu: [
-        { role: "undo" },
-        { role: "redo" },
-        { type: "separator" },
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
-        { role: "selectAll" },
-      ],
-    },
+    { label: "Edit", submenu: editItems },
     {
       label: "View",
       submenu: [
-        { role: "reload" },
-        { role: "forceReload" },
+        {
+          label: "Reload",
+          accelerator: "CmdOrCtrl+R",
+          click: () => applicationView?.webContents.reload(),
+        },
+        {
+          label: "Force Reload",
+          accelerator: "CmdOrCtrl+Shift+R",
+          click: () => applicationView?.webContents.reloadIgnoringCache(),
+        },
         { type: "separator" },
-        { role: "resetZoom" },
-        { role: "zoomIn" },
-        { role: "zoomOut" },
+        {
+          label: "Actual Size",
+          accelerator: "CmdOrCtrl+0",
+          click: () => applicationView?.webContents.setZoomLevel(0),
+        },
+        {
+          label: "Zoom In",
+          accelerator: "CmdOrCtrl+Plus",
+          click: () => changeApplicationZoom(0.5),
+        },
+        {
+          label: "Zoom Out",
+          accelerator: "CmdOrCtrl+-",
+          click: () => changeApplicationZoom(-0.5),
+        },
+        { type: "separator" },
+        {
+          label: "Toggle Terminal",
+          accelerator: "CmdOrCtrl+J",
+          click: () => terminalSurface?.toggle(),
+        },
         { type: "separator" },
         { role: "togglefullscreen" },
       ],
@@ -618,6 +819,12 @@ function createApplicationMenu() {
     { label: "Window", submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }] },
   );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function changeApplicationZoom(delta: number) {
+  const contents = applicationView?.webContents;
+  if (!contents) return;
+  contents.setZoomLevel(Math.max(-3, Math.min(3, contents.getZoomLevel() + delta)));
 }
 
 function createTray() {
@@ -669,12 +876,15 @@ function setUnreadCount(next: number) {
 }
 
 function quickCompose() {
+  terminalSurface?.hide();
   showMainWindow();
-  mainWindow?.webContents.send("desktop:quick-compose");
+  applicationView?.webContents.focus();
+  applicationView?.webContents.send("desktop:quick-compose");
 }
 
 function showMainWindow() {
   const window = mainWindow ?? createMainWindow();
+  if (!applicationReady) return;
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
@@ -683,18 +893,18 @@ function showMainWindow() {
 function openRoute(route: string | null | undefined) {
   const safeRoute = safeAppRoute(route ?? "") ?? "/app";
   currentRoute = safeRoute;
-  const window = mainWindow ?? createMainWindow(safeRoute);
+  if (!mainWindow) createMainWindow(safeRoute);
   showMainWindow();
-  if (!isSameServerURL(window.webContents.getURL())) {
-    void window.loadURL(appURL(settings.serverUrl, safeRoute));
+  const contents = applicationView?.webContents;
+  if (!contents) return;
+  if (!isSameServerURL(contents.getURL())) {
+    void contents.loadURL(appURL(settings.serverUrl, safeRoute));
     return;
   }
-  if (window.webContents.isLoading()) {
-    window.webContents.once("did-finish-load", () =>
-      window.webContents.send("desktop:navigate", safeRoute),
-    );
+  if (contents.isLoading()) {
+    contents.once("did-finish-load", () => contents.send("desktop:navigate", safeRoute));
   } else {
-    window.webContents.send("desktop:navigate", safeRoute);
+    contents.send("desktop:navigate", safeRoute);
   }
 }
 
@@ -763,8 +973,10 @@ async function completeDesktopOAuth(code: string) {
     await meResponse.arrayBuffer();
     pendingDesktopAuth = null;
     currentRoute = "/app";
-    const window = mainWindow ?? createMainWindow(currentRoute);
-    await window.loadURL(appURL(pending.serverUrl, currentRoute));
+    if (!mainWindow) createMainWindow(currentRoute);
+    const contents = applicationView?.webContents;
+    if (!contents) throw new Error("Application view is unavailable");
+    await contents.loadURL(appURL(pending.serverUrl, currentRoute));
     showMainWindow();
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown authentication error";

@@ -11,12 +11,18 @@ import {
   desktopTitleBarOptions,
   deepLinkToRoute,
   hasIntegratedTitleBarCapability,
+  isDesktopTerminalData,
+  isDesktopTerminalStatus,
   isSafeClipboardPNG,
   MAX_CLIPBOARD_IMAGE_DIMENSION,
+  MAX_TERMINAL_INPUT_BYTES,
   mergeSettings,
   normalizeServerURL,
+  normalizeTerminalDimensions,
+  normalizeTerminalSequence,
   safeAppRoute,
   sanitizeNotification,
+  sanitizeTerminalInput,
 } from "./contract";
 
 function pngHeader(width: number, height: number): ArrayBuffer {
@@ -210,6 +216,42 @@ test("detects renderer support before replacing native window chrome", () => {
     false,
   );
   assert.equal(hasIntegratedTitleBarCapability("<html><head></head></html>"), false);
+});
+
+test("validates terminal input, dimensions, and status payloads", () => {
+  assert.deepEqual(normalizeTerminalDimensions({ cols: 120, rows: 36 }), {
+    cols: 120,
+    rows: 36,
+  });
+  assert.deepEqual(normalizeTerminalDimensions({ cols: 2, rows: 1 }), { cols: 2, rows: 1 });
+  assert.deepEqual(normalizeTerminalDimensions({ cols: 500, rows: 300 }), {
+    cols: 500,
+    rows: 300,
+  });
+  assert.equal(normalizeTerminalDimensions({ cols: 1, rows: 36 }), null);
+  assert.equal(normalizeTerminalDimensions({ cols: 120, rows: 301 }), null);
+  assert.equal(normalizeTerminalDimensions({ cols: 120.5, rows: 36 }), null);
+  assert.equal(normalizeTerminalDimensions({ cols: "120", rows: 36 }), null);
+
+  assert.equal(sanitizeTerminalInput("echo ready\r"), "echo ready\r");
+  assert.equal(sanitizeTerminalInput("x".repeat(MAX_TERMINAL_INPUT_BYTES + 1)), null);
+  assert.equal(sanitizeTerminalInput("🙂".repeat(MAX_TERMINAL_INPUT_BYTES / 4 + 1)), null);
+  assert.equal(sanitizeTerminalInput(new Uint8Array()), null);
+
+  assert.equal(isDesktopTerminalData({ data: "ready", sequence: 1 }), true);
+  assert.equal(isDesktopTerminalData({ data: "ready", sequence: 0 }), false);
+  assert.equal(isDesktopTerminalData({ data: new Uint8Array(), sequence: 1 }), false);
+  assert.equal(normalizeTerminalSequence(42), 42);
+  assert.equal(normalizeTerminalSequence(1.5), null);
+  assert.equal(normalizeTerminalSequence("42"), null);
+
+  assert.equal(isDesktopTerminalStatus({ state: "idle" }), true);
+  assert.equal(isDesktopTerminalStatus({ state: "running", pid: 42 }), true);
+  assert.equal(isDesktopTerminalStatus({ state: "exited", exitCode: 0, signal: null }), true);
+  assert.equal(isDesktopTerminalStatus({ state: "error", message: "failed" }), true);
+  assert.equal(isDesktopTerminalStatus({ state: "error", message: "x".repeat(501) }), false);
+  assert.equal(isDesktopTerminalStatus({ state: "running", pid: -1 }), false);
+  assert.equal(isDesktopTerminalStatus({ state: "unknown" }), false);
 });
 
 test("bounds badge and notification data from the renderer", () => {

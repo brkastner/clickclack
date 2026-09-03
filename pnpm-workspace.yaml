@@ -13,6 +13,7 @@ overrides:
 allowBuilds:
   electron-winstaller: true
   esbuild: true
+  node-pty: true
   sharp: true
   workerd: true
 minimumReleaseAge: 2880

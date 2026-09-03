@@ -50,5 +50,6 @@ CLICKCLACK_OFFICIAL_MACOS_RELEASE=1 \
     --config.extraMetadata.version="$version" \
     --publish never
 
+pnpm smoke:terminal:packaged
 "$root/scripts/verify-macos-release.sh" "$tag" "$root/release"
 node "$root/scripts/release-artifacts.mjs" mac "$version" "$root/release"

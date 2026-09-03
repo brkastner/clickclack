@@ -17,6 +17,7 @@ export type ClickClackDesktopBridge = {
   setActiveRoute(route: string): void;
   setUnreadCount(count: number): void;
   signInWithGitHub(): Promise<boolean>;
+  toggleTerminal(): void;
   writeClipboardImage(png: ArrayBuffer): Promise<boolean>;
   writeClipboardText(text: string): Promise<boolean>;
 };
@@ -104,6 +105,7 @@ const bridge: ClickClackDesktopBridge = {
   setUnreadCount: (count) => ipcRenderer.send("desktop:set-unread", count),
   setActiveRoute: (route) => ipcRenderer.send("desktop:set-active-route", route),
   signInWithGitHub: () => ipcRenderer.invoke("desktop:sign-in-with-github"),
+  toggleTerminal: () => ipcRenderer.send("desktop:terminal-toggle"),
   writeClipboardImage: (png) => ipcRenderer.invoke("desktop:write-clipboard-image", png),
   writeClipboardText: (text) => ipcRenderer.invoke("desktop:write-clipboard-text", text),
   openSettings: () => ipcRenderer.send("desktop:open-settings"),

@@ -1,0 +1,123 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import test from "node:test";
+
+const readSource = (relativePath: string) =>
+  readFileSync(path.resolve(process.cwd(), "src", relativePath), "utf8");
+const readDesktopFile = (relativePath: string) =>
+  readFileSync(path.resolve(process.cwd(), relativePath), "utf8");
+
+test("keeps terminal I/O out of the page-facing preload while exposing its toggle", () => {
+  const preload = readSource("./app-preload.ts");
+  const main = readSource("./main.ts");
+  const desktopBridge = readDesktopFile("../web/src/lib/desktop.ts");
+  const titlebar = readDesktopFile("../web/src/components/topbar/DesktopTitlebar.svelte");
+
+  assert.match(preload, /toggleTerminal: \(\) => ipcRenderer\.send\("desktop:terminal-toggle"\)/u);
+  assert.match(main, /"desktop:terminal-toggle"[\s\S]*isMainSender\(event\)/u);
+  assert.match(desktopBridge, /toggleTerminal\(\): void/u);
+  assert.match(titlebar, /aria-label="Toggle terminal"/u);
+  assert.match(titlebar, /desktop\?\.toggleTerminal\(\)/u);
+  assert.doesNotMatch(
+    preload,
+    /desktop:terminal-(?:data|output|resize|start|status|terminate|write)/u,
+  );
+  assert.match(preload, /contextBridge\.exposeInMainWorld\("clickclackDesktop"/u);
+});
+
+test("mounts the local renderer only into its packaged root", () => {
+  const renderer = readSource("./terminal-renderer.tsx");
+  const dock = readSource("./terminal-dock.tsx");
+
+  assert.match(renderer, /document\.getElementById\("terminal-root"\)/u);
+  assert.match(renderer, /mountTerminalDock\(root, client\)/u);
+  assert.doesNotMatch(renderer, /querySelector/u);
+  assert.doesNotMatch(dock, /main\.timeline|topbar-actions|desktop-titlebar-actions/u);
+  assert.doesNotMatch(dock, /attachShadow|MutationObserver|terminal-toggle/u);
+});
+
+test("fits, resizes, focuses, and starts before accepting queued input", () => {
+  const source = readSource("./terminal-dock.tsx");
+  const firstPresentation =
+    source.match(/const prepareAndStart = \(\) => \{([\s\S]*?)\n    \};/u)?.[1] ?? "";
+  const fit = firstPresentation.indexOf("proposedDimensions(");
+  const resize = firstPresentation.indexOf("client.resize(dimensions)");
+  const focus = firstPresentation.indexOf("xterm.focus()");
+  const ready = firstPresentation.indexOf("client.outputReady()");
+  const start = firstPresentation.indexOf("startTerminal()");
+
+  assert.ok(fit >= 0 && fit < resize && resize < focus && focus < start && start < ready);
+  assert.match(source, /const canRestart = initialized &&/u);
+});
+
+test("closing hides the native surface without terminating the shell", () => {
+  const source = readSource("./terminal-dock.tsx");
+  const application =
+    source.match(
+      /function TerminalApplication[\s\S]*?\n\}\n\nexport type MountedTerminalDock/u,
+    )?.[0] ?? "";
+
+  assert.match(application, /onClose=\{client\.close\}/u);
+  assert.doesNotMatch(application, /terminate/u);
+});
+
+test("acknowledges output only after xterm finishes processing it", () => {
+  const source = readSource("./terminal-dock.tsx");
+  const preload = readSource("./terminal-preload.ts");
+
+  assert.match(
+    source,
+    /client\.onData\(\(data, acknowledge\) => xterm\.write\(data, acknowledge\)\)/u,
+  );
+  assert.match(preload, /desktop:terminal-output-ack/u);
+  assert.match(preload, /if \(acknowledged\) return/u);
+});
+
+test("keeps platform copy and paste shortcuts local while preserving Ctrl+C input", () => {
+  const source = readSource("./terminal-dock.tsx");
+
+  assert.match(source, /event\.ctrlKey && event\.shiftKey[\s\S]*key === "c"/u);
+  assert.match(source, /event\.ctrlKey && event\.shiftKey[\s\S]*key === "v"/u);
+  assert.match(source, /event\.metaKey[\s\S]*key === "c"/u);
+  assert.match(source, /event\.metaKey[\s\S]*key === "v"/u);
+  assert.doesNotMatch(source, /event\.ctrlKey && !event\.shiftKey[\s\S]*key === "c"/u);
+});
+
+test("uses native sibling views and targets application-only menu actions", () => {
+  const main = readSource("./main.ts");
+  const addApplication = main.indexOf("window.contentView.addChildView(appView)");
+  const addTerminal = main.indexOf("window.contentView.addChildView(localTerminalView)");
+
+  assert.match(main, /const window = new BaseWindow/u);
+  assert.ok(addApplication >= 0 && addApplication < addTerminal);
+  assert.match(main, /applicationView\?\.webContents\.reload\(\)/u);
+  assert.match(main, /applicationView\?\.webContents\.reloadIgnoringCache\(\)/u);
+  assert.match(main, /accelerator: "CmdOrCtrl\+J"/u);
+  assert.match(main, /desktop:terminal-toggle/u);
+  assert.match(
+    main,
+    /terminalSurface\?\.hide\(\);[\s\S]*applicationView\?\.webContents\.focus\(\)/u,
+  );
+  assert.match(main, /window\.on\("closed", \(\) => \{[\s\S]*surface\.dispose\(\)/u);
+});
+
+test("builds and packages a locked-down local terminal document", () => {
+  const build = readDesktopFile("scripts/build.mjs");
+  const html = readDesktopFile("resources/terminal.html");
+  const terminalPreload = readSource("./terminal-preload.ts");
+  const packagedSmoke = readDesktopFile("scripts/smoke-terminal.mjs");
+  const builder = readDesktopFile("electron-builder.yml");
+
+  assert.match(build, /"terminal-preload": "src\/terminal-preload\.ts"/u);
+  assert.match(build, /"terminal-renderer": "src\/terminal-renderer\.tsx"/u);
+  assert.match(html, /default-src 'none'/u);
+  assert.match(html, /connect-src 'none'/u);
+  assert.match(html, /frame-src 'none'/u);
+  assert.match(html, /id="terminal-root"/u);
+  assert.doesNotMatch(terminalPreload, /clickclackDesktop/u);
+  assert.match(builder, /- dist\/\*\*\/\*/u);
+  assert.match(builder, /- resources\/\*\*\/\*/u);
+  assert.match(packagedSmoke, /verifyPackagedTerminalSurface/u);
+  assert.match(packagedSmoke, /resources\/terminal\.html/u);
+});

@@ -1,0 +1,5 @@
+{
+  "name": "clickclack-terminal-isolation-smoke",
+  "private": true,
+  "main": "main.cjs"
+}
