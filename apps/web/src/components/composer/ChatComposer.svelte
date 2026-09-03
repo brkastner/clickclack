@@ -759,7 +759,7 @@
                   {:else if attachment.state === "failed"}
                     Upload failed · {formatBytes(attachment.file.size)}
                   {:else}
-                    Ready · {formatBytes(attachment.file.size)}
+                    Ready · {formatBytes(attachment.upload?.byte_size ?? attachment.file.size)}
                   {/if}
                 </span>
               </span>

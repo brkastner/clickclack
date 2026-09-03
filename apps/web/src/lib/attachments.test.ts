@@ -5,6 +5,7 @@ import {
   appendPendingAttachments,
   clipboardImageFiles,
   mergeUploads,
+  pendingAttachmentsForUploads,
   readyUploads,
   uploadsMissingAttachments,
   type PendingAttachment,
@@ -80,6 +81,39 @@ test("retains the existing queue and rejects files beyond the message limit", ()
   assert.equal(result.attachments.length, MAX_MESSAGE_ATTACHMENTS);
   assert.equal(result.attachments.at(-1)?.file.name, "accepted.txt");
   assert.equal(result.rejectedCount, 1);
+});
+
+test("turns existing uploads into ready composer attachments", () => {
+  let serial = 0;
+  const source = [upload("upload-1", "first.txt"), upload("upload-2", "second.txt")];
+  const pending = pendingAttachmentsForUploads(source, () => `resend-${++serial}`);
+
+  assert.deepEqual(
+    pending.map((attachment) => ({
+      key: attachment.key,
+      filename: attachment.file.name,
+      workspaceID: attachment.workspaceID,
+      state: attachment.state,
+      uploadID: attachment.upload?.id,
+    })),
+    [
+      {
+        key: "resend-1",
+        filename: "first.txt",
+        workspaceID: "workspace-1",
+        state: "ready",
+        uploadID: "upload-1",
+      },
+      {
+        key: "resend-2",
+        filename: "second.txt",
+        workspaceID: "workspace-1",
+        state: "ready",
+        uploadID: "upload-2",
+      },
+    ],
+  );
+  assert.deepEqual(readyUploads(pending), source);
 });
 
 test("collects ready uploads and merges server attachments without duplicates", () => {

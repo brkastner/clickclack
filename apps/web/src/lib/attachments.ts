@@ -52,6 +52,19 @@ export function readyUploads(attachments: PendingAttachment[]): Upload[] {
   );
 }
 
+export function pendingAttachmentsForUploads(
+  uploads: Upload[],
+  createKey: () => string,
+): PendingAttachment[] {
+  return uploads.map((upload) => ({
+    key: createKey(),
+    file: new File([], upload.filename, { type: upload.content_type }),
+    workspaceID: upload.workspace_id,
+    state: "ready",
+    upload,
+  }));
+}
+
 export function uploadsMissingAttachments(
   uploads: Upload[],
   attachedUploadIDs: Iterable<string>,

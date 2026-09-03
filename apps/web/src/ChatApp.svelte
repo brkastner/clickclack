@@ -22,6 +22,7 @@
   import {
     appendPendingAttachments,
     mergeUploads,
+    pendingAttachmentsForUploads,
     readyUploads,
     uploadsMissingAttachments,
     type PendingAttachment,
@@ -2933,14 +2934,13 @@
   function resendMessage(message: Message) {
     const content = messageContentForResend(message);
     if (!content) return;
-    const draft: OutgoingDraft = {
-      ...content,
-      workspaceID: content.workspaceID || selectedWorkspaceID,
-      topicFilterID: activeTopicFilterID,
-      topicFilterGeneration,
-      viewKey: currentConversationKey(),
-    };
-    void dispatchDraft(draft);
+    stopTyping();
+    composerNotice = null;
+    messageBody = content.body;
+    pendingAttachments = pendingAttachmentsForUploads(content.uploads, newNonce);
+    if (replyTarget) clearReplyTarget();
+    activeComposerContext = "message";
+    void tick().then(() => messageInput?.focus());
   }
 
   async function dispatchRegisteredCommand(

@@ -67,3 +67,16 @@ test("shows the resend shortcut only for the current user's sent messages", () =
   assert.match(row, /aria-label="Resend message"/u);
   assert.match(row, /onclick=\{\(\) => onResend\?\.\(message\)\}/u);
 });
+
+test("resend fills the composer without dispatching the message", () => {
+  const app = readFileSync(new URL("../ChatApp.svelte", import.meta.url), "utf8");
+  const handler = app.match(
+    /function resendMessage\(message: Message\) \{[\s\S]*?\n  \}\n\n  async function dispatchRegisteredCommand/u,
+  )?.[0];
+
+  assert.ok(handler, "resendMessage handler should exist");
+  assert.match(handler, /messageBody = content\.body/u);
+  assert.match(handler, /pendingAttachments =/u);
+  assert.match(handler, /messageInput\?\.focus\(\)/u);
+  assert.doesNotMatch(handler, /dispatchDraft/u);
+});
