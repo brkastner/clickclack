@@ -96,6 +96,8 @@ void app.whenReady().then(async () => {
     await waitForXtermFocus(terminalView);
     assert.equal(processes.length, 1);
     assert.deepEqual(await applicationCounters(applicationView), zeroCounters());
+    processes[0].emitData("\x1b[31mRED \x1b[32mGREEN \x1b[34mBLUE \x1b[36mCYAN\x1b[0m\r\n");
+    await waitForDistinctTerminalColors(terminalView);
 
     window.destroy();
     await new Promise((resolve) => setImmediate(resolve));
@@ -132,6 +134,10 @@ class FakeProcess {
   onExit(callback) {
     this.exitCallback = callback;
     return { dispose: () => (this.exitCallback = null) };
+  }
+
+  emitData(data) {
+    this.dataCallback?.(data);
   }
 
   pause() {}
@@ -194,6 +200,22 @@ async function waitForXtermFocus(view) {
       'document.activeElement?.classList.contains("xterm-helper-textarea") === true',
     ),
   );
+}
+
+async function waitForDistinctTerminalColors(view) {
+  let lastProbe = null;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    lastProbe = await view.webContents.executeJavaScript(`({
+      colors: [...document.querySelectorAll(".xterm-rows span")]
+        .filter((element) => /RED|GREEN|BLUE|CYAN/.test(element.textContent || ""))
+        .map((element) => ({ color: getComputedStyle(element).color, text: element.textContent })),
+      canvases: document.querySelectorAll("canvas").length,
+      rowsText: document.querySelector(".xterm-rows")?.textContent || "",
+    })`);
+    if (new Set(lastProbe.colors.map(({ color }) => color)).size >= 4) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`terminal color probe failed: ${JSON.stringify(lastProbe)}`);
 }
 
 async function applicationCounters(view) {

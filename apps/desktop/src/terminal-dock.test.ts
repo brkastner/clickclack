@@ -26,6 +26,17 @@ test("keeps terminal I/O out of the page-facing preload while exposing its toggl
   assert.match(preload, /contextBridge\.exposeInMainWorld\("clickclackDesktop"/u);
 });
 
+test("uses the full Rosé Pine Moon ANSI palette", () => {
+  const source = readSource("./terminal-dock.tsx");
+
+  assert.match(source, /green: color\("--terminal-green", "#3e8fb0"\)/u);
+  assert.match(source, /blue: color\("--terminal-blue", "#9ccfd8"\)/u);
+  assert.match(source, /cyan: color\("--terminal-cyan", "#ea9a97"\)/u);
+  assert.match(source, /brightBlack: color\("--terminal-bright-black", "#908caa"\)/u);
+  assert.doesNotMatch(source, /green: color\("--success"/u);
+  assert.doesNotMatch(source, /blue: color\("--info"/u);
+});
+
 test("mounts the local renderer only into its packaged root", () => {
   const renderer = readSource("./terminal-renderer.tsx");
   const dock = readSource("./terminal-dock.tsx");
@@ -112,6 +123,7 @@ test("builds and packages a locked-down local terminal document", () => {
   assert.match(build, /"terminal-preload": "src\/terminal-preload\.ts"/u);
   assert.match(build, /"terminal-renderer": "src\/terminal-renderer\.tsx"/u);
   assert.match(html, /default-src 'none'/u);
+  assert.match(html, /style-src 'self' 'unsafe-inline'/u);
   assert.match(html, /connect-src 'none'/u);
   assert.match(html, /frame-src 'none'/u);
   assert.match(html, /id="terminal-root"/u);
