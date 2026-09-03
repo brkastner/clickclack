@@ -2956,6 +2956,39 @@
     await dispatchDraft(draft);
   }
 
+  // Answering a workflow decision from its buttons.
+  //
+  // The button sends the reply the operator would otherwise have typed, through
+  // the ordinary send path. The Pi bridge holds the workflow's presentation
+  // claim and matches this reply exactly as it matches a typed one, so nothing
+  // here talks to a workflow host.
+  function answerDecision(reply: string) {
+    if (!selectedChannelID && !selectedDirectID) return;
+    stopTyping();
+    composerNotice = null;
+    if (replyTarget) clearReplyTarget();
+    void dispatchDraft({
+      body: reply,
+      uploads: [],
+      workspaceID: selectedWorkspaceID,
+      channelID: selectedChannelID || undefined,
+      directConversationID: selectedDirectID || undefined,
+      topicID: selectedChannelID ? selectedComposerTopicID || undefined : undefined,
+      topicFilterID: activeTopicFilterID,
+      topicFilterGeneration,
+      viewKey: currentConversationKey(),
+    });
+  }
+
+  // A choice that collects text cannot be answered by a click: the bridge treats
+  // a bare number on such a choice as unmatched. So it opens the composer with
+  // the number already there and the operator supplies the rest.
+  function prefillDecision(reply: string) {
+    messageBody = reply;
+    activeComposerContext = "message";
+    void tick().then(() => messageInput?.focus());
+  }
+
   function resendMessage(message: Message) {
     const content = messageContentForResend(message);
     if (!content) return;
@@ -5286,6 +5319,8 @@
       {pinnedMessageIDs}
       onTogglePin={toggleMessagePin}
       onCopyLink={ensureMessageLink}
+      onDecisionAnswer={answerDecision}
+      onDecisionPrefill={prefillDecision}
       messages={renderedMessages}
       {selectedDirect}
       {selectedChannel}
