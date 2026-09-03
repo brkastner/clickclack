@@ -3147,3 +3147,37 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* Segmented picker used by the decision alert setting. */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, var(--surface));
+}
+
+.segmented__option {
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.segmented__option:hover {
+  color: var(--text);
+}
+
+.segmented__option--active {
+  background: var(--accent, var(--surface));
+  color: var(--accent-contrast, var(--text-strong, var(--text)));
+}
+
+.settings-row2__hint--error {
+  color: var(--danger, #e5484d);
+}

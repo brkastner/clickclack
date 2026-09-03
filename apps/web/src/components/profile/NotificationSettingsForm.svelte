@@ -1,5 +1,6 @@
 <script lang="ts">
   import BrowserNotificationSetting from "./BrowserNotificationSetting.svelte";
+  import DecisionSoundSetting from "./DecisionSoundSetting.svelte";
   import { requestCurrentUser } from "../../lib/appearance";
   import type { User } from "../../lib/types";
 
@@ -76,6 +77,8 @@
       {isDesktop}
       onChanged={onBrowserNotificationsChanged}
     />
+
+    <DecisionSoundSetting user={currentUser} />
 
     <h3 class="settings-rows__head">Mobile push</h3>
 

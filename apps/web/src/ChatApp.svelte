@@ -106,6 +106,12 @@
     type ConversationAgentWork,
     type ConversationAgentWorkAction,
   } from "./lib/agent-working";
+  import {
+    isDecisionEvent,
+    playDecisionSound,
+    readDecisionSound,
+    type DecisionSound,
+  } from "./lib/decisionSound";
   import { listWorkspaceMembersPage } from "./lib/workspace-members";
   import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
@@ -240,6 +246,7 @@
   let showCreateDirect = false;
   let gifQuery = "";
   let browserNotificationsEnabled = false;
+  let decisionSound = $state<DecisionSound>("chime");
   // Client-only preferences for agent activity. Commentary renders as normal
   // text between collapsible runs of tool rows; these flags independently hide
   // narration and/or tool blocks.
@@ -1020,6 +1027,7 @@
   }
 
   function syncBrowserNotificationState() {
+    decisionSound = readDecisionSound(user?.id || "");
     if (desktop) {
       browserNotificationsEnabled = storedBrowserNotificationsEnabled();
       return;
@@ -4176,6 +4184,9 @@
       reactionController.applyEvent(event);
       return;
     }
+    // A workflow decision blocks a durable run until it is answered, so it
+    // alerts even when its conversation is already on screen.
+    if (isDecisionEvent(event)) void playDecisionSound(decisionSound);
     void maybeShowBrowserNotification(event, affectsActiveView);
     if (event.type === "message.created" && !affectsActiveView) {
       const loadedConversation = await loadUnknownDirectConversationFromEvent(event);
