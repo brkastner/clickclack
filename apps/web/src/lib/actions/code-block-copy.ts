@@ -4,8 +4,6 @@ type DecoratedCodeBlock = {
   code: HTMLElement;
   wrapper: HTMLDivElement;
   button: HTMLButtonElement;
-  originalParent: ParentNode | null;
-  originalNextSibling: ChildNode | null;
   resetTimer?: number;
   onCopy: (event: MouseEvent) => void;
 };
@@ -36,11 +34,9 @@ export function enhanceCodeBlockCopy(node: HTMLElement, enabled: boolean) {
     if (!state) return;
     if (state.resetTimer) window.clearTimeout(state.resetTimer);
     state.button.removeEventListener("click", state.onCopy);
-    if (state.wrapper.parentNode) {
-      state.wrapper.replaceWith(pre);
-    } else if (state.originalParent && pre.parentNode !== state.originalParent) {
-      state.originalParent.insertBefore(pre, state.originalNextSibling);
-    }
+    // Once the owner removes this wrapper, its DOM position is no longer ours to restore.
+    // Reinserting here races virtualization and can target a sibling that has also been removed.
+    if (state.wrapper.parentNode) state.wrapper.replaceWith(pre);
     decorated.delete(pre);
   };
 
@@ -70,9 +66,7 @@ export function enhanceCodeBlockCopy(node: HTMLElement, enabled: boolean) {
       button.ariaLabel = "Copy code block";
       button.title = "Copy code block";
       button.innerHTML = COPY_ICON;
-      const originalParent = pre.parentNode;
-      const originalNextSibling = pre.nextSibling;
-      originalParent?.insertBefore(wrapper, pre);
+      pre.parentNode?.insertBefore(wrapper, pre);
       controlTrack.append(button);
       wrapper.append(controlTrack, pre);
 
@@ -80,8 +74,6 @@ export function enhanceCodeBlockCopy(node: HTMLElement, enabled: boolean) {
         code,
         wrapper,
         button,
-        originalParent,
-        originalNextSibling,
         onCopy: () => {},
       };
       const onCopy = (event: MouseEvent) => {

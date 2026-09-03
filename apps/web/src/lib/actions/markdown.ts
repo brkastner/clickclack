@@ -56,8 +56,6 @@ export function enhanceMarkdown(node: HTMLElement) {
       wrapper: HTMLElement;
       replay: HTMLButtonElement;
       originalSrc: string;
-      originalParent: ParentNode | null;
-      originalNextSibling: ChildNode | null;
       onReplay: (event: MouseEvent) => void;
     }
   >();
@@ -180,11 +178,9 @@ export function enhanceMarkdown(node: HTMLElement) {
       replay.ariaLabel = `Replay GIF ${image.alt || "image"}`;
       replay.title = "Replay GIF";
       replay.textContent = "↻";
-      const originalParent = image.parentNode;
-      const originalNextSibling = image.nextSibling;
       const originalSrc = image.getAttribute("src") || image.src;
       (image as EnhancedGIFImage)[animatedURLKey] = animatedURL;
-      originalParent?.insertBefore(wrapper, image);
+      image.parentNode?.insertBefore(wrapper, image);
       wrapper.append(image, badge, replay);
       const onReplay = (event: MouseEvent) => {
         event.preventDefault();
@@ -195,8 +191,6 @@ export function enhanceMarkdown(node: HTMLElement) {
         wrapper,
         replay,
         originalSrc,
-        originalParent,
-        originalNextSibling,
         onReplay,
       });
       replay.addEventListener("click", onReplay);
@@ -218,11 +212,8 @@ export function enhanceMarkdown(node: HTMLElement) {
         state.replay.removeEventListener("click", state.onReplay);
         delete (image as EnhancedGIFImage)[animatedURLKey];
         image.src = state.originalSrc;
-        if (state.wrapper.parentNode) {
-          state.wrapper.replaceWith(image);
-        } else if (state.originalParent && image.parentNode !== state.originalParent) {
-          state.originalParent.insertBefore(image, state.originalNextSibling);
-        }
+        // Detached wrappers were removed by the rendering owner and must stay detached.
+        if (state.wrapper.parentNode) state.wrapper.replaceWith(image);
       }
       decorated.clear();
       timers.clear();

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const action = readFileSync(new URL("./actions/code-block-copy.ts", import.meta.url), "utf8");
+const markdownAction = readFileSync(new URL("./actions/markdown.ts", import.meta.url), "utf8");
 const messageRow = readFileSync(
   new URL("../components/messages/MessageRow.svelte", import.meta.url),
   "utf8",
@@ -19,6 +20,13 @@ test("enables per-block copy controls for human and agent messages", () => {
 test("copies code content rather than the whole message or wrapper", () => {
   assert.match(action, /writeClipboardText\(state\.code\.textContent \?\? ""\)/u);
   assert.doesNotMatch(action, /writeClipboardText\(state\.wrapper\.textContent/u);
+});
+
+test("does not reinsert decorators after their rendering owner removes them", () => {
+  for (const source of [action, markdownAction]) {
+    assert.doesNotMatch(source, /originalNextSibling/u);
+    assert.doesNotMatch(source, /originalParent/u);
+  }
 });
 
 test("reveals the overlaid control on block hover and keyboard focus", () => {
