@@ -57,3 +57,5 @@ or by reconnecting the websocket with a cursor.
   precedence.
 - [react-islands.md](react-islands.md) — React surfaces inside the Svelte app
   and the authority boundary they hold to.
+- [workspace-views.md](workspace-views.md) — custom full-surface screens beside
+  chat, and how they differ from panels and channels.

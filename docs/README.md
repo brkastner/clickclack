@@ -89,6 +89,8 @@ it for anything that isn't a local clone.
   layer lives.
 - [React islands](architecture/react-islands.md) — React surfaces inside the
   Svelte app, and what they are not allowed to own.
+- [Workspace views](architecture/workspace-views.md) — custom screens beside
+  chat, and when something is a view rather than a panel.
 - [API overview](api/overview.md) — REST/WebSocket surface, auth headers.
 - [Data model](data-model.md) — tables, IDs, thread invariants.
 - [SPEC.md](https://github.com/openclaw/clickclack/blob/main/SPEC.md) — locked

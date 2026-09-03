@@ -7,6 +7,7 @@
   import ChannelList from "./ChannelList.svelte";
   import DirectMessageList from "./DirectMessageList.svelte";
   import WorkspaceSwitcher from "./WorkspaceSwitcher.svelte";
+  import { WORKSPACE_VIEWS, workspaceViewsPath } from "../../lib/views";
 
   type Props = {
     workspaceID: string;
@@ -327,6 +328,23 @@
   {/if}
 
   <div class="sidebar-scroll">
+    {#if WORKSPACE_VIEWS.length > 0}
+      <nav class="sidebar-views" aria-label="Workspace views">
+        {#each WORKSPACE_VIEWS as view (view.id)}
+          <a class="sidebar-view" href={workspaceViewsPath(workspaceID, view.slug)}>
+            <span class="sidebar-view-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                {#each view.icon as d, i (i)}
+                  <path {d} />
+                {/each}
+              </svg>
+            </span>
+            <span class="sidebar-view-label">{view.label}</span>
+          </a>
+        {/each}
+      </nav>
+    {/if}
+
     <section class="sidebar-people-row" aria-label="Recent people">
       {#each displayedRecentPeople as person (person.id)}
           {@const conversation = directConversationForUser(directConversations, person.id)}

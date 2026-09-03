@@ -1,0 +1,164 @@
+/* Workspace views: full-surface screens beside chat at
+   /app/{workspaceID}/views/{slug}. The rail lists registered views; the
+   content area belongs to whichever view is active. */
+
+.workspace-views {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  background: var(--bg);
+  color: var(--text);
+  z-index: 40;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.workspace-views__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 10px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  overflow-y: auto;
+}
+
+.workspace-views__back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.workspace-views__back:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.workspace-views__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-views__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.workspace-views__item:hover {
+  background: var(--hover);
+}
+
+.workspace-views__item.is-active {
+  background: var(--hover-strong);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.workspace-views__item-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.workspace-views__item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.workspace-views__content {
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.workspace-view__error {
+  margin: 24px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--danger, #dc2626);
+}
+
+/* Shared view chrome (ViewScaffold.svelte). */
+
+.view-scaffold {
+  display: grid;
+  gap: 20px;
+  padding: 28px 32px;
+  max-width: 1200px;
+}
+
+.view-scaffold__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.view-scaffold__heading h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--text-strong);
+}
+
+.view-scaffold__heading p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+}
+
+.view-scaffold__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.view-scaffold__body {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .workspace-views {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .workspace-views__rail {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+
+  .workspace-views__list {
+    flex-direction: row;
+  }
+
+  .view-scaffold {
+    padding: 20px 16px;
+  }
+}
