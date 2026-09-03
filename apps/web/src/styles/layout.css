@@ -251,7 +251,7 @@
 }
 
 .desktop-shell > .sidebar {
-  background: #232136;
+  background: light-dark(var(--rp-overlay), #232136);
   border-right: 0;
 }
 

@@ -184,6 +184,30 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   expect(geometry.footer.width).toBeCloseTo(geometry.footer.sidebarWidth, 0);
 });
 
+test("topbar theme toggle updates the desktop sidebar", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 760 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await installDesktopBridge(page);
+
+  const workspace = await createWorkspace(page, Date.now());
+  const channel = await createChannel(page, workspace.id);
+  await page.goto(`/app/${workspace.route_id}/${channel.id}`);
+  await waitForAppReady(page);
+
+  const sidebar = page.locator(".desktop-shell > .sidebar");
+  const toggle = page.getByRole("button", { name: "Switch to light mode" });
+  await expect(toggle).toBeVisible();
+  await expect
+    .poll(() => sidebar.evaluate((element) => getComputedStyle(element).backgroundColor))
+    .toBe("rgb(35, 33, 54)");
+
+  await toggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-color-mode", "light");
+  await expect
+    .poll(() => sidebar.evaluate((element) => getComputedStyle(element).backgroundColor))
+    .toBe("rgb(242, 233, 225)");
+});
+
 test("resizes and persists the desktop sidebar", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 760 });
   await installDesktopBridge(page);
