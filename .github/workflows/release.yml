@@ -133,6 +133,9 @@ jobs:
       - name: Test desktop contract
         run: pnpm test:desktop
 
+      - name: Test terminal view isolation
+        run: pnpm --filter @clickclack/desktop smoke:terminal:isolation
+
       - name: Typecheck desktop
         run: pnpm --filter @clickclack/desktop typecheck
 
@@ -141,6 +144,9 @@ jobs:
 
       - name: Package desktop installers
         run: pnpm --filter @clickclack/desktop exec electron-builder ${{ matrix.builder_args }} --config.extraMetadata.version=${{ steps.release.outputs.version }} --publish never
+
+      - name: Smoke test packaged terminal
+        run: pnpm --filter @clickclack/desktop smoke:terminal:packaged
 
       - name: Write desktop checksums
         run: node apps/desktop/scripts/release-artifacts.mjs ${{ matrix.platform }} ${{ steps.release.outputs.version }} apps/desktop/release

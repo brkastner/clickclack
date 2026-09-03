@@ -16,6 +16,7 @@ export type ClickClackDesktopBridge = {
   setActiveRoute(route: string): void;
   setUnreadCount(count: number): void;
   signInWithGitHub(): Promise<boolean>;
+  toggleTerminal(): void;
   writeClipboardImage(png: ArrayBuffer): Promise<boolean>;
   writeClipboardText(text: string): Promise<boolean>;
 };

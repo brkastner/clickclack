@@ -89,13 +89,14 @@ expires after five minutes. Permission requests from remote content are denied.
 Server configuration is accepted only from the bundled local settings window
 and is written atomically with user-only permissions.
 
-## Embedded terminal plan
+## Embedded terminal
 
-The desktop client will add one local terminal session per Electron window. The
-terminal uses `node-pty` in the privileged main process and `@xterm/xterm` with
-`@xterm/addon-fit` in a bottom-docked Svelte panel. The dock is hidden and
-unmounted by default. Hiding it preserves the shell, while explicit termination
-or window shutdown cleans it up.
+The desktop client provides one local terminal session per native main window.
+A `BaseWindow` owns sibling `WebContentsView` instances: the configured remote
+application and a packaged local terminal surface. The terminal view renders
+`@xterm/xterm` with `@xterm/addon-fit`, while Electron main owns the shell through
+`node-pty`. The dock is hidden by default. Hiding it preserves the shell;
+explicit termination, process exit, or window destruction ends the session.
 
 This stays deliberately small. It does not add tabs, split panes, multiplexing,
 persistence across app restarts, remote shells, terminal sharing, a new service,
@@ -103,15 +104,21 @@ or an IDE framework.
 
 ### Contracts and compatibility
 
-- The renderer bridge gains an optional desktop-only `terminal` capability.
-  Browser callers continue to work when that property is absent.
-- The IPC contract is limited to `start`, `status`, `write`, `resize`,
-  `terminate`, `data`, and `exit`. Inputs are typed and validated. Generic
-  process spawning, shell strings, environment mutation, filesystem access,
-  Node.js access, and raw IPC do not cross the preload boundary.
-- Electron owns PTY creation, shell selection, process identity, and disposal.
-  Svelte owns panel visibility, xterm rendering, focus, and measured rows and
-  columns.
+- The page-facing `app-preload.ts` contains no terminal imports, channels,
+  methods, output, state, or mount logic. The configured remote renderer cannot
+  start a shell, write commands, subscribe to output, or obtain a terminal
+  capability.
+- The packaged `terminal.html` runs in a separate, non-persistent session with a
+  dedicated preload. Its strict content security policy and Electron guards deny
+  network access, navigation, popups, downloads, permissions, frames, and
+  webviews. It never exposes `clickclackDesktop`.
+- Terminal IPC accepts only the exact live terminal `webContents`, its main
+  frame, and the canonical local terminal file URL. The application view fails
+  every terminal request. File origin alone is never sufficient.
+- Electron main owns native bounds, visibility, focus, PTY creation, shell
+  selection, process identity, bounded delivery, flow control, and disposal.
+  The remote application cannot move, restyle, cover, or activate the terminal
+  surface.
 - Visibility and process lifetime remain separate. Closing the dock hides it
   without ending the shell. Explicit termination ends it, starting after an exit
   creates a fresh PTY, and closing the Electron window always disposes it.
@@ -122,94 +129,97 @@ or an IDE framework.
   shell remain external dependencies. ClickClack uses their public interfaces
   and does not assume they can change.
 
-### Implementation plan
+### Implementation
 
-1. Add `node-pty` as a packaged dependency of `apps/desktop`. Add
-   `@xterm/xterm` and `@xterm/addon-fit` to `apps/web`. Update the root lockfile,
-   keep `node-pty` external to the browser bundle, and use the existing
-   Electron and electron-builder paths to rebuild and package its native binary.
-   A clean install, `pnpm build:desktop`, and a packaged-directory smoke build
-   must prove that the module loads on the current platform.
-2. Add a focused PTY owner under `apps/desktop/src/` and connect it from
-   `apps/desktop/src/main.ts`. It chooses the user's platform shell with
-   conservative fallbacks, owns one PTY per window, forwards data and exit
-   events, validates bounded input and dimensions, preserves the PTY while the
-   panel is hidden, supports explicit termination and restart, and cleans up
-   idempotently with the window. IPC handlers use the existing main-sender
-   validation pattern.
-3. Extend `apps/desktop/src/app-preload.ts` and
-   `apps/web/src/lib/desktop.ts` with the optional terminal bridge. Expose only
-   start/status, write, resize, terminate, and data/exit subscriptions. Each
-   subscription returns an unsubscribe function, and payloads are checked on
-   both sides.
-4. Add `apps/web/src/components/terminal/TerminalDock.svelte`. Use xterm.js and
-   FitAddon, mount only when opened, wire each input and output subscription
-   once, fit through `ResizeObserver`, show starting, running, exited, and error
-   states, and provide close, terminate, and restart controls. Opening focuses
-   the terminal. Unmounting disposes renderer observers and listeners but does
-   not terminate the PTY.
-5. Add non-persisted `terminalOpen = false` state to
-   `apps/web/src/ChatApp.svelte`. Render the dock as the final row beneath the
-   conversation only when the preload advertises terminal support. Put a clear,
-   labeled toggle in `DesktopTitlebar.svelte` or the nearest existing desktop
-   action surface. Reuse the existing colors, borders, controls, focus styles,
-   and responsive layout. The closed state reserves no space.
-6. Add focused tests through the existing desktop and web test runners. Prefer
-   unit and contract tests. Add an end-to-end test only if the current harness
-   already supports the Electron preload boundary. Do not add a test framework.
-7. Update this document with the shipped behavior. Use the existing macOS,
-   Windows, and Linux desktop release matrix for rollout. Change those jobs only
-   when an explicit native-module rebuild or package smoke check is required.
-   No data migration, server rollout, feature service, or API migration applies.
+- `apps/desktop/src/terminal-surface.ts` owns the terminal view, lazy
+  `TerminalSession`, native layout, focus transitions, sender authorization,
+  event delivery, renderer recovery, and idempotent disposal.
+- Closed, the application view fills the content area and the terminal view has
+  zero bounds, so it cannot cover application or titlebar controls. Open, the
+  application view shrinks and the terminal view occupies a 220 to 380 pixel
+  bottom dock. The terminal view remains the top sibling.
+- `apps/desktop/src/terminal-preload.ts` exposes only the bounded local terminal
+  client to `terminal.html`. `terminal-dock.tsx` mounts only into
+  `#terminal-root`; it never queries or mutates the remote document.
+- First presentation fits xterm, sends measured rows and columns, focuses xterm,
+  and starts the shell lazily before announcing renderer readiness. Native
+  terminal `webContents` focus happens first so main can bound and queue keyboard
+  input during renderer startup, then replay it after xterm owns focus. Closing
+  restores application focus without terminating the shell.
+- `Cmd/Ctrl+J` or the native View menu toggles the terminal. Quick Compose hides
+  it and focuses the application. Reload, force reload, and zoom menu actions
+  always target the
+  application view.
+- Terminal copy and paste stay in the local view. Windows and Linux use
+  `Ctrl+Shift+C/V`; macOS uses `Cmd+C/V`. Plain `Ctrl+C` remains PTY input.
+  Clipboard text and PTY input are bounded.
+- PTY output uses one acknowledged IPC chunk at a time. Main pauses `node-pty` at
+  the high-water mark, resumes below the low-water mark, and terminates the shell
+  if its one-megabyte delivery buffer is exceeded.
+- `node-pty` stays external to the esbuild bundle, is unpacked from the
+  application archive, and is rebuilt for the pinned Electron version.
 
 ### Verification
 
-- Dependency and build checks prove `node-pty` is externalized, rebuilt for
-  Electron, packaged, and loadable.
-- PTY owner tests cover spawn, duplicate start, data, input, resize, exit,
-  restart, terminate, invalid payloads, invalid senders, window cleanup, and
-  idempotent disposal without orphan processes.
-- Preload contract tests cover the exact allowed methods and channels, payload
-  validation, subscription cleanup, and the missing capability in browser mode.
-- Terminal UI tests cover the hidden default, capability gating, opening and
-  focus, fitting and resize, input and output, hide without termination,
-  explicit termination and restart, failure states, and listener cleanup.
-- A layout regression test proves the open panel stays below the conversation
-  and the closed panel leaves no empty area.
-- A manual desktop smoke test opens the panel, runs an interactive command,
-  resizes it, hides and reopens it with the session intact, terminates and
-  restarts it, and closes the app without leaving a shell process alive.
-- `pnpm test:desktop`, web tests and typechecking, lint, formatting, and
-  `pnpm check` pass without weakened checks.
-- The existing macOS, Windows, and Linux release jobs provide packaging evidence
-  before rollout is complete.
+- `pnpm test:desktop` covers terminal payload validation, PTY lifecycle and flow
+  control, pure native layout, exact sender authorization, application sender
+  rejection, two-owner isolation, hide and reopen behavior, renderer recovery,
+  and final disposal.
+- Source checks keep terminal code out of `app-preload.ts`, require the local
+  `#terminal-root`, reject remote selectors and shadow roots, enforce first-open
+  ordering, and preserve xterm write acknowledgements.
+- `pnpm --filter @clickclack/desktop smoke:terminal:isolation` loads the real
+  terminal document, preload, React renderer, and xterm inside a sibling
+  `WebContentsView`. It sends a printable key immediately after opening, checks
+  delivery to the PTY owner, verifies that keyboard, input, composition,
+  selection, and clipboard events never reach an adversarial application view,
+  and covers hide, reopen, renderer reload, disjoint bounds, and native window
+  destruction.
+- `pnpm --filter @clickclack/desktop smoke:terminal` exercises `node-pty` under
+  the pinned Electron runtime. The packaged smoke loads it from `app.asar`,
+  verifies the terminal HTML, preload, renderer, and stylesheet resources, and
+  runs a real PTY marker command.
+- Manual verification opens the panel, runs an interactive command, checks local
+  copy and paste, resizes the window, hides and reopens the panel with the session
+  intact, terminates and restarts it, and closes the app without leaving a shell
+  process alive.
+- macOS, Windows, and Linux packaging jobs run the isolation and packaged native
+  smokes before uploading installers.
 
 ### Risks and handling
 
 - `node-pty` may fail to rebuild, sign, or package against an Electron ABI. Pin a
   compatible release, use the existing rebuild path, externalize it, and require
   the three-platform package matrix plus a current-platform packaged smoke test.
-- An overly broad IPC bridge could let compromised renderer content run local
-  processes. Keep shell selection and PTY ownership in main, validate every
-  sender and payload, and never accept executable paths, commands, environment
-  maps, or arbitrary channels from the renderer.
+- Sharing a document with remote page JavaScript would expose composed keyboard,
+  input, selection, and clipboard events and permit clickjacking. Keep the
+  terminal in its sibling local `WebContentsView`; shadow DOM is not a security
+  boundary.
 - Repeated hide and open cycles could duplicate subscriptions, lose output, or
-  end the shell. Keep process lifetime in main, make start idempotent, return
-  unsubscribe functions, dispose renderer resources on unmount, and test the
-  cycle directly.
+  end the shell. Keep process lifetime in main, make start idempotent, attach
+  subscriptions once, and keep xterm mounted while the dock is visually hidden.
+- Unbounded output could exhaust Electron or xterm queues. Keep delivery
+  acknowledgement-based, pause and resume the PTY at fixed watermarks, and fail
+  closed at the hard buffer limit.
+- A full renderer reload discards xterm scrollback while leaving the PTY alive.
+  This is intentional: hidden-time output is preserved during normal dock use,
+  but terminal history is not persisted or replayed across renderer lifetimes.
 - Resize observations could flood IPC or send invalid dimensions. Fit only after
   the dock is measurable, clamp rows and columns in both processes, and skip
   unchanged or transient resize events.
 - A configured shell may be missing, exit immediately, or fail through its own
   startup files. Use conservative platform fallbacks and show a bounded error or
   exited state with restart. Do not interpret output or modify user settings.
-- Existing uncommitted work touches nearby files. Use targeted edits, preserve
-  unrelated changes, inspect each diff, and keep terminal work in new modules
-  and components where practical.
 
 ### Boundaries
 
-This plan does not change API handlers, database schemas or migrations,
+The remote Svelte and React application does not render terminal output, manage
+its lifecycle, receive its IPC client, or share its DOM event boundary. The
+terminal is a packaged local document presented by a native sibling view. It is
+not part of `examples/assistant-ui-island-prototype`, `PinnedPanelIsland.tsx`, or
+`ImageViewerIsland.tsx`.
+
+This feature does not change API handlers, database schemas or migrations,
 OpenAPI, SDK behavior, bot features, hosted infrastructure, or external
 services. It does not change Electron, xterm.js, node-pty, operating-system
 terminals or PTY facilities, shells, signing systems, or package toolchains.
@@ -236,10 +246,13 @@ pnpm build:desktop
 pnpm dev:desktop
 ```
 
-Create an unpacked app for the current platform:
+Rebuild and exercise the native PTY under Electron, then create an unpacked app
+for the current platform:
 
 ```sh
-pnpm --filter @clickclack/desktop run pack
+pnpm --filter @clickclack/desktop run smoke:terminal:isolation
+pnpm --filter @clickclack/desktop run smoke:terminal
+pnpm --filter @clickclack/desktop run verify:pack
 ```
 
 Create installers on their native CI runner:

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { safeExternalChannelURL } from "../../lib/chat/channels";
+  import { desktop } from "../../lib/desktop";
   import type { ChannelNotificationPreference, Workspace } from "../../lib/types";
   import WorkspaceSwitcher from "../navigation/WorkspaceSwitcher.svelte";
   import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
@@ -174,6 +175,17 @@
     </form>
 
     <div class="desktop-titlebar-actions" aria-label="Channel tools">
+      <button
+        type="button"
+        title="Toggle terminal"
+        aria-label="Toggle terminal"
+        onclick={() => desktop?.toggleTerminal()}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" />
+          <path d="m7 9 3 3-3 3m5 0h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
       <ThemeToggle />
       <AvatarSizeToggle />
       {#if channelNotifPreference}

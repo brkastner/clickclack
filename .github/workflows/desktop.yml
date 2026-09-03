@@ -75,11 +75,17 @@ jobs:
       - name: Test desktop contract
         run: pnpm test:desktop
 
+      - name: Test terminal view isolation
+        run: pnpm --filter @clickclack/desktop smoke:terminal:isolation
+
       - name: Typecheck desktop
         run: pnpm --filter @clickclack/desktop typecheck
 
       - name: Package desktop app
         run: pnpm --filter @clickclack/desktop run ${{ matrix.command }}
+
+      - name: Smoke test packaged terminal
+        run: pnpm --filter @clickclack/desktop smoke:terminal:packaged
 
       - name: Upload unsigned preview installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
