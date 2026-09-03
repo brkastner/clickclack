@@ -3,6 +3,7 @@ import {
   isDesktopTerminalData,
   isDesktopTerminalStatus,
   normalizeTerminalDimensions,
+  normalizeTerminalDockHeight,
   sanitizeTerminalInput,
   type DesktopTerminalStatus,
 } from "./contract";
@@ -26,6 +27,10 @@ const terminalClient: TerminalClient = Object.freeze({
   resize: (dimensions) => {
     const payload = normalizeTerminalDimensions(dimensions);
     if (payload) ipcRenderer.send("desktop:terminal-resize", payload);
+  },
+  resizeDock: (height) => {
+    const payload = normalizeTerminalDockHeight(height);
+    if (payload !== null) ipcRenderer.send("desktop:terminal-resize-dock", payload);
   },
   terminate: () => invokeTerminalStatus("desktop:terminal-terminate"),
   outputReady: () => ipcRenderer.send("desktop:terminal-output-ready"),

@@ -79,6 +79,37 @@ button {
   display: none;
 }
 
+.terminal-dock__resize-handle {
+  display: grid;
+  height: 9px;
+  flex: 0 0 9px;
+  place-items: center;
+  border: 0;
+  background: var(--panel-2);
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.terminal-dock__resize-handle span {
+  width: 44px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: width 120ms ease, background 120ms ease;
+}
+
+.terminal-dock__resize-handle:hover span,
+.terminal-dock__resize-handle:focus-visible span {
+  width: 58px;
+  background: var(--accent);
+}
+
+.terminal-dock__resize-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .terminal-dock__header {
   display: flex;
   min-height: 40px;

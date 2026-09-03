@@ -61,6 +61,27 @@ void app.whenReady().then(async () => {
 
     await waitFor(() => processes[0]?.writes.includes("x"));
     await waitForXtermFocus(terminalView);
+    const openTerminalBounds = terminalView.getBounds();
+    await resizeTerminalWithKeyboard(terminalView);
+    await waitFor(() => terminalView.getBounds().height === openTerminalBounds.height + 24);
+    const resizedApplicationBounds = applicationView.getBounds();
+    const resizedTerminalBounds = terminalView.getBounds();
+    const resizedContentBounds = window.contentView.getBounds();
+    assert.equal(resizedApplicationBounds.width, resizedContentBounds.width);
+    assert.equal(resizedTerminalBounds.width, resizedContentBounds.width);
+    assert.equal(
+      resizedApplicationBounds.height + resizedTerminalBounds.height,
+      resizedContentBounds.height,
+    );
+    assertDisjoint(resizedApplicationBounds, resizedTerminalBounds);
+
+    await resizeTerminalWithKeyboard(terminalView, "End");
+    await waitFor(
+      async () => (await terminalAriaValue(terminalView)) === terminalView.getBounds().height,
+    );
+    await resizeTerminalWithKeyboard(terminalView, "End");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(await terminalAriaValue(terminalView), terminalView.getBounds().height);
     await dispatchLocalEventFamilies(terminalView);
     assert.deepEqual(await applicationCounters(applicationView), zeroCounters());
     assert.equal(processes.length, 1);
@@ -98,6 +119,7 @@ void app.whenReady().then(async () => {
     assert.deepEqual(await applicationCounters(applicationView), zeroCounters());
     processes[0].emitData("\x1b[31mRED \x1b[32mGREEN \x1b[34mBLUE \x1b[36mCYAN\x1b[0m\r\n");
     await waitForDistinctTerminalColors(terminalView);
+    await verifyKittyGraphicsHandshake(processes[0]);
 
     window.destroy();
     await new Promise((resolve) => setImmediate(resolve));
@@ -156,6 +178,7 @@ function registerTerminalIPC(surface) {
   ipcMain.handle("desktop:terminal-status", (event) => surface.status(event));
   ipcMain.on("desktop:terminal-write", (event, input) => surface.write(event, input));
   ipcMain.on("desktop:terminal-resize", (event, input) => surface.resize(event, input));
+  ipcMain.on("desktop:terminal-resize-dock", (event, input) => surface.resizeDock(event, input));
   ipcMain.on("desktop:terminal-output-ready", (event) => surface.outputReady(event));
   ipcMain.on("desktop:terminal-output-ack", (event, input) =>
     surface.acknowledgeOutput(event, input),
@@ -199,6 +222,38 @@ async function waitForXtermFocus(view) {
     view.webContents.executeJavaScript(
       'document.activeElement?.classList.contains("xterm-helper-textarea") === true',
     ),
+  );
+}
+
+async function resizeTerminalWithKeyboard(view, key = "ArrowUp") {
+  await view.webContents.executeJavaScript(`(() => {
+    const handle = document.querySelector(".terminal-dock__resize-handle");
+    handle?.focus();
+    handle?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: ${JSON.stringify(key)} }));
+  })()`);
+}
+
+async function terminalAriaValue(view) {
+  return view.webContents.executeJavaScript(
+    'Number(document.querySelector(".terminal-dock__resize-handle")?.getAttribute("aria-valuenow"))',
+  );
+}
+
+async function verifyKittyGraphicsHandshake(process) {
+  const writesBeforeProbe = process.writes.length;
+  process.emitData("\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\");
+  await waitFor(
+    () => process.writes.slice(writesBeforeProbe).join("").includes("Gi=31;OK"),
+    () => `Kitty query writes: ${JSON.stringify(process.writes.slice(writesBeforeProbe))}`,
+  );
+
+  const writesBeforeImage = process.writes.length;
+  process.emitData("\x1b_Ga=t,f=24,s=1,v=1,i=32;AAAA\x1b\\");
+  await waitFor(() => process.writes.slice(writesBeforeImage).join("").includes("Gi=32;OK"));
+  process.emitData("\x1b_Ga=p,i=32,p=1,x=0,y=0,w=1,h=1,c=1,r=1,z=-1,C=1\x1b\\");
+  await waitFor(
+    () => process.writes.slice(writesBeforeImage).join("").includes("Gi=32,p=1;OK"),
+    () => `Kitty image writes: ${JSON.stringify(process.writes.slice(writesBeforeImage))}`,
   );
 }
 
@@ -248,10 +303,12 @@ function assertDisjoint(left, right) {
   assert.equal(intersects, false, `view bounds intersect: ${JSON.stringify({ left, right })}`);
 }
 
-async function waitFor(predicate) {
+async function waitFor(predicate, diagnostic) {
   for (let attempt = 0; attempt < 200; attempt += 1) {
     if (await predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error("timed out waiting for terminal renderer state");
+  throw new Error(
+    `timed out waiting for terminal renderer state${diagnostic ? ` (${diagnostic()})` : ""}`,
+  );
 }

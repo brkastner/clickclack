@@ -58,6 +58,15 @@ export type DesktopTerminalDimensions = {
   rows: number;
 };
 
+export const MIN_TERMINAL_DOCK_HEIGHT = 160;
+export const MAX_TERMINAL_DOCK_HEIGHT = 5_000;
+
+export function normalizeTerminalDockHeight(input: unknown): number | null {
+  if (typeof input !== "number" || !Number.isFinite(input)) return null;
+  const height = Math.round(input);
+  return height >= MIN_TERMINAL_DOCK_HEIGHT && height <= MAX_TERMINAL_DOCK_HEIGHT ? height : null;
+}
+
 export type DesktopTerminalData = {
   data: string;
   sequence: number;
