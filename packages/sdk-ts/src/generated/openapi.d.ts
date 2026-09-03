@@ -2128,8 +2128,14 @@ export interface components {
       workspace_id: string;
       channel_id?: string;
       direct_conversation_id?: string;
-      /** @enum {string} */
-      type: "typing.started" | "typing.stopped" | "presence.changed" | "agent.progress";
+      /**
+       * @description agent.progress and workflow.run are bot-token-only and must name
+       *     exactly one of channel_id or direct_conversation_id, so a private
+       *     turn or run can never broadcast to a whole workspace.
+       *
+       * @enum {string}
+       */
+      type: "typing.started" | "typing.stopped" | "presence.changed" | "agent.progress" | "workflow.run";
       payload?: {
         [key: string]: unknown;
       };

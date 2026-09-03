@@ -831,6 +831,14 @@
   box-shadow: var(--key-edge-pressed);
 }
 
+/* A workflow stopped on a human decision is blocking, so its control reads
+   louder than an ordinary toggle even when the panel is closed. */
+.topbar-actions button.attention {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .notif-toggle {
   display: inline-flex;
   align-items: center;

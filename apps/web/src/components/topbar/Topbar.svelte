@@ -13,6 +13,11 @@
     searchQuery: string;
     threadOpen: boolean;
     pinnedOpen?: boolean;
+    /** A workflow run is being reported for this conversation. */
+    runAvailable?: boolean;
+    runOpen?: boolean;
+    /** The run is stopped waiting on a person. */
+    runWaiting?: boolean;
     channelNotifPreference?: ChannelNotificationPreference | null;
     channelNotifSaving?: boolean;
     channelSettingsAvailable?: boolean;
@@ -21,6 +26,7 @@
     onResetSearch: () => void;
     onToggleThread: () => void;
     onPinnedItems: () => void;
+    onToggleRun?: () => void;
     onOpenChannelSettings?: () => void;
     onToggleChannelNotifications?: () => void;
   };
@@ -39,6 +45,9 @@
     searchQuery,
     threadOpen,
     pinnedOpen = false,
+    runAvailable = false,
+    runOpen = false,
+    runWaiting = false,
     channelNotifPreference = undefined,
     channelNotifSaving = false,
     channelSettingsAvailable = false,
@@ -47,6 +56,7 @@
     onResetSearch,
     onToggleThread,
     onPinnedItems,
+    onToggleRun = () => {},
     onOpenChannelSettings = () => {},
     onToggleChannelNotifications = () => {},
   }: Props = $props();
@@ -128,6 +138,22 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.16L3 21l1.84-6.4A8 8 0 1 1 21 12Z" />
       </svg>
     </button>
+    <!-- Only shown while a run is actually being reported, so the control never
+         sits there as dead chrome in a conversation with no workflow. -->
+    {#if runAvailable}
+      <button
+        type="button"
+        title={runOpen ? "Close workflow run" : "Workflow run"}
+        aria-label={runOpen ? "Close workflow run" : "Workflow run"}
+        class:active={runOpen}
+        class:attention={runWaiting}
+        onclick={onToggleRun}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 6h4v4H5zM15 14h4v4h-4zM9 8h4a2 2 0 0 1 2 2v6" />
+        </svg>
+      </button>
+    {/if}
     {#if selectedChannel}
       <button
         type="button"

@@ -107,6 +107,13 @@
     type ConversationAgentWorkAction,
   } from "./lib/agent-working";
   import {
+    applyWorkflowRunFrame,
+    isRunWaiting,
+    readWorkflowRunFrame,
+    type WorkflowRun,
+  } from "./lib/chat/workflow-run";
+  import RunPanel from "./components/workflow/RunPanel.svelte";
+  import {
     isDecisionEvent,
     playDecisionSound,
     readDecisionSound,
@@ -171,6 +178,10 @@
   let selectedThreadState: ThreadState | null = null;
   let selectedProfile: User | null = null;
   let pinnedPanelOpen = false;
+  // Live workflow runs, keyed by conversation. Ephemeral: nothing is replayed
+  // after a reload, so this starts empty and fills from the next frame.
+  let workflowRuns: ReadonlyMap<string, WorkflowRun> = new Map();
+  let runPanelOpen = false;
   let openPinnedPanelAfterRoute = false;
   let pinnedMessages: Message[] = [];
   let pinnedMessagesLoading = false;
@@ -539,7 +550,15 @@
     lookupUser,
     (_userID, fallback) => fallback,
   );
-  $: sidePanelOpen = pinnedPanelOpen || selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
+  // The run being reported for the conversation in view, if any.
+  $: activeWorkflowRun = workflowRuns.get(activeConversationKeyForRuns) ?? null;
+  $: activeConversationKeyForRuns = selectedDirectID || selectedChannelID || "";
+  $: runPanelAvailable = activeWorkflowRun !== null;
+  $: runWaiting = activeWorkflowRun !== null && isRunWaiting(activeWorkflowRun);
+  // A run panel open in a conversation that stops reporting closes itself: the
+  // pane would otherwise hold an empty state the operator never asked for.
+  $: if (runPanelOpen && !runPanelAvailable) runPanelOpen = false;
+  $: sidePanelOpen = pinnedPanelOpen || runPanelOpen || selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
   $: searchPaneVisible = searchSession !== null && !searchThreadDetour;
   $: if (selectedArtifact && artifactConversationKey && artifactConversationKey !== activeConversationKey) {
@@ -4123,6 +4142,10 @@
       handleAgentProgressEvent(event);
       return;
     }
+    if (event.type === "workflow.run") {
+      handleWorkflowRunEvent(event);
+      return;
+    }
     if (event.type === "channel.read" || event.type === "dm.read") {
       handleReadEvent(event);
       return;
@@ -4534,6 +4557,18 @@
     ensureTypingSweeper();
   }
 
+  // Run frames are kept for every conversation, not only the visible one, so
+  // switching channels shows the right run immediately instead of waiting for
+  // that conversation's next frame.
+  function handleWorkflowRunEvent(event: RealtimeEvent) {
+    const run = readWorkflowRunFrame(event);
+    if (run === undefined) return;
+    const conversationID = realtimeConversationID(event);
+    workflowRuns = applyWorkflowRunFrame(workflowRuns, conversationID, run);
+    // A run that ends while its panel is open leaves the panel showing an empty
+    // state rather than closing under the operator.
+  }
+
   function handleAgentProgressEvent(event: RealtimeEvent) {
     const payload = event.payload as Record<string, unknown>;
     const eventChannel = event.channel_id || (typeof payload.channel_id === "string" ? payload.channel_id : "");
@@ -4802,6 +4837,10 @@
       closeArtifactViewer();
       return;
     }
+    if (runPanelOpen) {
+      runPanelOpen = false;
+      return;
+    }
     if (pinnedPanelOpen) {
       pinnedPanelOpen = false;
       return;
@@ -4867,7 +4906,21 @@
     await loadPinnedMessages(channelID, "");
   }
 
+  // The right pane holds one thing at a time, so opening the run view closes
+  // whatever else was in it.
+  function toggleRunPanel() {
+    if (runPanelOpen) {
+      runPanelOpen = false;
+      return;
+    }
+    if (!runPanelAvailable) return;
+    pinnedPanelOpen = false;
+    selectedProfile = null;
+    runPanelOpen = true;
+  }
+
   async function togglePinnedPanel() {
+    runPanelOpen = false;
     if (pinnedPanelOpen) {
       pinnedPanelOpen = false;
       return;
@@ -5294,6 +5347,9 @@
         {searchQuery}
         threadOpen={selectedThread !== null}
         pinnedOpen={pinnedPanelOpen}
+        runAvailable={runPanelAvailable}
+        runOpen={runPanelOpen}
+        {runWaiting}
         {channelNotifPreference}
         {channelNotifSaving}
         channelSettingsAvailable={canManageSelectedChannel}
@@ -5301,6 +5357,7 @@
         onSearch={() => void searchMessages()}
         onResetSearch={resetSearch}
         onToggleThread={toggleSidePanelFromTopbar}
+        onToggleRun={toggleRunPanel}
         onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
         onPinnedItems={togglePinnedPanel}
         onOpenChannelSettings={openChannelSettings}
@@ -5509,9 +5566,19 @@
     class:covered={selectedArtifact !== null}
     inert={mobileNavOpen || selectedArtifact !== null}
     aria-hidden={selectedArtifact ? "true" : undefined}
-    aria-label={pinnedPanelOpen ? "Pinned messages pane" : selectedProfile ? "Profile pane" : "Thread pane"}
+    aria-label={runPanelOpen ? "Workflow run pane" : pinnedPanelOpen ? "Pinned messages pane" : selectedProfile ? "Profile pane" : "Thread pane"}
   >
-    {#if pinnedPanelOpen}
+    {#if runPanelOpen}
+      <RunPanel
+        run={activeWorkflowRun}
+        conversationLabel={selectedChannel
+          ? `#${selectedChannel.name}`
+          : selectedDirect
+            ? dmTitle(selectedDirect, user?.id)
+            : undefined}
+        onClose={closeSidePanel}
+      />
+    {:else if pinnedPanelOpen}
       <PinnedPanel
         messages={pinnedMessages}
         channel={selectedChannel}

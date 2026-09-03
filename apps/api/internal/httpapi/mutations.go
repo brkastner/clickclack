@@ -136,17 +136,24 @@ func (s *Server) publishEphemeral(w http.ResponseWriter, r *http.Request) {
 	// private turn can never broadcast to a whole workspace. The recipient list
 	// is always server-derived below; the relay never supplies recipients
 	// directly.
+	// workflow.run is the source-bridge run-status frame. A workflow that a bot
+	// is running on a conversation's behalf reports its live state here: status,
+	// which step it is on, whether it is waiting. It carries the same bot-only
+	// and must-name-one-surface rules as agent.progress and for the same reason,
+	// so the two are authorized together below.
 	isAgentProgress := body.Type == "agent.progress"
+	isWorkflowRun := body.Type == "workflow.run"
+	isBotFrame := isAgentProgress || isWorkflowRun
 	if body.Type != "typing.started" && body.Type != "typing.stopped" &&
-		body.Type != "presence.changed" && !isAgentProgress {
+		body.Type != "presence.changed" && !isBotFrame {
 		writeError(w, http.StatusBadRequest, errors.New("unsupported ephemeral event type"))
 		return
 	}
-	if isAgentProgress {
-		// Human sessions never publish agent progress. A bot with normal write
-		// access can publish progress for the channel or DM it is allowed to use.
+	if isBotFrame {
+		// Human sessions never publish these. A bot with normal write access can
+		// publish them for the channel or DM it is already allowed to use.
 		if act.botTokenID == "" {
-			writeError(w, http.StatusForbidden, errors.New("agent.progress requires a bot token"))
+			writeError(w, http.StatusForbidden, errors.New(body.Type+" requires a bot token"))
 			return
 		}
 	}
@@ -167,12 +174,13 @@ func (s *Server) publishEphemeral(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("typing events require channel_id or direct_conversation_id"))
 		return
 	}
-	// S1: a progress frame MUST target exactly one concrete surface. An empty
-	// target would otherwise fall through to the workspace-wide branch below and
-	// leak thinking/command-output/patch detail to every member. (channel_id and
-	// direct_conversation_id are also mutually exclusive, enforced just below.)
-	if isAgentProgress && channelID == "" && directConversationID == "" {
-		writeError(w, http.StatusBadRequest, errors.New("agent.progress requires channel_id or direct_conversation_id"))
+	// S1: a bot frame MUST target exactly one concrete surface. An empty target
+	// would otherwise fall through to the workspace-wide branch below and leak
+	// thinking/command-output/patch detail, or a private workflow's run state, to
+	// every member. (channel_id and direct_conversation_id are also mutually
+	// exclusive, enforced just below.)
+	if isBotFrame && channelID == "" && directConversationID == "" {
+		writeError(w, http.StatusBadRequest, errors.New(body.Type+" requires channel_id or direct_conversation_id"))
 		return
 	}
 	var recipientUserIDs []string
