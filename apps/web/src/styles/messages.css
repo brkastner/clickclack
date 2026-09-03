@@ -3166,6 +3166,44 @@
   justify-content: flex-start;
 }
 
+:root[data-avatar-size="double"] .message-group:not(.is-self) {
+  grid-template-columns: 158px minmax(0, 1fr);
+}
+
+:root[data-avatar-size="double"] .message-group.is-self {
+  grid-template-columns: minmax(0, 1fr) 158px;
+}
+
+:root[data-avatar-size="double"][data-user-align="left"] .message-group.is-self {
+  grid-template-columns: 158px minmax(0, 1fr);
+}
+
+:root[data-avatar-size="double"][data-other-align="right"] .message-group:not(.is-self) {
+  grid-template-columns: minmax(0, 1fr) 158px;
+}
+
+:root[data-avatar-size="double"] .message-group > .avatar {
+  width: 156px;
+  height: 156px;
+  border-radius: 34px;
+  font-size: 44px;
+}
+
+:root[data-avatar-size="double"] .message-group::after {
+  top: 170px;
+  left: 96px;
+}
+
+:root[data-avatar-size="double"] .message-group.is-self::after {
+  right: 96px;
+  left: auto;
+}
+
+:root[data-avatar-size="double"][data-user-align="left"] .message-group.is-self::after {
+  right: auto;
+  left: 96px;
+}
+
 .message-group.is-agent .message-row:not(.is-preamble) .message-content {
   padding-block: 1px;
 }
@@ -3260,10 +3298,7 @@
 /* Keep reaction pickers inside the message viewport when their row is aligned
    to the left. Right-aligned rows retain the picker's right-edge anchoring. */
 :root[data-user-align="left"] .message-group.is-self .picker-wrapper .emoji-grid,
-:root[data-other-align="left"]
-  .message-group:not(.is-self)
-  .picker-wrapper
-  .emoji-grid {
+:root[data-other-align="left"] .message-group:not(.is-self) .picker-wrapper .emoji-grid {
   right: auto;
   left: 0;
 }
@@ -3355,6 +3390,25 @@
     right: auto;
     bottom: 49px;
     left: 39px;
+  }
+
+  :root[data-avatar-size="double"] .message-group,
+  :root[data-avatar-size="double"] .message-group.is-self {
+    grid-template-columns: 94px minmax(0, 1fr);
+  }
+
+  :root[data-avatar-size="double"] .message-group > .avatar {
+    width: 92px;
+    height: 92px;
+    border-radius: 28px;
+    font-size: 34px;
+  }
+
+  :root[data-avatar-size="double"] .message-group::after,
+  :root[data-avatar-size="double"] .message-group.is-self::after {
+    top: 105px;
+    right: auto;
+    left: 62px;
   }
 
   .message-group.is-self .group-body > header {

@@ -2,6 +2,7 @@
   import { safeExternalChannelURL } from "../../lib/chat/channels";
   import type { ChannelNotificationPreference, Workspace } from "../../lib/types";
   import WorkspaceSwitcher from "../navigation/WorkspaceSwitcher.svelte";
+  import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
 
   type Props = {
@@ -174,6 +175,7 @@
 
     <div class="desktop-titlebar-actions" aria-label="Channel tools">
       <ThemeToggle />
+      <AvatarSizeToggle />
       {#if channelNotifPreference}
         <button
           type="button"

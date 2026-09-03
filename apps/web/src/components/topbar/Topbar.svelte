@@ -2,6 +2,7 @@
   import { dmTitle } from "../../lib/chat/people";
   import { channelDisplayTitle, safeExternalChannelURL } from "../../lib/chat/channels";
   import type { Channel, ChannelNotificationPreference, DirectConversation } from "../../lib/types";
+  import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
 
   type Props = {
@@ -89,6 +90,7 @@
   </form>
   <div class="topbar-actions" aria-label="Channel tools">
     <ThemeToggle />
+    <AvatarSizeToggle />
     {#if channelNotifPreference}
       <button
         type="button"

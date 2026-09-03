@@ -96,6 +96,10 @@
         if (ccDensity === "compact") {
           document.documentElement.setAttribute("data-density", ccDensity);
         }
+        var ccAvatarSize = localStorage.getItem("clickclack:avatar-size:v1");
+        if (ccAvatarSize === "double") {
+          document.documentElement.setAttribute("data-avatar-size", ccAvatarSize);
+        }
       } catch (e) {}
     </script>
     %sveltekit.head%
