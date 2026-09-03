@@ -138,6 +138,13 @@ function proposedDimensions(
   return { cols: xterm.cols, rows: xterm.rows };
 }
 
+function isTerminalToggleShortcut(event: KeyboardEvent, platform: NodeJS.Platform): boolean {
+  const key = event.key.toLowerCase();
+  return platform === "darwin"
+    ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === "j"
+    : event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && key === "j";
+}
+
 function isTerminalCopyShortcut(event: KeyboardEvent, platform: NodeJS.Platform): boolean {
   const key = event.key.toLowerCase();
   return platform === "darwin"
@@ -312,6 +319,12 @@ function TerminalDock({ client, open, onClose }: TerminalDockProps) {
     };
     xterm.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
+      if (isTerminalToggleShortcut(event, client.platform)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        client.close();
+        return false;
+      }
       if (isTerminalCopyShortcut(event, client.platform)) {
         event.preventDefault();
         event.stopImmediatePropagation();

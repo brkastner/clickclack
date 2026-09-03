@@ -119,6 +119,16 @@ test("keeps platform copy and paste shortcuts local while preserving Ctrl+C inpu
   assert.doesNotMatch(source, /event\.ctrlKey && !event\.shiftKey[\s\S]*key === "c"/u);
 });
 
+test("closes the terminal when its focused xterm receives CmdOrCtrl+J", () => {
+  const source = readSource("./terminal-dock.tsx");
+
+  assert.match(source, /isTerminalToggleShortcut\(event, client\.platform\)/u);
+  assert.match(
+    source,
+    /isTerminalToggleShortcut\(event, client\.platform\)[\s\S]*client\.close\(\)[\s\S]*return false/u,
+  );
+});
+
 test("uses native sibling views and targets application-only menu actions", () => {
   const main = readSource("./main.ts");
   const addApplication = main.indexOf("window.contentView.addChildView(appView)");

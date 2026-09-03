@@ -61,6 +61,13 @@ void app.whenReady().then(async () => {
 
     await waitFor(() => processes[0]?.writes.includes("x"));
     await waitForXtermFocus(terminalView);
+    await toggleFocusedTerminal(terminalView);
+    await waitFor(
+      () => terminalView.getBounds().height === 0,
+      () => `focused Ctrl+J left terminal bounds at ${JSON.stringify(terminalView.getBounds())}`,
+    );
+    surface.open();
+    await waitForXtermFocus(terminalView);
     const openTerminalBounds = terminalView.getBounds();
     await resizeTerminalWithKeyboard(terminalView);
     await waitFor(() => terminalView.getBounds().height === openTerminalBounds.height + 24);
@@ -223,6 +230,12 @@ async function waitForXtermFocus(view) {
       'document.activeElement?.classList.contains("xterm-helper-textarea") === true',
     ),
   );
+}
+
+async function toggleFocusedTerminal(view) {
+  const modifiers = [process.platform === "darwin" ? "meta" : "control"];
+  view.webContents.sendInputEvent({ type: "keyDown", keyCode: "J", modifiers });
+  view.webContents.sendInputEvent({ type: "keyUp", keyCode: "J", modifiers });
 }
 
 async function resizeTerminalWithKeyboard(view, key = "ArrowUp") {
