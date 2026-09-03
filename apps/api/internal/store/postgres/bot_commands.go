@@ -15,7 +15,10 @@ import (
 
 const maxBotCommands = 100
 
-var botCommandPattern = regexp.MustCompile(`^/[a-z0-9_-]{1,32}$`)
+// Commands may carry one namespace segment, as in /kas:cook, so a bot can
+// publish a family of related entry points. The segment shape stays as narrow
+// as a bare command name rather than allowing arbitrary characters.
+var botCommandPattern = regexp.MustCompile(`^/[a-z0-9_-]{1,32}(?::[a-z0-9_-]{1,32})?$`)
 
 func (s *Store) SetBotCommands(ctx context.Context, workspaceID, botUserID string, commands []store.BotCommandInput) ([]store.BotCommand, error) {
 	workspaceID = strings.TrimSpace(workspaceID)

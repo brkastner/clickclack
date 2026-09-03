@@ -271,6 +271,8 @@ func TestHTTPBotCommandOverwriteClearAndValidation(t *testing.T) {
 		body map[string]any
 	}{
 		{"bad name", map[string]any{"commands": []map[string]string{{"command": "bad name", "description": "invalid"}}}},
+		{"empty namespace", map[string]any{"commands": []map[string]string{{"command": "kas:", "description": "invalid"}}}},
+		{"nested namespace", map[string]any{"commands": []map[string]string{{"command": "kas:cook:extra", "description": "invalid"}}}},
 		{"missing description", map[string]any{"commands": []map[string]string{{"command": "status"}}}},
 		{"too many", map[string]any{"commands": tooMany}},
 		{"duplicate", map[string]any{"commands": []map[string]string{

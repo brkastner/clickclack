@@ -251,3 +251,55 @@ func assertSQLiteBotCommandSet(t *testing.T, st *Store, workspaceID, botUserID s
 		}
 	}
 }
+
+func TestBotCommandNamespaceShape(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	owner, err := st.EnsureBootstrap(ctx, "Namespace Owner", "namespace-owner@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := workspaces[0]
+	bot, _, err := st.CreateBot(ctx, store.CreateBotInput{
+		WorkspaceID: workspace.ID,
+		DisplayName: "Namespace Bot",
+		Handle:      "namespace-bot",
+		CreatedBy:   owner.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A command family such as /kas:cook publishes alongside its bare command.
+	saved, err := st.SetBotCommands(ctx, workspace.ID, bot.ID, []store.BotCommandInput{
+		{Command: "kas", Description: "Run the lifecycle"},
+		{Command: "kas:cook", Description: "Run the full lifecycle"},
+		{Command: "/KAS:Check", Description: "Review only"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, 0, len(saved))
+	for _, command := range saved {
+		got = append(got, command.Command)
+	}
+	slices.Sort(got)
+	want := []string{"/kas", "/kas:check", "/kas:cook"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("expected %#v, got %#v", want, got)
+	}
+
+	for _, command := range []string{"kas:", ":cook", "kas:cook:extra", "kas::cook", "kas cook"} {
+		if _, err := st.SetBotCommands(ctx, workspace.ID, bot.ID, []store.BotCommandInput{
+			{Command: command, Description: "invalid"},
+		}); err == nil {
+			t.Fatalf("expected %q to be rejected", command)
+		}
+	}
+}
