@@ -16,6 +16,12 @@
   import { messageAudioPlayback } from "../../lib/messageAudioPlayback";
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
+  import DecisionChoices from "./DecisionChoices.svelte";
+  import {
+    isDecisionMessage,
+    readDecisionPrompt,
+    stripDecisionBlock,
+  } from "../../lib/chat/decision-prompt";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
   import MessageActionSheet from "./MessageActionSheet.svelte";
   import CopyLinkFallback from "./CopyLinkFallback.svelte";
@@ -63,6 +69,9 @@
     pinned?: boolean;
     onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
     onCopyLink?: (message: Message) => Promise<string>;
+    decisionActive?: boolean;
+    onDecisionAnswer?: (reply: string) => void;
+    onDecisionPrefill?: (reply: string) => void;
   };
 
   let {
@@ -99,7 +108,24 @@
     pinned = false,
     onTogglePin,
     onCopyLink,
+    decisionActive = false,
+    onDecisionAnswer,
+    onDecisionPrefill,
   }: Props = $props();
+
+  // A workflow decision renders its choices as buttons inside the bubble. The
+  // prose stays and stays answerable by typing; only the machine block the
+  // bridge appends for this purpose is hidden.
+  let decisionPrompt = $derived(
+    isDecisionMessage(message) && onDecisionAnswer ? readDecisionPrompt(message.body) : null,
+  );
+  let renderedBody = $derived(
+    decisionPrompt === null ? message.body : stripDecisionBlock(message.body),
+  );
+  // Whether this decision is still the one the bridge is waiting on is a
+  // whole-timeline question, so the list decides it. nextMessage here is only
+  // group-scoped and would leave a stale prompt looking live.
+  let decisionAnswered = $derived(!decisionActive);
 
   let editSession = $derived(editController?.session(editScope));
   let editing = $derived(
@@ -718,7 +744,15 @@
       use:enhanceMarkdown
       use:enhanceCodeBlockCopy={true}
       use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
-    >{@html markdown(message.body)}</div>
+    >{@html markdown(renderedBody)}</div>
+    {#if decisionPrompt && onDecisionAnswer}
+      <DecisionChoices
+        prompt={decisionPrompt}
+        answered={decisionAnswered}
+        onAnswer={onDecisionAnswer}
+        onPrefill={onDecisionPrefill ?? (() => {})}
+      />
+    {/if}
     {#if message.edited_at}
       <span class="message-edit__indicator" title="Edited {time(message.edited_at)}">(edited)</span>
     {/if}

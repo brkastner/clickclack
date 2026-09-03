@@ -34,6 +34,9 @@
     pinnedMessageIDs?: ReadonlySet<string>;
     onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
     onCopyLink?: (message: Message) => Promise<string>;
+    activeDecisionID?: string | null;
+    onDecisionAnswer?: (reply: string) => void;
+    onDecisionPrefill?: (reply: string) => void;
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
@@ -67,6 +70,9 @@
     pinnedMessageIDs = new Set<string>(),
     onTogglePin,
     onCopyLink,
+    activeDecisionID = null,
+    onDecisionAnswer,
+    onDecisionPrefill,
     editController,
     editScope = "",
     onMessageEdited,
@@ -145,6 +151,9 @@
         pinned={pinnedMessageIDs.has(message.id)}
         {onTogglePin}
         {onCopyLink}
+        decisionActive={activeDecisionID === message.id}
+        {onDecisionAnswer}
+        {onDecisionPrefill}
       />
     {/each}
   </div>

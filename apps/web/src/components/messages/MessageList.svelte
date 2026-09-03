@@ -33,6 +33,7 @@
   import { recentAutoLoadAttachmentIDs } from "../../lib/media-loading";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Channel, DirectConversation, Message, Topic, Upload, User } from "../../lib/types";
+  import { activeDecisionID as newestDecisionID } from "../../lib/chat/decision-prompt";
   import HistoryLoader from "./HistoryLoader.svelte";
   import MessageGroup from "./MessageGroup.svelte";
 
@@ -90,6 +91,8 @@
     pinnedMessageIDs?: ReadonlySet<string>;
     onTogglePin?: (message: Message, pinned: boolean) => Promise<void>;
     onCopyLink?: (message: Message) => Promise<string>;
+    onDecisionAnswer?: (reply: string) => void;
+    onDecisionPrefill?: (reply: string) => void;
     editController?: MessageEditController;
     editScope?: string;
     onMessageEdited?: (message: Message) => void;
@@ -145,6 +148,8 @@
     pinnedMessageIDs = new Set<string>(),
     onTogglePin,
     onCopyLink,
+    onDecisionAnswer,
+    onDecisionPrefill,
     editController,
     editScope = "",
     onMessageEdited,
@@ -255,6 +260,11 @@
     return oldestSeq <= targetSeq && newestSeq >= targetSeq;
   });
   let canUseUnreadDivider = $derived(unreadBoundaryLoaded && listSpansUnreadBoundary);
+
+  // Which decision prompt, if any, is still waiting on an answer. This is a
+  // whole-timeline question rather than a per-group one, so it is decided here
+  // and passed down.
+  let liveDecisionID = $derived(onDecisionAnswer ? newestDecisionID(messages) : null);
 
   let items = $derived.by<Item[]>(() => {
     const out: Item[] = [];
@@ -1066,6 +1076,9 @@
               {pinnedMessageIDs}
               {onTogglePin}
               {onCopyLink}
+              activeDecisionID={liveDecisionID}
+              {onDecisionAnswer}
+              {onDecisionPrefill}
             />
           {/if}
         {/snippet}
