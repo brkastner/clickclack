@@ -75,6 +75,15 @@ test("double mode scales sidebar shelf and DM avatars to 150 percent", () => {
   );
 });
 
+test("centers persona identity headers without changing nested channels", () => {
+  const styles = readSource("../styles/sidebar.css");
+
+  assert.match(
+    styles,
+    /\.sidebar-profile-groups \.profile-subgroup-header \.profile-source-link\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?padding-inline:\s*8px;[\s\S]*?text-align:\s*center;/u,
+  );
+});
+
 test("double mode scales avatar-linked names with their avatars", () => {
   const sidebarStyles = readSource("../styles/sidebar.css");
   const messageStyles = readSource("../styles/messages.css");
@@ -98,10 +107,12 @@ test("double mode scales avatar-linked names with their avatars", () => {
   );
 });
 
-test("sidebar grid cards surface unread direct messages on the avatar", () => {
+test("sidebar profile cards glow with foam for unread direct messages", () => {
   const sidebar = readSource("../components/navigation/Sidebar.svelte");
   const styles = readSource("../styles/sidebar.css");
 
+  assert.match(sidebar, /const unread = conversation\?\.unread_count \|\| 0/u);
+  assert.match(sidebar, /hrefForDirect\(conversation\.id\)/u);
   assert.match(
     sidebar,
     /class:has-unread=\{unread > 0 && conversation\?\.id !== selectedDirectID\}/u,
@@ -109,7 +120,7 @@ test("sidebar grid cards surface unread direct messages on the avatar", () => {
   assert.match(sidebar, /class="sidebar-person-unread"/u);
   assert.match(
     styles,
-    /\.sidebar-person\.has-unread > \.avatar\s*\{[\s\S]*?border:\s*2px solid var\(--rp-love\);[\s\S]*?box-shadow:/u,
+    /\.sidebar-person\.has-unread\s*\{[\s\S]*?background:[\s\S]*?var\(--rp-foam\)[\s\S]*?box-shadow:/u,
   );
   assert.match(
     styles,

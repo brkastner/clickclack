@@ -189,6 +189,10 @@
   border-radius: 22px;
   color: inherit;
   text-decoration: none;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .sidebar-person > .avatar {
@@ -251,11 +255,26 @@
   color: var(--text-strong);
 }
 
-.sidebar-person.has-unread > .avatar {
-  border: 2px solid var(--rp-love);
+.sidebar-person.has-unread {
+  border-color: color-mix(in srgb, var(--rp-foam) 72%, transparent);
+  background: color-mix(in srgb, var(--rp-foam) 18%, transparent);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--rp-love) 24%, transparent),
-    0 0 22px color-mix(in srgb, var(--rp-love) 58%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--rp-foam) 24%, transparent),
+    0 0 24px color-mix(in srgb, var(--rp-foam) 38%, transparent);
+}
+
+.sidebar-person.has-unread:hover,
+.sidebar-person.has-unread:focus-visible {
+  border-color: var(--rp-foam);
+  background: color-mix(in srgb, var(--rp-foam) 24%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--rp-foam) 32%, transparent),
+    0 0 28px color-mix(in srgb, var(--rp-foam) 48%, transparent);
+}
+
+.sidebar-person.has-unread > .avatar {
+  border: 2px solid color-mix(in srgb, var(--rp-foam) 78%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rp-foam) 18%, transparent);
 }
 
 .sidebar-person.has-unread .sidebar-person-name {
@@ -794,6 +813,12 @@
 .profile-channel-group .profile-subgroup-header .channel-subgroup-toggle,
 .profile-channel-group .channel-row.reorderable .nav-item {
   padding-left: 4px;
+}
+
+.sidebar-profile-groups .profile-subgroup-header .profile-source-link {
+  justify-content: center;
+  padding-inline: 8px;
+  text-align: center;
 }
 
 .profile-channel-group .channel-row.reorderable .channel-drag-handle {

@@ -615,6 +615,28 @@
   height: 100%;
   object-fit: cover;
   object-position: center;
+  transform-origin: 58% 34%;
+  backface-visibility: hidden;
+  will-change: transform;
+  animation: chat-portrait-drift 42s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+@keyframes chat-portrait-drift {
+  0% {
+    transform: translate3d(-4px, -3px, 0) scale(1.035);
+  }
+
+  34% {
+    transform: translate3d(6px, -9px, 0) scale(1.05);
+  }
+
+  68% {
+    transform: translate3d(-8px, 7px, 0) scale(1.042);
+  }
+
+  100% {
+    transform: translate3d(8px, 4px, 0) scale(1.055);
+  }
 }
 
 @keyframes chat-portrait-enter {
@@ -635,7 +657,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-portrait-bleed {
+  .chat-portrait-bleed,
+  .chat-portrait-bleed > img {
     animation: none;
   }
 }

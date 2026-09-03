@@ -39,3 +39,19 @@ test("fades the portrait from the top-right without blocking chat interaction", 
   assert.match(styles, /mask-composite:\s*intersect/u);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation:\s*none;/u);
 });
+
+test("drifts only the image with a slow compositor transform", () => {
+  const styles = readSource("../styles/layout.css");
+  const imageRule = styles.match(/\.chat-portrait-bleed > img\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
+  const driftFrames = styles.match(/@keyframes chat-portrait-drift\s*\{([\s\S]*?)\n\}/u)?.[1] ?? "";
+
+  assert.match(imageRule, /will-change:\s*transform;/u);
+  assert.match(imageRule, /animation:\s*chat-portrait-drift 42s/u);
+  assert.match(driftFrames, /translate3d/u);
+  assert.match(driftFrames, /scale\(/u);
+  assert.doesNotMatch(driftFrames, /mask|filter|object-position/u);
+  assert.match(
+    styles,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.chat-portrait-bleed > img[\s\S]*?animation:\s*none;/u,
+  );
+});
