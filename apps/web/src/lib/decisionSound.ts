@@ -89,8 +89,9 @@ type AudioContextConstructor = new () => AudioContext;
 
 function audioContextConstructor(): AudioContextConstructor | undefined {
   if (typeof window === "undefined") return undefined;
-  const candidate = window.AudioContext
-    ?? (window as unknown as { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
+  const candidate =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
   return candidate;
 }
 

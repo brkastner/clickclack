@@ -246,7 +246,7 @@
   let showCreateDirect = false;
   let gifQuery = "";
   let browserNotificationsEnabled = false;
-  let decisionSound = $state<DecisionSound>("chime");
+  let decisionSound: DecisionSound = "chime";
   // Client-only preferences for agent activity. Commentary renders as normal
   // text between collapsible runs of tool rows; these flags independently hide
   // narration and/or tool blocks.
