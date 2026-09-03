@@ -60,19 +60,29 @@ export function writeDecisionSound(userID: string, sound: DecisionSound): boolea
 }
 
 /**
+ * Namespace the Pi bridge uses on turn_id to mark a decision prompt.
+ *
+ * ClickClack has no decision message kind, and adding one would diverge this
+ * fork from upstream on its own message contract. A decision therefore posts as
+ * agent_commentary with a namespaced turn_id, which ClickClack passes through
+ * unvalidated and publishes on message.created.
+ */
+const decisionTurnPrefix = "decision:";
+
+/**
  * True when this realtime event is a workflow decision awaiting an answer.
  *
- * Decisions arrive as an ordinary bot message carrying an interactive_request
- * kind, so the sound is tied to that kind rather than to any command name. A
- * decision raised by any workflow alerts, not only one entry point.
+ * Keyed to the turn marker rather than to any command name, so a decision
+ * raised by any workflow alerts rather than only one entry point.
  */
 export function isDecisionEvent(event: {
   type?: string;
   payload?: Record<string, unknown>;
 }): boolean {
   if (event.type !== "message.created") return false;
-  const kind = event.payload?.kind;
-  return kind === "interactive_request";
+  if (event.payload?.kind !== "agent_commentary") return false;
+  const turnID = event.payload?.turn_id;
+  return typeof turnID === "string" && turnID.startsWith(decisionTurnPrefix);
 }
 
 type AudioContextConstructor = new () => AudioContext;

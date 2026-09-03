@@ -68,23 +68,38 @@ test("an anonymous user never stores or reads a preference", () => {
   assert.equal(readDecisionSound(""), defaultDecisionSound);
 });
 
-test("only an interactive request counts as a decision", () => {
+test("only a decision-marked agent turn counts as a decision", () => {
   assert.equal(
-    isDecisionEvent({ type: "message.created", payload: { kind: "interactive_request" } }),
+    isDecisionEvent({
+      type: "message.created",
+      payload: { kind: "agent_commentary", turn_id: "decision:request-1:3" },
+    }),
     true,
   );
-  for (const kind of ["message", "agent_commentary", "agent_tool"]) {
+});
+
+test("ordinary agent activity in the same turn stays silent", () => {
+  for (const payload of [
+    { kind: "agent_commentary", turn_id: "turn_abc" },
+    { kind: "agent_tool", turn_id: "decision:request-1:3" },
+    { kind: "message", turn_id: "decision:request-1:3" },
+    { kind: "agent_commentary" },
+    { kind: "agent_commentary", turn_id: 7 },
+  ]) {
     assert.equal(
-      isDecisionEvent({ type: "message.created", payload: { kind } }),
+      isDecisionEvent({ type: "message.created", payload }),
       false,
-      kind,
+      JSON.stringify(payload),
     );
   }
 });
 
 test("a non-message event is never a decision", () => {
   assert.equal(
-    isDecisionEvent({ type: "thread.reply_created", payload: { kind: "interactive_request" } }),
+    isDecisionEvent({
+      type: "thread.reply_created",
+      payload: { kind: "agent_commentary", turn_id: "decision:request-1:3" },
+    }),
     false,
   );
   assert.equal(isDecisionEvent({ type: "message.created" }), false);
