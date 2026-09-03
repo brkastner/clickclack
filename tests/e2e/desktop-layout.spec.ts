@@ -89,7 +89,7 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     }
 
     peopleShelf.replaceChildren(
-      ...Array.from({ length: 4 }, () => {
+      ...Array.from({ length: 6 }, () => {
         const person = document.createElement("a");
         person.className = "sidebar-person";
         return person;
@@ -121,9 +121,10 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
         vertical: [
           people[0].top - shelfRect.top,
           people[2].top - people[0].bottom,
+          people[4].top - people[2].bottom,
           shelfRect.bottom -
             Number.parseFloat(peopleShelfStyle.borderBottomWidth) -
-            people[2].bottom,
+            people[4].bottom,
         ],
       },
       channelWidth: channelRect.width,
@@ -152,13 +153,13 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
     };
   });
 
-  // The recent-people shelf forms a true 2×2 grid. Vertical spacing stays
+  // The recent-people shelf forms a true 2×3 grid. Vertical spacing stays
   // even, while the horizontal middle gap is twice either outer edge.
-  expect(geometry.topGap).toBeGreaterThanOrEqual(216);
-  expect(geometry.topGap).toBeLessThanOrEqual(230);
+  expect(geometry.topGap).toBeGreaterThanOrEqual(370);
+  expect(geometry.topGap).toBeLessThanOrEqual(382);
   expect(geometry.peopleShelf.display).toBe("grid");
   expect(geometry.peopleShelf.columns).toBe("92px 92px");
-  expect(geometry.peopleShelf.rows).toBe("92px 92px");
+  expect(geometry.peopleShelf.rows).toBe("112px 112px 112px");
   expect(
     Math.abs(geometry.peopleShelf.horizontal[0] - geometry.peopleShelf.horizontal[2]),
   ).toBeLessThanOrEqual(1);
@@ -170,6 +171,9 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
   ).toBeLessThanOrEqual(1);
   expect(
     Math.abs(geometry.peopleShelf.vertical[1] - geometry.peopleShelf.vertical[2]),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(geometry.peopleShelf.vertical[2] - geometry.peopleShelf.vertical[3]),
   ).toBeLessThanOrEqual(1);
   expect(geometry.workspaceLabel).toContain("Workspace");
   expect(geometry.channelWidth).toBeGreaterThan(0);

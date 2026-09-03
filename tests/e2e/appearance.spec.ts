@@ -249,6 +249,7 @@ test("forced color mode applies instantly and survives reload", async ({ page })
 });
 
 test("board theme retunes the app palette and survives reload", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
   await openAppearanceSettings(page);
 
   const html = page.locator("html");
