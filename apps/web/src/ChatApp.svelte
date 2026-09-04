@@ -5271,6 +5271,9 @@
       channelNotifPreference={selectedChannel ? channelNotifPreference : null}
       {channelNotifSaving}
       pinnedOpen={pinnedPanelOpen}
+      runAvailable={runPanelAvailable}
+      runOpen={runPanelOpen}
+      {runWaiting}
       channelTitle={selectedDirect
         ? `@${dmTitle(selectedDirect, user?.id)}`
         : selectedChannel
@@ -5302,6 +5305,7 @@
       onToggleSidebar={handleSidebarCollapse}
       onToggleChannelNotifications={() => void cycleChannelNotifPreference()}
       onPinnedItems={togglePinnedPanel}
+      onToggleRun={toggleRunPanel}
     />
   {/if}
 

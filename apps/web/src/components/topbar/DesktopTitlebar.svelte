@@ -13,6 +13,11 @@
     channelTitle?: string;
     pinsAvailable?: boolean;
     pinnedOpen?: boolean;
+    /** A workflow run is being reported for this conversation. */
+    runAvailable?: boolean;
+    runOpen?: boolean;
+    /** The run is stopped waiting on a person. */
+    runWaiting?: boolean;
     externalURL?: string;
     connected: boolean;
     mobileNavigation: boolean;
@@ -37,6 +42,7 @@
     onToggleSidebar: () => void;
     onToggleChannelNotifications?: () => void;
     onPinnedItems: () => void;
+    onToggleRun: () => void;
   };
 
   function notifTitle(pref: ChannelNotificationPreference): string {
@@ -52,6 +58,9 @@
     channelTitle,
     pinsAvailable = false,
     pinnedOpen = false,
+    runAvailable = false,
+    runOpen = false,
+    runWaiting = false,
     externalURL,
     connected,
     mobileNavigation,
@@ -76,6 +85,7 @@
     onToggleSidebar,
     onToggleChannelNotifications = () => {},
     onPinnedItems,
+    onToggleRun,
   }: Props = $props();
 
   const externalHref = $derived(safeExternalChannelURL(externalURL));
@@ -204,6 +214,20 @@
           {:else}
             <span aria-hidden="true">🔔</span>
           {/if}
+        </button>
+      {/if}
+      {#if runAvailable}
+        <button
+          type="button"
+          title={runOpen ? "Close workflow run" : "Workflow run"}
+          aria-label={runOpen ? "Close workflow run" : "Workflow run"}
+          class:active={runOpen}
+          class:attention={runWaiting}
+          onclick={onToggleRun}
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 6h4v4H5zM15 14h4v4h-4zM9 8h4a2 2 0 0 1 2 2v6" />
+          </svg>
         </button>
       {/if}
       {#if pinsAvailable}
