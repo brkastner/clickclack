@@ -158,7 +158,7 @@ export type Message = {
   reactions?: ReactionSummary[];
   // Client-only provisional voice row. Never sent to the server.
   voice?: {
-    state: "listening" | "transcribing";
+    state: "listening" | "transcribing" | "paused" | "thinking" | "thinking-paused";
     stream?: MediaStream;
   };
   // Client-only status. Absent for sent messages.

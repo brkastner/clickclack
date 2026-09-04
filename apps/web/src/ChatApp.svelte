@@ -135,6 +135,7 @@
     voiceDestinationForFocus,
     voiceFocusChanged,
     voiceKeyboardShortcut,
+    voicePreviewStatus,
     voiceResponsePlaybackEnabled,
     VoiceDraftAccumulator,
     type VoiceDelegation,
@@ -431,6 +432,8 @@
   );
   $: voicePreviewMessage = buildVoicePreviewMessage(
     voiceState.status,
+    voiceState.inputStatus,
+    voiceThinking,
     voiceDestination,
     activeVoiceTranscript,
     voiceInputStream,
@@ -444,6 +447,8 @@
 
   function buildVoicePreviewMessage(
     currentVoiceStatus: VoiceState["status"],
+    inputStatus: VoiceState["inputStatus"],
+    waiting: boolean,
     destination: OutgoingDraft | null,
     transcript: VoiceTranscript | null,
     inputStream: MediaStream | null,
@@ -453,6 +458,7 @@
     const hasTranscript = Boolean(transcript?.text.trim());
     const showLiveInput =
       currentVoiceStatus === "listening" ||
+      currentVoiceStatus === "thinking" ||
       (currentVoiceStatus === "speaking" && hasTranscript);
     if (
       !showLiveInput ||
@@ -476,7 +482,7 @@
       created_at: new Date().toISOString(),
       author: currentUser,
       voice: {
-        state: transcript ? "transcribing" : "listening",
+        state: voicePreviewStatus(currentVoiceStatus, inputStatus, waiting, hasTranscript),
         stream: inputStream || undefined,
       },
     };

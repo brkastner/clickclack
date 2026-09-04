@@ -747,7 +747,15 @@
             use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
           >{@html markdown(message.body)}</div>
         {:else}
-          <span class="voice-transcript__listening">Listening…</span>
+          <span class="voice-transcript__listening">
+            {message.voice.state === "thinking-paused"
+              ? "Thinking… · mic paused"
+              : message.voice.state === "thinking"
+                ? "Thinking…"
+                : message.voice.state === "paused"
+                  ? "Mic paused"
+                  : "Listening…"}
+          </span>
         {/if}
       </div>
     {:else}

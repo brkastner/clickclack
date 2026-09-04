@@ -1,4 +1,4 @@
-export type VoiceStatus = "idle" | "connecting" | "listening" | "speaking" | "failed";
+export type VoiceStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "failed";
 export type VoiceInputStatus = "live" | "pausing" | "paused" | "resuming";
 export type VoiceProviderMode = "cascaded" | "native";
 
@@ -40,7 +40,29 @@ export function voiceResponsePlaybackEnabled(
   status: VoiceStatus,
   awaitingResponses: number,
 ): boolean {
-  return awaitingResponses > 0 && (status === "listening" || status === "speaking");
+  return (
+    awaitingResponses > 0 &&
+    (status === "listening" || status === "thinking" || status === "speaking")
+  );
+}
+
+export type VoicePreviewStatus =
+  | "listening"
+  | "transcribing"
+  | "paused"
+  | "thinking"
+  | "thinking-paused";
+
+export function voicePreviewStatus(
+  status: VoiceStatus,
+  inputStatus: VoiceInputStatus | undefined,
+  waiting: boolean,
+  hasTranscript: boolean,
+): VoicePreviewStatus {
+  const paused = inputStatus === "paused" || inputStatus === "pausing";
+  if (waiting || status === "thinking") return paused ? "thinking-paused" : "thinking";
+  if (paused) return "paused";
+  return hasTranscript ? "transcribing" : "listening";
 }
 
 export type VoiceKeyboardShortcut = "toggle-input" | "toggle-auto-send";
@@ -60,7 +82,7 @@ export type VoiceKeyboardInput = {
 
 export function voiceKeyboardShortcut(input: VoiceKeyboardInput): VoiceKeyboardShortcut | null {
   if (
-    (input.status !== "listening" && input.status !== "speaking") ||
+    (input.status !== "listening" && input.status !== "thinking" && input.status !== "speaking") ||
     input.ctrlKey ||
     input.metaKey ||
     input.altKey ||
@@ -326,7 +348,9 @@ export class BrowserVoiceSession {
 
   toggleInput(): boolean {
     if (
-      (this.state.status !== "listening" && this.state.status !== "speaking") ||
+      (this.state.status !== "listening" &&
+        this.state.status !== "thinking" &&
+        this.state.status !== "speaking") ||
       this.dataChannel?.readyState !== "open"
     ) {
       return false;
@@ -464,7 +488,7 @@ export class BrowserVoiceSession {
     }
     if (message.type === "session.state_changed") {
       const state = message.data.state;
-      if (state === "listening" || state === "speaking") {
+      if (state === "listening" || state === "thinking" || state === "speaking") {
         this.publish({
           status: state,
           inputStatus: this.state.inputStatus ?? "live",

@@ -1025,8 +1025,10 @@
               <small>
                 {voiceStatus === "connecting"
                   ? "Connecting…"
-                  : voicePaused
-                    ? "Mic paused"
+                  : voiceWaiting && voicePaused
+                    ? "Thinking · mic paused"
+                    : voicePaused
+                      ? "Mic paused"
                     : voiceInputStatus === "resuming"
                       ? "Resuming…"
                       : voiceWaiting
@@ -1066,6 +1068,10 @@
               <span>Opening voice channel</span>
               <strong>Connecting to OpenClaw…</strong>
               <p>Your typed draft is safe while the live session opens.</p>
+            {:else if voiceWaiting && voicePaused}
+              <span>Turn received · input paused</span>
+              <strong>OpenClaw is thinking</strong>
+              <p>Your transcript is in the conversation. No microphone audio is being sent.</p>
             {:else if voicePaused}
               <span>Input paused</span>
               <strong>Take your time</strong>

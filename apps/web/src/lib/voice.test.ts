@@ -8,6 +8,7 @@ import {
   voiceDestinationForFocus,
   voiceFocusChanged,
   voiceKeyboardShortcut,
+  voicePreviewStatus,
   voiceResponsePlaybackEnabled,
   VoiceDraftAccumulator,
   type VoiceDelegation,
@@ -210,7 +211,16 @@ test("speaks responses only while the focused conversation is awaiting one", () 
   assert.equal(voiceResponsePlaybackEnabled("speaking", 0), false);
   assert.equal(voiceResponsePlaybackEnabled("idle", 1), false);
   assert.equal(voiceResponsePlaybackEnabled("listening", 1), true);
+  assert.equal(voiceResponsePlaybackEnabled("thinking", 1), true);
   assert.equal(voiceResponsePlaybackEnabled("speaking", 1), true);
+});
+
+test("labels voice previews from turn progress and microphone state", () => {
+  assert.equal(voicePreviewStatus("listening", "paused", false, false), "paused");
+  assert.equal(voicePreviewStatus("thinking", "paused", true, false), "thinking-paused");
+  assert.equal(voicePreviewStatus("thinking", "live", true, false), "thinking");
+  assert.equal(voicePreviewStatus("listening", "live", false, true), "transcribing");
+  assert.equal(voicePreviewStatus("listening", "live", false, false), "listening");
 });
 
 test("maps live voice shortcuts without stealing editable input", () => {
@@ -230,6 +240,7 @@ test("maps live voice shortcuts without stealing editable input", () => {
   assert.equal(voiceKeyboardShortcut(base), "toggle-input");
   assert.equal(voiceKeyboardShortcut({ ...base, shiftKey: true }), null);
   assert.equal(voiceKeyboardShortcut({ ...base, code: "KeyA", key: "a" }), "toggle-auto-send");
+  assert.equal(voiceKeyboardShortcut({ ...base, status: "thinking" }), "toggle-input");
   assert.equal(voiceKeyboardShortcut({ ...base, status: "idle" }), null);
   assert.equal(voiceKeyboardShortcut({ ...base, editable: true }), null);
   assert.equal(voiceKeyboardShortcut({ ...base, repeat: true }), null);
@@ -432,6 +443,16 @@ test("connects microphone audio through kassette SmallWebRTC signaling", async (
     data: { session_id: "voice-1", paused: true, sequence: 3 },
   });
   assert.equal(session.currentState().inputStatus, "paused");
+  peer.dataChannel.emit({
+    label: "kassette",
+    type: "session.state_changed",
+    data: { session_id: "voice-1", state: "thinking", sequence: 4 },
+  });
+  assert.deepEqual(session.currentState(), {
+    status: "thinking",
+    inputStatus: "paused",
+    providerMode: undefined,
+  });
 
   assert.equal(session.toggleInput(), true);
   assert.equal(input.track.enabled, false);
