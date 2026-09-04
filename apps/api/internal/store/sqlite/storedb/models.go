@@ -415,13 +415,14 @@ type User struct {
 }
 
 type UserAppearancePreference struct {
-	UserID        string `json:"user_id"`
-	ColorMode     string `json:"color_mode"`
-	BoardTheme    string `json:"board_theme"`
-	MessageLayout string `json:"message_layout"`
-	Density       string `json:"density"`
-	BotShelfOrder string `json:"bot_shelf_order"`
-	BotShelfLimit int64  `json:"bot_shelf_limit"`
+	UserID               string `json:"user_id"`
+	ColorMode            string `json:"color_mode"`
+	BoardTheme           string `json:"board_theme"`
+	MessageLayout        string `json:"message_layout"`
+	Density              string `json:"density"`
+	BotShelfOrder        string `json:"bot_shelf_order"`
+	BotShelfLimit        int64  `json:"bot_shelf_limit"`
+	PersonaHeroPositions string `json:"persona_hero_positions"`
 }
 
 type UserNotificationSetting struct {

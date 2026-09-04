@@ -1005,18 +1005,19 @@ func (q *Queries) GetActiveSlashCommandWorkspace(ctx context.Context, id string)
 }
 
 const getAppearancePreferences = `-- name: GetAppearancePreferences :one
-SELECT color_mode, board_theme, message_layout, density, bot_shelf_order, bot_shelf_limit
+SELECT color_mode, board_theme, message_layout, density, bot_shelf_order, bot_shelf_limit, persona_hero_positions
 FROM user_appearance_preferences
 WHERE user_id = $1
 `
 
 type GetAppearancePreferencesRow struct {
-	ColorMode     string `json:"color_mode"`
-	BoardTheme    string `json:"board_theme"`
-	MessageLayout string `json:"message_layout"`
-	Density       string `json:"density"`
-	BotShelfOrder string `json:"bot_shelf_order"`
-	BotShelfLimit int32  `json:"bot_shelf_limit"`
+	ColorMode            string `json:"color_mode"`
+	BoardTheme           string `json:"board_theme"`
+	MessageLayout        string `json:"message_layout"`
+	Density              string `json:"density"`
+	BotShelfOrder        string `json:"bot_shelf_order"`
+	BotShelfLimit        int32  `json:"bot_shelf_limit"`
+	PersonaHeroPositions string `json:"persona_hero_positions"`
 }
 
 func (q *Queries) GetAppearancePreferences(ctx context.Context, userID string) (GetAppearancePreferencesRow, error) {
@@ -1029,6 +1030,7 @@ func (q *Queries) GetAppearancePreferences(ctx context.Context, userID string) (
 		&i.Density,
 		&i.BotShelfOrder,
 		&i.BotShelfLimit,
+		&i.PersonaHeroPositions,
 	)
 	return i, err
 }
@@ -5699,6 +5701,22 @@ type UpdateAppearanceMessageLayoutParams struct {
 
 func (q *Queries) UpdateAppearanceMessageLayout(ctx context.Context, arg UpdateAppearanceMessageLayoutParams) error {
 	_, err := q.db.ExecContext(ctx, updateAppearanceMessageLayout, arg.MessageLayout, arg.UserID)
+	return err
+}
+
+const updateAppearancePersonaHeroPositions = `-- name: UpdateAppearancePersonaHeroPositions :exec
+UPDATE user_appearance_preferences
+SET persona_hero_positions = $1
+WHERE user_id = $2
+`
+
+type UpdateAppearancePersonaHeroPositionsParams struct {
+	PersonaHeroPositions string `json:"persona_hero_positions"`
+	UserID               string `json:"user_id"`
+}
+
+func (q *Queries) UpdateAppearancePersonaHeroPositions(ctx context.Context, arg UpdateAppearancePersonaHeroPositionsParams) error {
+	_, err := q.db.ExecContext(ctx, updateAppearancePersonaHeroPositions, arg.PersonaHeroPositions, arg.UserID)
 	return err
 }
 

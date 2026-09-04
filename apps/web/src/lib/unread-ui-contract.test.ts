@@ -23,11 +23,22 @@ test("keeps the unread overlay above elevated virtualized message rows", () => {
 });
 
 test("marks channels and direct conversations read when they are opened", () => {
-  const applyRoute = chatApp.match(/async function applyRoute[\s\S]*?\n  async function ensureResolvedRouteTargetLoaded/u)?.[0] ?? "";
-  const selectChannel = chatApp.match(/async function selectChannel[\s\S]*?\n  async function loadChannelNotifPreference/u)?.[0] ?? "";
-  const selectDirect = chatApp.match(/async function selectDirectConversation[\s\S]*?\n  async function startDirectWithUser/u)?.[0] ?? "";
+  const applyRoute =
+    chatApp.match(
+      /async function applyRoute[\s\S]*?\n  async function ensureResolvedRouteTargetLoaded/u,
+    )?.[0] ?? "";
+  const selectChannel =
+    chatApp.match(
+      /async function selectChannel[\s\S]*?\n  async function loadChannelNotifPreference/u,
+    )?.[0] ?? "";
+  const selectDirect =
+    chatApp.match(
+      /async function selectDirectConversation[\s\S]*?\n  async function startDirectWithUser/u,
+    )?.[0] ?? "";
   const markConversationReadOnOpen =
-    chatApp.match(/function markConversationReadOnOpen[\s\S]*?\n  function markActiveViewRead/u)?.[0] ?? "";
+    chatApp.match(
+      /function markConversationReadOnOpen[\s\S]*?\n  function markActiveViewRead/u,
+    )?.[0] ?? "";
 
   assert.equal(
     applyRoute.match(/markConversationReadOnOpen\(targetID\);/gu)?.length,

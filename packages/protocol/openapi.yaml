@@ -2761,6 +2761,25 @@ components:
           description: Maximum shelf bots to render. 0 shows all.
           minimum: 0
           maximum: 64
+        persona_hero_positions:
+          type: object
+          description: Per-bot sidebar hero crop positions as X/Y percentages.
+          maxProperties: 64
+          additionalProperties:
+            $ref: "#/components/schemas/PersonaHeroPosition"
+    PersonaHeroPosition:
+      type: object
+      required: [x, y]
+      additionalProperties: false
+      properties:
+        x:
+          type: integer
+          minimum: 0
+          maximum: 100
+        y:
+          type: integer
+          minimum: 0
+          maximum: 100
     AppearancePreferencesPatch:
       type: object
       description: Partial appearance update. Omitted properties are unchanged and empty strings reset to defaults.
@@ -2788,6 +2807,12 @@ components:
           description: Maximum shelf bots to render. 0 shows all.
           minimum: 0
           maximum: 64
+        persona_hero_positions:
+          type: object
+          description: Complete per-bot sidebar hero crop map. Empty object resets all positions.
+          maxProperties: 64
+          additionalProperties:
+            $ref: "#/components/schemas/PersonaHeroPosition"
     CreateChannelRequest:
       type: object
       required: [name]

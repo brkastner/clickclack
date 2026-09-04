@@ -16,6 +16,7 @@
     loading?: AvatarLoading;
     fetchPriority?: AvatarFetchPriority;
     buttonLabel?: string;
+    imagePosition?: string;
     onclick?: (event: MouseEvent) => void;
   };
 
@@ -29,6 +30,7 @@
     loading = "lazy",
     fetchPriority = "low",
     buttonLabel,
+    imagePosition = "50% 50%",
     onclick,
   }: Props = $props();
 
@@ -60,6 +62,7 @@
         alt=""
         width={size}
         height={size}
+        style:object-position={imagePosition}
         {loading}
         decoding="async"
         fetchpriority={fetchPriority}
@@ -77,6 +80,7 @@
         alt=""
         width={size}
         height={size}
+        style:object-position={imagePosition}
         {loading}
         decoding="async"
         fetchpriority={fetchPriority}

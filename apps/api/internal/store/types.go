@@ -217,6 +217,11 @@ type UpdateNotificationSettingsInput struct {
 	PushoverUserKey string
 }
 
+type PersonaHeroPosition struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
 type AppearancePreferences struct {
 	ColorMode     string `json:"color_mode,omitempty"`
 	BoardTheme    string `json:"board_theme,omitempty"`
@@ -227,15 +232,19 @@ type AppearancePreferences struct {
 	BotShelfOrder []string `json:"bot_shelf_order,omitempty"`
 	// BotShelfLimit caps how many shelf bots render; 0 means show all.
 	BotShelfLimit int `json:"bot_shelf_limit,omitempty"`
+	// PersonaHeroPositions stores per-bot object-position percentages for the
+	// sidebar persona hero crop.
+	PersonaHeroPositions map[string]PersonaHeroPosition `json:"persona_hero_positions,omitempty"`
 }
 
 type AppearancePreferencesPatch struct {
-	ColorMode     *string   `json:"color_mode,omitempty"`
-	BoardTheme    *string   `json:"board_theme,omitempty"`
-	MessageLayout *string   `json:"message_layout,omitempty"`
-	Density       *string   `json:"density,omitempty"`
-	BotShelfOrder *[]string `json:"bot_shelf_order,omitempty"`
-	BotShelfLimit *int      `json:"bot_shelf_limit,omitempty"`
+	ColorMode            *string                         `json:"color_mode,omitempty"`
+	BoardTheme           *string                         `json:"board_theme,omitempty"`
+	MessageLayout        *string                         `json:"message_layout,omitempty"`
+	Density              *string                         `json:"density,omitempty"`
+	BotShelfOrder        *[]string                       `json:"bot_shelf_order,omitempty"`
+	BotShelfLimit        *int                            `json:"bot_shelf_limit,omitempty"`
+	PersonaHeroPositions *map[string]PersonaHeroPosition `json:"persona_hero_positions,omitempty"`
 }
 
 type UpdateAppearancePreferencesInput struct {

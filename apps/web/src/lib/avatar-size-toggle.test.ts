@@ -98,6 +98,22 @@ test("persona headers use each avatar as the full clipped hero background", () =
   assert.doesNotMatch(styles, /\.sidebar-profile-groups \.channel-profile-avatar/u);
 });
 
+test("persona hero crop controls preview and persist per-bot positions", () => {
+  const avatar = readSource("../components/avatar/Avatar.svelte");
+  const channelList = readSource("../components/navigation/ChannelList.svelte");
+  const editor = readSource("../components/profile/ProfileEditor.svelte");
+  const appearance = readSource("./appearance.ts");
+
+  assert.match(avatar, /style:object-position=\{imagePosition\}/u);
+  assert.match(channelList, /\$personaHeroPositions\[group\.profile\.bot_user_id\]/u);
+  assert.match(editor, /Sidebar hero horizontal position/u);
+  assert.match(editor, /Sidebar hero vertical position/u);
+  assert.match(editor, /imagePosition=\{`\$\{heroPosition\.x\}% \$\{heroPosition\.y\}%`\}/u);
+  assert.match(appearance, /persona_hero_positions: next/u);
+  assert.match(editor, /Could not save this crop/u);
+  assert.match(editor, /onclick=\{retryPersonaHeroPositions\}/u);
+});
+
 test("persona headers support persisted pointer and keyboard reordering", () => {
   const sidebar = readSource("../components/navigation/Sidebar.svelte");
   const channelList = readSource("../components/navigation/ChannelList.svelte");

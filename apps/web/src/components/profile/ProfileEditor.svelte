@@ -1,5 +1,11 @@
 <script lang="ts">
   import Avatar from "../avatar/Avatar.svelte";
+  import {
+    personaHeroPositions,
+    personaHeroPositionSaveState,
+    retryPersonaHeroPositions,
+    setPersonaHeroPosition,
+  } from "../../lib/appearance";
   import type { User } from "../../lib/types";
 
   type Props = {
@@ -45,6 +51,12 @@
       avatarURLLight.trim() !== (profile.avatar_url_light ?? ""),
   );
   const identityValid = $derived(displayName.trim().length > 0);
+  const heroPosition = $derived($personaHeroPositions[profile.id] ?? { x: 50, y: 20 });
+
+  function updateHeroPosition(axis: "x" | "y", event: Event) {
+    const value = Number((event.currentTarget as HTMLInputElement).value);
+    setPersonaHeroPosition(profile.id, { ...heroPosition, [axis]: value });
+  }
 
   async function saveIdentity() {
     if (saving || !identityDirty || !identityValid) return;
@@ -107,6 +119,41 @@
           {#if avatarURLLight}<button type="button" class="text-action" onclick={() => (avatarURLLight = "")}>Remove light avatar</button>{/if}
         </div>
       </div>
+      <section class="profile-editor__hero-position" aria-label="Sidebar hero crop">
+        <Avatar
+          class="profile-editor__hero-preview"
+          id={profile.id}
+          name={displayName || profile.display_name}
+          src={avatarURL}
+          lightSrc={avatarURLLight}
+          size={320}
+          loading="eager"
+          fetchPriority="auto"
+          imagePosition={`${heroPosition.x}% ${heroPosition.y}%`}
+        />
+        <div class="profile-editor__hero-controls">
+          <div class="profile-editor__hero-heading">
+            <strong>Sidebar hero crop</strong>
+            <button type="button" class="text-action" disabled={heroPosition.x === 50 && heroPosition.y === 20} onclick={() => setPersonaHeroPosition(profile.id, { x: 50, y: 20 })}>Reset</button>
+          </div>
+          <label class="profile-editor__range">
+            <span>Horizontal <output>{heroPosition.x}%</output></span>
+            <input type="range" min="0" max="100" value={heroPosition.x} aria-label="Sidebar hero horizontal position" oninput={(event) => updateHeroPosition("x", event)} />
+          </label>
+          <label class="profile-editor__range">
+            <span>Vertical <output>{heroPosition.y}%</output></span>
+            <input type="range" min="0" max="100" value={heroPosition.y} aria-label="Sidebar hero vertical position" oninput={(event) => updateHeroPosition("y", event)} />
+          </label>
+          {#if $personaHeroPositionSaveState === "saving"}
+            <p class="profile-editor__hero-save" role="status">Saving crop...</p>
+          {:else if $personaHeroPositionSaveState === "error"}
+            <p class="profile-editor__hero-save is-error" role="alert">
+              Could not save this crop.
+              <button type="button" class="text-action" onclick={retryPersonaHeroPositions}>Retry</button>
+            </p>
+          {/if}
+        </div>
+      </section>
       <label class="profile-editor__field">
         <span>Display name</span>
         <input bind:value={displayName} maxlength="80" aria-label="Display name" />

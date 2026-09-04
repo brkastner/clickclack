@@ -39,18 +39,20 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 	system := "system"
 	moss := "moss"
 	compact := "compact"
+	heroPositions := map[string]store.PersonaHeroPosition{"bot-1": {X: 35, Y: 72}}
 	preferences, err = st.UpdateAppearancePreferences(ctx, store.UpdateAppearancePreferencesInput{
 		UserID: user.ID,
 		Patch: store.AppearancePreferencesPatch{
-			ColorMode:  &system,
-			BoardTheme: &moss,
-			Density:    &compact,
+			ColorMode:            &system,
+			BoardTheme:           &moss,
+			Density:              &compact,
+			PersonaHeroPositions: &heroPositions,
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preferences == nil || preferences.ColorMode != "" || preferences.BoardTheme != "moss" || preferences.MessageLayout != "" || preferences.Density != "compact" {
+	if preferences == nil || preferences.ColorMode != "" || preferences.BoardTheme != "moss" || preferences.MessageLayout != "" || preferences.Density != "compact" || preferences.PersonaHeroPositions["bot-1"].Y != 72 {
 		t.Fatalf("unexpected initial preferences: %#v", preferences)
 	}
 

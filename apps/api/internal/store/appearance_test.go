@@ -82,7 +82,7 @@ func TestNormalizeAppearancePreferencesPatch_NilFieldsStayNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out.ColorMode != nil || out.BoardTheme != nil || out.MessageLayout != nil || out.Density != nil {
+	if out.ColorMode != nil || out.BoardTheme != nil || out.MessageLayout != nil || out.Density != nil || out.PersonaHeroPositions != nil {
 		t.Errorf("nil fields mutated: %#v", out)
 	}
 }
@@ -125,6 +125,7 @@ func TestAppearancePreferencesPatchEmpty(t *testing.T) {
 		{"BoardTheme", AppearancePreferencesPatch{BoardTheme: strPtr("")}},
 		{"MessageLayout", AppearancePreferencesPatch{MessageLayout: strPtr("")}},
 		{"Density", AppearancePreferencesPatch{Density: strPtr("")}},
+		{"PersonaHeroPositions", AppearancePreferencesPatch{PersonaHeroPositions: &map[string]PersonaHeroPosition{}}},
 	}
 	for _, c := range nonEmpty {
 		if AppearancePreferencesPatchEmpty(c.patch) {
@@ -138,6 +139,31 @@ func deref(p *string) string {
 		return "<nil>"
 	}
 	return *p
+}
+
+func TestNormalizePersonaHeroPositions(t *testing.T) {
+	positions := map[string]PersonaHeroPosition{
+		" bot-a ": {X: 23, Y: 78},
+	}
+	patch, err := NormalizeAppearancePreferencesPatch(AppearancePreferencesPatch{PersonaHeroPositions: &positions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := (*patch.PersonaHeroPositions)["bot-a"]; got.X != 23 || got.Y != 78 {
+		t.Fatalf("position = %#v", got)
+	}
+	encoded, err := EncodePersonaHeroPositions(*patch.PersonaHeroPositions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := DecodePersonaHeroPositions(encoded)["bot-a"]; got.X != 23 || got.Y != 78 {
+		t.Fatalf("round trip = %#v", got)
+	}
+
+	invalid := map[string]PersonaHeroPosition{"bot-a": {X: 101, Y: 50}}
+	if _, err := NormalizeAppearancePreferencesPatch(AppearancePreferencesPatch{PersonaHeroPositions: &invalid}); err == nil {
+		t.Fatal("expected out-of-range position to be rejected")
+	}
 }
 
 func TestNormalizeBotShelfPatch(t *testing.T) {

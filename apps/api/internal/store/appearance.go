@@ -1,11 +1,13 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 )
 
 const MaxBotShelfOrderEntries = 64
+const MaxPersonaHeroPositions = 64
 
 func AppearancePreferencesPatchEmpty(patch AppearancePreferencesPatch) bool {
 	return patch.ColorMode == nil &&
@@ -13,7 +15,8 @@ func AppearancePreferencesPatchEmpty(patch AppearancePreferencesPatch) bool {
 		patch.MessageLayout == nil &&
 		patch.Density == nil &&
 		patch.BotShelfOrder == nil &&
-		patch.BotShelfLimit == nil
+		patch.BotShelfLimit == nil &&
+		patch.PersonaHeroPositions == nil
 }
 
 func NormalizeAppearancePreferencesPatch(input AppearancePreferencesPatch) (AppearancePreferencesPatch, error) {
@@ -77,13 +80,32 @@ func NormalizeAppearancePreferencesPatch(input AppearancePreferencesPatch) (Appe
 		limit := *input.BotShelfLimit
 		shelfLimit = &limit
 	}
+	var heroPositions *map[string]PersonaHeroPosition
+	if input.PersonaHeroPositions != nil {
+		if len(*input.PersonaHeroPositions) > MaxPersonaHeroPositions {
+			return AppearancePreferencesPatch{}, errors.New("persona_hero_positions is too long")
+		}
+		positions := make(map[string]PersonaHeroPosition, len(*input.PersonaHeroPositions))
+		for rawID, position := range *input.PersonaHeroPositions {
+			id := strings.TrimSpace(rawID)
+			if id == "" {
+				return AppearancePreferencesPatch{}, errors.New("persona_hero_positions has an empty id")
+			}
+			if position.X < 0 || position.X > 100 || position.Y < 0 || position.Y > 100 {
+				return AppearancePreferencesPatch{}, errors.New("persona_hero_positions is invalid")
+			}
+			positions[id] = position
+		}
+		heroPositions = &positions
+	}
 	return AppearancePreferencesPatch{
-		ColorMode:     colorMode,
-		BoardTheme:    boardTheme,
-		MessageLayout: messageLayout,
-		Density:       density,
-		BotShelfOrder: shelfOrder,
-		BotShelfLimit: shelfLimit,
+		ColorMode:            colorMode,
+		BoardTheme:           boardTheme,
+		MessageLayout:        messageLayout,
+		Density:              density,
+		BotShelfOrder:        shelfOrder,
+		BotShelfLimit:        shelfLimit,
+		PersonaHeroPositions: heroPositions,
 	}, nil
 }
 
@@ -96,6 +118,28 @@ func DecodeBotShelfOrder(raw string) []string {
 		return nil
 	}
 	return strings.Split(raw, ",")
+}
+
+func EncodePersonaHeroPositions(positions map[string]PersonaHeroPosition) (string, error) {
+	if len(positions) == 0 {
+		return "", nil
+	}
+	encoded, err := json.Marshal(positions)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func DecodePersonaHeroPositions(raw string) map[string]PersonaHeroPosition {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	positions := map[string]PersonaHeroPosition{}
+	if err := json.Unmarshal([]byte(raw), &positions); err != nil {
+		return nil
+	}
+	return positions
 }
 
 func normalizeAppearancePreference(value *string, allowed map[string]string, field string) (*string, error) {

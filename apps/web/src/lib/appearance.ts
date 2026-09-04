@@ -8,7 +8,12 @@ import { writable } from "svelte/store";
 
 import { api } from "./api";
 import { getEmbedHostThemeMode } from "./embed-theme";
-import type { AppearancePreferences, AppearancePreferencesPatch, User } from "./types";
+import type {
+  AppearancePreferences,
+  AppearancePreferencesPatch,
+  PersonaHeroPosition,
+  User,
+} from "./types";
 
 export type ColorMode = "light" | "dark" | "system";
 export type ResolvedColorMode = Exclude<ColorMode, "system">;
@@ -286,6 +291,11 @@ export function setDensity(density: Density) {
 export type BotShelfPreferences = { order: string[]; limit: number };
 export const DEFAULT_BOT_SHELF_LIMIT = 6;
 export const botShelfPreferences = writable<BotShelfPreferences>({ order: [], limit: 0 });
+export type PersonaHeroPositionSaveState = "idle" | "saving" | "saved" | "error";
+export const personaHeroPositions = writable<Record<string, PersonaHeroPosition>>({});
+export const personaHeroPositionSaveState = writable<PersonaHeroPositionSaveState>("idle");
+let personaHeroPositionSnapshot: Record<string, PersonaHeroPosition> = {};
+let personaHeroPositionTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function setBotShelfOrder(order: string[]) {
   botShelfPreferences.update((current) => ({ ...current, order }));
@@ -296,6 +306,45 @@ export function setBotShelfLimit(limit: number) {
   const normalized = Math.max(0, Math.floor(limit));
   botShelfPreferences.update((current) => ({ ...current, limit: normalized }));
   queueAppearancePatch({ bot_shelf_limit: normalized });
+}
+
+export function setPersonaHeroPosition(botID: string, position: PersonaHeroPosition) {
+  const normalized = {
+    x: Math.max(0, Math.min(100, Math.round(position.x))),
+    y: Math.max(0, Math.min(100, Math.round(position.y))),
+  };
+  const next = { ...personaHeroPositionSnapshot };
+  if (normalized.x === 50 && normalized.y === 20) delete next[botID];
+  else next[botID] = normalized;
+  personaHeroPositionSnapshot = next;
+  personaHeroPositions.set(next);
+  personaHeroPositionSaveState.set("saving");
+
+  const userID = appearanceSyncUserID;
+  const accountGeneration = appearanceAccountGeneration;
+  clearTimeout(personaHeroPositionTimer);
+  personaHeroPositionTimer = setTimeout(() => {
+    if (appearanceSyncUserID !== userID || appearanceAccountGeneration !== accountGeneration)
+      return;
+    queueAppearancePatch(
+      { persona_hero_positions: next },
+      {
+        onSaved: () => personaHeroPositionSaveState.set("saved"),
+        onError: () => personaHeroPositionSaveState.set("error"),
+      },
+    );
+  }, 180);
+}
+
+export function retryPersonaHeroPositions() {
+  personaHeroPositionSaveState.set("saving");
+  queueAppearancePatch(
+    { persona_hero_positions: personaHeroPositionSnapshot },
+    {
+      onSaved: () => personaHeroPositionSaveState.set("saved"),
+      onError: () => personaHeroPositionSaveState.set("error"),
+    },
+  );
 }
 
 export function serializeAppearancePreferences(): AppearancePreferences {
@@ -320,6 +369,8 @@ export function applyServerPreferences(preferences: AppearancePreferences) {
     order: preferences.bot_shelf_order ?? [],
     limit: preferences.bot_shelf_limit ?? 0,
   });
+  personaHeroPositionSnapshot = preferences.persona_hero_positions ?? {};
+  personaHeroPositions.set(personaHeroPositionSnapshot);
 }
 
 export async function requestCurrentUser(init: RequestInit = {}): Promise<{ user: User }> {
@@ -381,7 +432,15 @@ function reconcileAppearancePreferences(user: User, requestState?: AppearanceReq
   if (Object.keys(patch).length > 0) queueAppearancePatch(patch);
 }
 
-function queueAppearancePatch(patch: AppearancePreferencesPatch) {
+type AppearancePatchCallbacks = {
+  onSaved?: () => void;
+  onError?: () => void;
+};
+
+function queueAppearancePatch(
+  patch: AppearancePreferencesPatch,
+  callbacks: AppearancePatchCallbacks = {},
+) {
   const userID = appearanceSyncUserID;
   if (!userID || Object.keys(patch).length === 0) return;
   const revision = ++appearanceRevision;
@@ -406,11 +465,14 @@ function queueAppearancePatch(patch: AppearancePreferencesPatch) {
       if (appearanceRevision === revision) {
         applyServerPreferences(data.user.appearance_preferences ?? {});
         rememberAppearanceCacheUser();
+        callbacks.onSaved?.();
       }
     } catch {
-      // The local cache remains active; a later change or reload can retry.
+      // Cached preferences remain active; server-only preferences surface an
+      // explicit retry through their callback.
       if (appearanceSyncUserID === userID && appearanceAccountGeneration === accountGeneration) {
         appearanceSettledRevision = Math.max(appearanceSettledRevision, revision);
+        if (appearanceRevision === revision) callbacks.onError?.();
       }
     }
   });

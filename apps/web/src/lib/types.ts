@@ -18,6 +18,8 @@ export type NotificationSettings = {
   pushover_user_key: string;
 };
 
+export type PersonaHeroPosition = { x: number; y: number };
+
 export type AppearancePreferences = {
   color_mode?: "" | "light" | "dark";
   board_theme?: "" | "ember" | "moss" | "iris";
@@ -25,6 +27,7 @@ export type AppearancePreferences = {
   density?: "" | "compact";
   bot_shelf_order?: string[];
   bot_shelf_limit?: number;
+  persona_hero_positions?: Record<string, PersonaHeroPosition>;
 };
 
 export type AppearancePreferencesPatch = {
@@ -34,6 +37,7 @@ export type AppearancePreferencesPatch = {
   density?: "" | "comfortable" | "compact";
   bot_shelf_order?: string[];
   bot_shelf_limit?: number;
+  persona_hero_positions?: Record<string, PersonaHeroPosition>;
 };
 
 export type Workspace = {

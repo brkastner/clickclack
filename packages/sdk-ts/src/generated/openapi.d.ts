@@ -1687,6 +1687,14 @@ export interface components {
       bot_shelf_order?: string[];
       /** @description Maximum shelf bots to render. 0 shows all. */
       bot_shelf_limit?: number;
+      /** @description Per-bot sidebar hero crop positions as X/Y percentages. */
+      persona_hero_positions?: {
+        [key: string]: components["schemas"]["PersonaHeroPosition"];
+      };
+    };
+    PersonaHeroPosition: {
+      x: number;
+      y: number;
     };
     /** @description Partial appearance update. Omitted properties are unchanged and empty strings reset to defaults. */
     AppearancePreferencesPatch: {
@@ -1702,6 +1710,10 @@ export interface components {
       bot_shelf_order?: string[];
       /** @description Maximum shelf bots to render. 0 shows all. */
       bot_shelf_limit?: number;
+      /** @description Complete per-bot sidebar hero crop map. Empty object resets all positions. */
+      persona_hero_positions?: {
+        [key: string]: components["schemas"]["PersonaHeroPosition"];
+      };
     };
     CreateChannelRequest: {
       name: string;
@@ -2132,7 +2144,6 @@ export interface components {
        * @description agent.progress and workflow.run are bot-token-only and must name
        *     exactly one of channel_id or direct_conversation_id, so a private
        *     turn or run can never broadcast to a whole workspace.
-       *
        * @enum {string}
        */
       type:

@@ -18,12 +18,13 @@ func (s *Store) GetAppearancePreferences(ctx context.Context, userID string) (*s
 		return nil, err
 	}
 	preferences := store.AppearancePreferences{
-		ColorMode:     row.ColorMode,
-		BoardTheme:    row.BoardTheme,
-		MessageLayout: row.MessageLayout,
-		Density:       row.Density,
-		BotShelfOrder: store.DecodeBotShelfOrder(row.BotShelfOrder),
-		BotShelfLimit: int(row.BotShelfLimit),
+		ColorMode:            row.ColorMode,
+		BoardTheme:           row.BoardTheme,
+		MessageLayout:        row.MessageLayout,
+		Density:              row.Density,
+		BotShelfOrder:        store.DecodeBotShelfOrder(row.BotShelfOrder),
+		BotShelfLimit:        int(row.BotShelfLimit),
+		PersonaHeroPositions: store.DecodePersonaHeroPositions(row.PersonaHeroPositions),
 	}
 	return &preferences, nil
 }
@@ -98,6 +99,18 @@ func updateAppearancePreferences(ctx context.Context, q *storedb.Queries, userID
 		if err := q.UpdateAppearanceBotShelfLimit(ctx, storedb.UpdateAppearanceBotShelfLimitParams{
 			BotShelfLimit: int64(*patch.BotShelfLimit),
 			UserID:        userID,
+		}); err != nil {
+			return err
+		}
+	}
+	if patch.PersonaHeroPositions != nil {
+		encoded, err := store.EncodePersonaHeroPositions(*patch.PersonaHeroPositions)
+		if err != nil {
+			return err
+		}
+		if err := q.UpdateAppearancePersonaHeroPositions(ctx, storedb.UpdateAppearancePersonaHeroPositionsParams{
+			PersonaHeroPositions: encoded,
+			UserID:               userID,
 		}); err != nil {
 			return err
 		}
