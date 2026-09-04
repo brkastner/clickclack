@@ -13,16 +13,23 @@
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
   import { desktop } from "../../lib/desktop";
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
+  import {
+    completedShortcodeAt,
+    rememberRecentEmoji,
+    searchEmoji,
+    type EmojiEntry,
+  } from "../../lib/emoji";
   import type { GifItem } from "../../lib/gifs";
   import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
   import type { VoiceInputStatus, VoiceStatus } from "../../lib/voice";
   import VoiceVisualizer from "../VoiceVisualizer.svelte";
   import ComposerToolbar from "./ComposerToolbar.svelte";
+  import EmojiPickerPanel from "./EmojiPickerPanel.svelte";
   import GifPicker from "./GifPicker.svelte";
   import ReplyPreview from "./ReplyPreview.svelte";
 
   type ActiveToken = {
-    kind: "slash" | "mention";
+    kind: "slash" | "mention" | "emoji";
     start: number;
     end: number;
     query: string;
@@ -31,13 +38,17 @@
 
   type ComposerSuggestion = {
     id: string;
-    kind: "slash" | "mention";
+    kind: "slash" | "mention" | "emoji";
     label: string;
     detail: string;
     insertText: string;
     sortText: string;
     hint?: string;
     source?: string;
+    /* Emoji suggestions render the glyph itself instead of an initial. */
+    glyph?: string;
+    /* Shortcode recorded in recents when an emoji suggestion is accepted. */
+    emojiName?: string;
   };
 
   type ComposerFormatAction =
@@ -199,6 +210,7 @@
   let formatState = $state<FormatState>(emptyFormatState());
   let fileDragActive = $state(false);
   let toolbarExpanded = $state(false);
+  let showEmojiPicker = $state(false);
 
   const voiceMode = $derived(
     showVoice &&
@@ -208,11 +220,19 @@
     voiceInputStatus === "paused" || voiceInputStatus === "pausing",
   );
 
+  const suggestionListLabel = $derived(
+    activeToken?.kind === "slash"
+      ? "Slash command suggestions"
+      : activeToken?.kind === "emoji"
+        ? "Emoji suggestions"
+        : "Mention suggestions",
+  );
+
   const activeSuggestions = $derived.by(() => {
     if (!activeToken || tokenKey(activeToken) === dismissedToken) return [];
-    return activeToken.kind === "slash"
-      ? slashSuggestions(activeToken)
-      : mentionSuggestions(activeToken);
+    if (activeToken.kind === "slash") return slashSuggestions(activeToken);
+    if (activeToken.kind === "emoji") return emojiSuggestions(activeToken);
+    return mentionSuggestions(activeToken);
   });
 
   type EditorActionOptions = {
@@ -267,6 +287,9 @@
         },
       },
       onUpdate: ({ editor: current }) => {
+        /* Autoreplace runs before the value is published so a completed
+           `:sob:` never round-trips through the draft as raw text. */
+        if (replaceCompletedShortcode(current)) return;
         const markdown = current.getMarkdown();
         if (markdown !== value) onValue(markdown);
         refreshActiveToken(current);
@@ -359,7 +382,7 @@
       "\n",
       "\ufffc",
     );
-    const match = /(^|\s)([/@][^\s]*)$/.exec(before);
+    const match = /(^|\s)([/@:][^\s]*)$/.exec(before);
     if (!match) {
       activeToken = null;
       return;
@@ -370,13 +393,38 @@
       activeToken = null;
       return;
     }
+    /* `:` only opens the emoji menu once there is something to search for,
+       so ordinary punctuation and `http://` never pop a panel. */
+    if (raw.startsWith(":") && !/^:[a-z0-9_+-]{2,}$/i.test(raw)) {
+      activeToken = null;
+      return;
+    }
     activeToken = {
-      kind: raw.startsWith("/") ? "slash" : "mention",
+      kind: raw.startsWith("/") ? "slash" : raw.startsWith(":") ? "emoji" : "mention",
       start,
       end: from,
       query: raw.slice(1).toLowerCase(),
       raw,
     };
+  }
+
+  /* Swaps a finished `:shortcode:` for its glyph. Returns true when the text
+     changed, since that dispatch re-enters onUpdate with the final value. */
+  function replaceCompletedShortcode(editor: Editor): boolean {
+    const { selection } = editor.state;
+    if (!selection.empty) return false;
+    const head = selection.$from;
+    if (head.parent.type.name === "codeBlock" || editor.isActive("code")) return false;
+    const before = head.parent.textBetween(0, head.parentOffset, "\n", "\ufffc");
+    const match = completedShortcodeAt(before);
+    if (!match) return false;
+    const from = selection.from - (before.length - match.start);
+    editor
+      .chain()
+      .insertContentAt({ from, to: selection.from }, { type: "text", text: match.char })
+      .run();
+    rememberRecentEmoji(match.shortcode);
+    return true;
   }
 
   function tokenKey(token: ActiveToken): string {
@@ -458,9 +506,30 @@
       .slice(0, 6);
   }
 
+  function emojiSuggestions(token: ActiveToken): ComposerSuggestion[] {
+    return searchEmoji(token.query, 8).map((entry) => ({
+      id: `emoji:${entry.name}`,
+      kind: "emoji" as const,
+      label: `:${entry.name}:`,
+      detail: entry.aliases.length > 0 ? `:${entry.aliases[0]}:` : entry.keywords,
+      insertText: `${entry.char} `,
+      sortText: entry.name,
+      glyph: entry.char,
+      emojiName: entry.name,
+    }));
+  }
+
+  function insertEmoji(entry: EmojiEntry) {
+    const editor = editorInstance;
+    if (editor) editor.chain().focus().insertContent(entry.char).run();
+    else onAppendToComposer(entry.char);
+    rememberRecentEmoji(entry.name);
+  }
+
   function pickSuggestion(suggestion: ComposerSuggestion) {
     const editor = editorInstance;
     if (!editor || !activeToken) return;
+    if (suggestion.emojiName) rememberRecentEmoji(suggestion.emojiName);
     editor
       .chain()
       .focus()
@@ -599,6 +668,7 @@
 
   function submitFromComposer() {
     if (disabled || submitDisabled) return;
+    showEmojiPicker = false;
     onSubmit();
     editorInstance?.commands.clearContent();
   }
@@ -674,6 +744,19 @@
   function pickGif(url: string, title: string) {
     onPickGif(url, title);
   }
+
+  function toggleEmojiPicker() {
+    const next = !showEmojiPicker;
+    /* The two pickers share the slot above the composer card. */
+    if (next && showGifPicker) onToggleGif();
+    showEmojiPicker = next;
+  }
+
+  function suggestionKindLabel(kind: ComposerSuggestion["kind"]): string {
+    if (kind === "slash") return "command";
+    if (kind === "emoji") return "emoji";
+    return "mention";
+  }
 </script>
 
 <form
@@ -683,6 +766,15 @@
     submitFromComposer();
   }}
 >
+  {#if showEmojiPicker}
+    <EmojiPickerPanel
+      onPick={insertEmoji}
+      onClose={() => {
+        showEmojiPicker = false;
+        editorInstance?.commands.focus();
+      }}
+    />
+  {/if}
   {#if showGifPicker}
     <GifPicker
       gifs={filteredGifs}
@@ -692,7 +784,7 @@
     />
   {/if}
   {#if activeSuggestions.length > 0}
-    <div class="composer-suggestions" role="listbox" aria-label={activeToken?.kind === "slash" ? "Slash command suggestions" : "Mention suggestions"}>
+    <div class="composer-suggestions" role="listbox" aria-label={suggestionListLabel}>
       {#each activeSuggestions as suggestion, index (suggestion.id)}
         <button
           type="button"
@@ -702,9 +794,11 @@
           onmousedown={(event) => event.preventDefault()}
           onclick={() => pickSuggestion(suggestion)}
         >
-          <span class="suggestion-mark" aria-hidden="true">
+          <span class="suggestion-mark" class:is-emoji={suggestion.kind === "emoji"} aria-hidden="true">
             {#if suggestion.kind === "slash"}
               /
+            {:else if suggestion.kind === "emoji"}
+              {suggestion.glyph}
             {:else}
               {avatarInitial(suggestion.detail)}
             {/if}
@@ -713,7 +807,7 @@
             <strong>{suggestion.label}{#if suggestion.hint}<em class="suggestion-hint"> {suggestion.hint}</em>{/if}</strong>
             <span>{suggestion.detail}</span>
           </span>
-          <span class="suggestion-kind">{suggestion.source ?? (suggestion.kind === "slash" ? "command" : "mention")}</span>
+          <span class="suggestion-kind">{suggestion.source ?? suggestionKindLabel(suggestion.kind)}</span>
         </button>
       {/each}
     </div>
@@ -836,9 +930,11 @@
           <button
             type="button"
             class="composer-tool"
+            class:is-active={showEmojiPicker}
             title="Emoji"
             aria-label="Add emoji"
-            onclick={() => onAppendToComposer("🙂")}
+            aria-expanded={showEmojiPicker}
+            onclick={toggleEmojiPicker}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
@@ -851,7 +947,10 @@
             class:is-active={showGifPicker}
             title="GIF"
             aria-label="Add GIF"
-            onclick={onToggleGif}
+            onclick={() => {
+              showEmojiPicker = false;
+              onToggleGif();
+            }}
           >GIF</button>
         {/if}
       </div>

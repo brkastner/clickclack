@@ -150,3 +150,46 @@ test("keeps quotes compact and converts language-tagged code fences", async ({ p
   await expect(editor.locator("pre code").filter({ hasText: "printf pasted" })).toBeVisible();
   await expect(editor).not.toContainText("```sh");
 });
+
+test("replaces emoji shortcodes and inserts from the picker", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, stamp);
+  const channel = await createChannel(page, workspace.id);
+  await openChannel(page, workspace.route_id);
+
+  const editor = page.getByLabel("Message body");
+  await editor.focus();
+
+  // Typing a complete shortcode swaps in the glyph without leaving text behind.
+  await editor.pressSequentially("crying :sob:");
+  await expect(editor).toHaveText("crying 😭");
+  await expect(editor).not.toContainText(":sob:");
+
+  // A partial shortcode opens the suggestion list; Enter accepts the top hit.
+  await editor.pressSequentially(" :upside");
+  const suggestions = page.getByRole("listbox", { name: "Emoji suggestions" });
+  await expect(suggestions).toBeVisible();
+  await expect(suggestions.getByText(":upside_down_face:")).toBeVisible();
+  await editor.press("Enter");
+  await expect(editor).toContainText("🙃");
+
+  // Unknown shortcodes stay literal.
+  await editor.pressSequentially(" :definitelynotanemoji:");
+  await expect(editor).toContainText(":definitelynotanemoji:");
+
+  await editor.fill("");
+  await page.getByRole("button", { name: "Add emoji" }).click();
+  const picker = page.getByRole("region", { name: "Emoji picker" });
+  await expect(picker).toBeVisible();
+  await picker.getByRole("searchbox", { name: "Search emoji" }).fill("rocket");
+  await picker.getByRole("button", { name: "Insert rocket" }).click();
+  await expect(editor).toContainText("🚀");
+
+  const created = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().endsWith(`/api/channels/${channel.id}/messages`),
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+  const payload = (await created).postDataJSON() as { body: string };
+  expect(payload.body).toContain("🚀");
+});
