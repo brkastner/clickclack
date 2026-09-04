@@ -32,7 +32,7 @@
     hrefForChannel: (channelID: string) => string;
     hrefForDirect: (conversationID: string) => string;
     onSelectChannel: (channelID: string) => void;
-    onCreateChannel: () => void;
+    onCreateChannel: (profile?: ChannelProfileShortcut) => void;
     onAssignChannelProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
     onSelectDirect: (conversationID: string) => void;
     onStartDirect: (memberID: string) => void;

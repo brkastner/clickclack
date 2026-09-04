@@ -22,7 +22,7 @@
     onSelectChannel: (channelID: string) => void;
     onSelectDirect: (conversationID: string) => void;
     onStartDirect: (memberID: string) => void;
-    onCreateChannel: () => void;
+    onCreateChannel: (profile?: ChannelProfileShortcut) => void;
     onToggle: () => void;
     onReorder: (channelIDs: string[]) => void;
     onAssignProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
@@ -66,7 +66,7 @@
   const botGroups = $derived(profiles.map((profile) => ({
     profile,
     channels: activeChannels.filter((channel) => channel.bot_assignments?.some((assignment) => assignment.bot_user_id === profile.bot_user_id)),
-  })).filter((group) => group.channels.length > 0));
+  })));
   const visibleChannels = $derived(variant === "archived" ? archivedChannels : activeChannels);
   const priorityChannels = $derived(visibleChannels.filter((channel) =>
     (channel.id === selectedChannelID && !selectedDirectID) || (channel.unread_count || 0) > 0 || workingConversationIDs.has(channel.id),
@@ -226,16 +226,34 @@
         <div class="channel-subgroup-header profile-subgroup-header">
           <a href={conversation ? hrefForDirect(conversation.id) : "#"} class="channel-subgroup-toggle profile-source-link" class:active={conversation?.id === selectedDirectID}
             onclick={(event) => { event.preventDefault(); if (conversation) onSelectDirect(conversation.id); else onStartDirect(group.profile.bot_user_id); }}>
+            {#if group.profile.avatar_url || group.profile.avatar_url_light}
+              <Avatar
+                class="persona-band"
+                id={group.profile.id}
+                name={group.profile.display_name}
+                src={group.profile.avatar_url}
+                lightSrc={group.profile.avatar_url_light}
+                size={160}
+              />
+              <span class="persona-band-scrim" aria-hidden="true"></span>
+            {/if}
             <Avatar
               class="channel-profile-avatar"
               id={group.profile.id}
               name={group.profile.display_name}
               src={group.profile.avatar_url}
               lightSrc={group.profile.avatar_url_light}
-              size={26}
+              size={36}
             />
-            <span>{group.profile.display_name}</span><span class="channel-subgroup-count">{group.channels.length}</span>
+            <span class="persona-name">{group.profile.display_name}</span><span class="channel-subgroup-count">{group.channels.length}</span>
           </a>
+          <button
+            type="button"
+            class="profile-add-button"
+            aria-label={`Create channel for ${group.profile.display_name}`}
+            title={`Create channel for ${group.profile.display_name}`}
+            onclick={() => onCreateChannel(group.profile)}
+          >＋</button>
         </div>
         <div class="channel-subgroup-list" role="list">
           {#each group.channels as channel (channel.id)}{@render channelRow(channel, group.channels, `bot:${group.profile.bot_user_id}`)}{/each}

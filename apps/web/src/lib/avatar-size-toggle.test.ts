@@ -67,7 +67,7 @@ test("double mode scales sidebar shelf and DM avatars to 150 percent", () => {
   );
   assert.match(
     styles,
-    /:root\[data-avatar-size="double"\] \.sidebar-profile-groups \.channel-profile-avatar\s*\{[\s\S]*?width:\s*39px;[\s\S]*?height:\s*39px;/u,
+    /:root\[data-avatar-size="double"\] \.sidebar-profile-groups \.channel-profile-avatar\s*\{[\s\S]*?width:\s*53px;[\s\S]*?height:\s*63px;/u,
   );
   assert.match(
     styles,
@@ -75,12 +75,31 @@ test("double mode scales sidebar shelf and DM avatars to 150 percent", () => {
   );
 });
 
-test("centers persona identity headers without changing nested channels", () => {
+test("left-anchors persona identity headers without changing nested channels", () => {
   const styles = readSource("../styles/sidebar.css");
 
   assert.match(
     styles,
-    /\.sidebar-profile-groups \.profile-subgroup-header \.profile-source-link\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?padding-inline:\s*8px;[\s\S]*?text-align:\s*center;/u,
+    /\.sidebar-profile-groups \.profile-subgroup-header \.profile-source-link\s*\{[\s\S]*?justify-content:\s*flex-start;[\s\S]*?padding-right:\s*32px;[\s\S]*?text-align:\s*left;/u,
+  );
+});
+
+test("persona headers bleed the portrait behind a left-anchored plate", () => {
+  const styles = readSource("../styles/sidebar.css");
+  const channelList = readSource("../components/navigation/ChannelList.svelte");
+
+  assert.match(channelList, /class="persona-band"/u);
+  assert.match(channelList, /class="persona-band-scrim"/u);
+  assert.match(channelList, /class="persona-name"/u);
+
+  // The band mask stays closed across the plate so the avatar reads crisply.
+  assert.match(
+    styles,
+    /\.sidebar-profile-groups \.persona-band\s*\{[\s\S]*?mask-image: linear-gradient\(\s*to right,\s*transparent 0%,\s*transparent 34%,/u,
+  );
+  assert.match(
+    styles,
+    /\.sidebar-profile-groups \.persona-band img\s*\{[\s\S]*?object-position:\s*50% 20%;/u,
   );
 });
 
@@ -95,7 +114,7 @@ test("double mode scales avatar-linked names with their avatars", () => {
   );
   assert.match(
     sidebarStyles,
-    /:root\[data-avatar-size="double"\] \.sidebar-profile-groups \.channel-subgroup-toggle\s*\{[\s\S]*?font-size:\s*21px;/u,
+    /:root\[data-avatar-size="double"\] \.sidebar-profile-groups \.channel-subgroup-toggle\s*\{[\s\S]*?font-size:\s*36px;/u,
   );
   assert.match(
     sidebarStyles,

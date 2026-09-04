@@ -322,36 +322,136 @@
   margin-top: 0;
 }
 
+/* Persona identity header: a solid avatar plate anchored left, with the same
+   portrait cropped to its head band bleeding behind the name. The band's mask
+   only opens to the right of the plate so the plate stays crisp and the bleed
+   reads as atmosphere rather than a second competing avatar. */
 .sidebar-profile-groups .channel-subgroup-toggle {
-  min-height: 36px;
-  gap: 8px;
-  padding: 4px 8px 4px 6px;
+  position: relative;
+  min-height: var(--persona-band-h, 46px);
+  gap: 10px;
+  padding: 4px 12px 4px 6px;
+  overflow: hidden;
+  isolation: isolate;
   font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0;
+  font-size: var(--persona-name-size, 24px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
   text-transform: none;
 }
 
+.sidebar-profile-groups .persona-band {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.42;
+  filter: saturate(0.8) contrast(1.05);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 34%,
+    #000 56%,
+    #000 74%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 34%,
+    #000 56%,
+    #000 74%,
+    transparent 100%
+  );
+}
+
+.sidebar-profile-groups .persona-band img {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: calc(var(--persona-band-h, 46px) * 3.1);
+  top: calc(var(--persona-band-h, 46px) * -0.92);
+  object-fit: cover;
+  object-position: 50% 20%;
+  transition: transform 400ms ease;
+}
+
+.sidebar-profile-groups .channel-subgroup-toggle:hover .persona-band {
+  opacity: 0.6;
+}
+
+.sidebar-profile-groups .channel-subgroup-toggle:hover .persona-band img {
+  transform: scale(1.05);
+}
+
+.sidebar-profile-groups .channel-subgroup-toggle.active .persona-band {
+  opacity: 0.62;
+}
+
+.persona-band-scrim {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--panel) 96%, transparent) 0%,
+    color-mix(in srgb, var(--panel) 72%, transparent) 34%,
+    color-mix(in srgb, var(--panel) 34%, transparent) 62%,
+    color-mix(in srgb, var(--panel) 90%, transparent) 100%
+  );
+}
+
+.sidebar-profile-groups .persona-name {
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  color: var(--text-strong);
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow:
+    0 1px 10px color-mix(in srgb, var(--panel) 85%, transparent),
+    0 0 2px color-mix(in srgb, var(--panel) 90%, transparent);
+}
+
 .sidebar-profile-groups .channel-profile-avatar {
+  position: relative;
+  z-index: 2;
+  width: calc(var(--persona-band-h, 46px) * 0.78);
+  height: calc(var(--persona-band-h, 46px) * 0.92);
+  flex: 0 0 calc(var(--persona-band-h, 46px) * 0.78);
+  border-radius: 7px;
   background: hsl(var(--hue) 62% 48%);
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 8px 20px -10px light-dark(color-mix(in srgb, var(--rp-text) 40%, transparent), #000);
   color: #fff;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
 }
 
+.sidebar-profile-groups .channel-profile-avatar img {
+  object-position: 50% 22%;
+}
+
+:root[data-avatar-size="double"] .sidebar-profile-groups {
+  --persona-band-h: 68px;
+  --persona-name-size: 36px;
+}
+
 :root[data-avatar-size="double"] .sidebar-profile-groups .channel-subgroup-toggle {
-  min-height: 49px;
-  gap: 10px;
-  font-size: 21px;
+  font-size: 36px;
 }
 
 :root[data-avatar-size="double"] .sidebar-profile-groups .channel-profile-avatar {
-  width: 39px;
-  height: 39px;
-  flex-basis: 39px;
-  font-size: 15px;
+  width: 53px;
+  height: 63px;
+  flex-basis: 53px;
+  font-size: 18px;
 }
 
 .sidebar-channels-title {
@@ -801,6 +901,27 @@
   position: relative;
 }
 
+.profile-add-button {
+  position: absolute;
+  z-index: 3;
+  right: 4px;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--muted);
+  transform: translateY(-50%);
+}
+
+.profile-add-button:hover,
+.profile-add-button:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .profile-subgroup-header .channel-subgroup-caret {
   position: absolute;
   z-index: 2;
@@ -815,10 +936,12 @@
   padding-left: 4px;
 }
 
+/* A2 anchors identity to the left plate, so the header reads left-aligned and
+   the trailing inline padding just clears the add button. */
 .sidebar-profile-groups .profile-subgroup-header .profile-source-link {
-  justify-content: center;
-  padding-inline: 8px;
-  text-align: center;
+  justify-content: flex-start;
+  padding-right: 32px;
+  text-align: left;
 }
 
 .profile-channel-group .channel-row.reorderable .channel-drag-handle {

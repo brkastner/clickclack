@@ -89,13 +89,18 @@ Managers can group a channel under a bot with
 `PUT /api/channels/{channel_id}/bot-assignments/{bot_user_id}` and remove the
 assignment with `DELETE` on the same path. The endpoints accept no request body.
 Channel responses expose assignments as `bot_assignments`, containing only
-`channel_id` and `bot_user_id`. Assignments control sidebar grouping only. Bot
-names, handles, avatars, message authorship, mentions, and runtime routing all
-continue to use the canonical bot user.
+`channel_id` and `bot_user_id`. Assignments control sidebar grouping and give
+connected bot runtimes an authoritative persona-routing signal. The OpenClaw
+ClickClack plugin dispatches an assigned channel only to the matching bot
+account and treats that account as the channel's unmentioned default responder.
+Bot names, handles, avatars, message authorship, and mentions continue to use
+the canonical bot user.
 
 The sidebar renders each assigned bot from its `users` identity and opens that
-bot's direct conversation from the group header. Unassigned channels stay in
-the ordinary channel list. Bot tokens cannot mutate assignments.
+bot's direct conversation from the group header. The adjacent add button creates
+a channel and assigns it to that bot before navigating into it. Unassigned
+channels stay in the ordinary channel list. Managers can also link an existing
+channel by dragging it under a bot. Bot tokens cannot mutate assignments.
 
 Profile groups render above ordinary alphabetized sections, in the viewer's own
 channel order keyed by each profile's source channel. Managers reorder them by

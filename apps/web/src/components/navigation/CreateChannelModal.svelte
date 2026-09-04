@@ -2,12 +2,22 @@
   type Props = {
     channelName: string;
     status: string;
+    profileName?: string;
+    creating?: boolean;
     onChannelName: (value: string) => void;
     onClose: () => void;
     onCreate: () => void;
   };
 
-  let { channelName, status, onChannelName, onClose, onCreate }: Props = $props();
+  let {
+    channelName,
+    status,
+    profileName,
+    creating = false,
+    onChannelName,
+    onClose,
+    onCreate,
+  }: Props = $props();
 </script>
 
 <div class="modal-scrim" role="presentation">
@@ -15,7 +25,7 @@
   <section class="profile-modal create-modal" aria-label="Create channel">
     <header>
       <div>
-        <p>Channels</p>
+        <p>{profileName ? `Channel for ${profileName}` : "Channels"}</p>
         <h2>Create channel</h2>
       </div>
       <button type="button" aria-label="Close channel dialog" onclick={onClose}>×</button>
@@ -39,8 +49,10 @@
       </label>
       {#if status}<p class="profile-status">{status}</p>{/if}
       <div class="profile-actions">
-        <button type="button" class="ghost-action" onclick={onClose}>Cancel</button>
-        <button type="submit" class="primary-action">Create channel</button>
+        <button type="button" class="ghost-action" disabled={creating} onclick={onClose}>Cancel</button>
+        <button type="submit" class="primary-action" disabled={creating}>
+          {creating ? "Creating…" : profileName ? `Create for ${profileName}` : "Create channel"}
+        </button>
       </div>
     </form>
   </section>

@@ -260,6 +260,9 @@
   let channelSettingsSaving = false;
   let channelSettingsError = "";
   let showCreateChannel = false;
+  let createChannelProfile: ChannelProfileShortcut | null = null;
+  let channelCreateStatus = "";
+  let channelCreating = false;
   let showCreateDirect = false;
   let gifQuery = "";
   let browserNotificationsEnabled = false;
@@ -1336,6 +1339,7 @@
         !workspaceChanged && selectedChannelID === targetID && !selectedDirectID && viewKey === targetID;
       selectedChannelID = targetID;
       selectedDirectID = "";
+      markConversationReadOnOpen(targetID);
       rememberLastChannel(workspace.id, targetID);
       clearRoutePanelState();
       const shouldOpenPinnedPanel = openPinnedPanelAfterRoute;
@@ -1362,6 +1366,7 @@
         !workspaceChanged && selectedDirectID === targetID && !selectedChannelID && viewKey === targetID;
       selectedDirectID = targetID;
       selectedChannelID = "";
+      markConversationReadOnOpen(targetID);
       clearRoutePanelState();
       if (sameConversation) {
         appliedRouteKey = canonicalRouteKey;
@@ -1685,20 +1690,49 @@
     status = "ready";
   }
 
+  function openCreateChannel(profile: ChannelProfileShortcut | null = null) {
+    createChannelProfile = profile;
+    channelCreateStatus = "";
+    showCreateChannel = true;
+  }
+
   async function createChannel() {
-    if (!selectedWorkspaceID || !channelName.trim()) return;
-    const data = await api<{ channel: Channel }>(`/api/workspaces/${selectedWorkspaceID}/channels`, {
-      method: "POST",
-      body: JSON.stringify({ name: channelName, kind: "public" })
-    });
-    channelName = "";
-    channels = [...channels, data.channel];
-    showCreateChannel = false;
-    await navigateToApp(selectedWorkspaceID, data.channel.id);
+    if (!selectedWorkspaceID || !channelName.trim() || channelCreating) return;
+    channelCreating = true;
+    channelCreateStatus = "";
+    try {
+      const data = await api<{ channel: Channel }>(`/api/workspaces/${selectedWorkspaceID}/channels`, {
+        method: "POST",
+        body: JSON.stringify({ name: channelName, kind: "public" })
+      });
+      const profile = createChannelProfile;
+      const channel = profile
+        ? {
+            ...data.channel,
+            bot_assignments: [{ channel_id: data.channel.id, bot_user_id: profile.bot_user_id }],
+          }
+        : data.channel;
+      if (profile) {
+        await api(`/api/channels/${channel.id}/bot-assignments/${profile.bot_user_id}`, {
+          method: "PUT",
+        });
+      }
+      channelName = "";
+      channels = [...channels.filter((candidate) => candidate.id !== channel.id), channel];
+      showCreateChannel = false;
+      createChannelProfile = null;
+      await navigateToApp(selectedWorkspaceID, channel.id);
+    } catch (error) {
+      channelCreateStatus = readableAPIError(error, "Could not create channel");
+      await loadChannels(false, false, false);
+    } finally {
+      channelCreating = false;
+    }
   }
 
   async function selectChannel(channelID: string) {
     mobileNavOpen = false;
+    markConversationReadOnOpen(channelID);
     rememberLastChannel(selectedWorkspaceID, channelID);
     const targetPath = appHref(selectedWorkspaceID, channelID);
     if (
@@ -2346,6 +2380,20 @@
     const dm = directConversations.find((c) => c.id === key);
     if (dm) return maxDirectSeq(key);
     return 0;
+  }
+
+  function markConversationReadOnOpen(key: string) {
+    const seq = latestReadSeqForKey(key);
+    if (seq <= 0) return;
+    if (directConversations.some((conversation) => conversation.id === key)) {
+      void markDirectRead(key, seq);
+      clearUnreadLocally(key, seq);
+      return;
+    }
+    if (channels.some((channel) => channel.id === key)) {
+      void markChannelRead(key, seq);
+      clearUnreadLocally(key, seq);
+    }
   }
 
   function markActiveViewRead(
@@ -3952,6 +4000,7 @@
 
   async function selectDirectConversation(conversationID: string) {
     mobileNavOpen = false;
+    markConversationReadOnOpen(conversationID);
     const targetPath = appHref(selectedWorkspaceID, conversationID);
     if (
       conversationID === selectedDirectID &&
@@ -5077,6 +5126,8 @@
     channelSettingsOpen = false;
     channelSettingsError = "";
     showCreateChannel = false;
+    createChannelProfile = null;
+    channelCreateStatus = "";
     showCreateDirect = false;
   }
 
@@ -5289,7 +5340,7 @@
     hrefForChannel={(channelID) => appHref(selectedWorkspaceID, channelID)}
     hrefForDirect={(conversationID) => appHref(selectedWorkspaceID, conversationID)}
     onSelectChannel={(channelID) => void selectChannel(channelID)}
-    onCreateChannel={() => (showCreateChannel = true)}
+    onCreateChannel={(profile) => openCreateChannel(profile ?? null)}
     onAssignChannelProfile={(channelID, profile) =>
       void assignChannelProfile(channelID, profile)}
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
@@ -5702,7 +5753,9 @@
 {#if showCreateChannel}
   <CreateChannelModal
     {channelName}
-    status=""
+    status={channelCreateStatus}
+    profileName={createChannelProfile?.display_name}
+    creating={channelCreating}
     onChannelName={(value) => (channelName = value)}
     onClose={closeModal}
     onCreate={() => void createChannel()}
