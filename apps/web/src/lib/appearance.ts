@@ -312,9 +312,10 @@ export function setPersonaHeroPosition(botID: string, position: PersonaHeroPosit
   const normalized = {
     x: Math.max(0, Math.min(100, Math.round(position.x))),
     y: Math.max(0, Math.min(100, Math.round(position.y))),
+    zoom: Math.max(100, Math.min(250, Math.round(position.zoom ?? 100))),
   };
   const next = { ...personaHeroPositionSnapshot };
-  if (normalized.x === 50 && normalized.y === 20) delete next[botID];
+  if (normalized.x === 50 && normalized.y === 20 && normalized.zoom === 118) delete next[botID];
   else next[botID] = normalized;
   personaHeroPositionSnapshot = next;
   personaHeroPositions.set(next);

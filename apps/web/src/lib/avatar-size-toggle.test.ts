@@ -105,9 +105,17 @@ test("persona hero crop controls preview and persist per-bot positions", () => {
   const appearance = readSource("./appearance.ts");
 
   assert.match(avatar, /style:object-position=\{imagePosition\}/u);
+  assert.match(avatar, /style:transform-origin=\{imageTransformOrigin\}/u);
+  assert.match(avatar, /style:transform=\{`scale\(\$\{imageScale\}\)`\}/u);
   assert.match(channelList, /\$personaHeroPositions\[group\.profile\.bot_user_id\]/u);
-  assert.match(editor, /Sidebar hero horizontal position/u);
-  assert.match(editor, /Sidebar hero vertical position/u);
+  assert.match(channelList, /imageScale=\{\(\$personaHeroPositions\[group\.profile\.bot_user_id\]\?\.zoom \?\? 118\) \/ 100\}/u);
+  assert.match(channelList, /imageTransformOrigin=\{`\$\{\$personaHeroPositions\[group\.profile\.bot_user_id\]\?\.x \?\? 50\}% 50%`\}/u);
+  assert.match(editor, /onpointerdown=\{startHeroPan\}/u);
+  assert.match(editor, /onpointermove=\{moveHeroPan\}/u);
+  assert.match(editor, /onkeydown=\{moveHeroWithKeyboard\}/u);
+  assert.match(editor, /aria-label="Sidebar hero zoom"/u);
+  assert.doesNotMatch(editor, /Sidebar hero horizontal position/u);
+  assert.doesNotMatch(editor, /Sidebar hero vertical position/u);
   assert.match(editor, /imagePosition=\{`\$\{heroPosition\.x\}% \$\{heroPosition\.y\}%`\}/u);
   assert.match(appearance, /persona_hero_positions: next/u);
   assert.match(editor, /Could not save this crop/u);

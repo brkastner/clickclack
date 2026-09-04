@@ -316,6 +316,8 @@
                 lightSrc={group.profile.avatar_url_light}
                 size={320}
                 imagePosition={`${$personaHeroPositions[group.profile.bot_user_id]?.x ?? 50}% ${$personaHeroPositions[group.profile.bot_user_id]?.y ?? 20}%`}
+                imageTransformOrigin={`${$personaHeroPositions[group.profile.bot_user_id]?.x ?? 50}% 50%`}
+                imageScale={($personaHeroPositions[group.profile.bot_user_id]?.zoom ?? 118) / 100}
               />
               <span class="persona-band-scrim" aria-hidden="true"></span>
             {/if}

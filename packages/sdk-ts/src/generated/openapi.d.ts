@@ -1695,6 +1695,8 @@ export interface components {
     PersonaHeroPosition: {
       x: number;
       y: number;
+      /** @description Hero image zoom percentage. 100 means no additional zoom. */
+      zoom?: number;
     };
     /** @description Partial appearance update. Omitted properties are unchanged and empty strings reset to defaults. */
     AppearancePreferencesPatch: {

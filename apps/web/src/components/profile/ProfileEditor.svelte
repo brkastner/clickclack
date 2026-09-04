@@ -31,6 +31,15 @@
   let saving = $state(false);
   let status = $state("");
   let statusError = $state(false);
+  let heroDrag = $state<{
+    pointerID: number;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   $effect(() => {
     displayName = profile.display_name;
@@ -51,11 +60,62 @@
       avatarURLLight.trim() !== (profile.avatar_url_light ?? ""),
   );
   const identityValid = $derived(displayName.trim().length > 0);
-  const heroPosition = $derived($personaHeroPositions[profile.id] ?? { x: 50, y: 20 });
+  const heroPosition = $derived({
+    x: $personaHeroPositions[profile.id]?.x ?? 50,
+    y: $personaHeroPositions[profile.id]?.y ?? 20,
+    zoom: $personaHeroPositions[profile.id]?.zoom ?? 118,
+  });
 
-  function updateHeroPosition(axis: "x" | "y", event: Event) {
-    const value = Number((event.currentTarget as HTMLInputElement).value);
-    setPersonaHeroPosition(profile.id, { ...heroPosition, [axis]: value });
+  function clampPercent(value: number): number {
+    return Math.max(0, Math.min(100, Math.round(value)));
+  }
+
+  function updateHeroZoom(event: Event) {
+    const zoom = Number((event.currentTarget as HTMLInputElement).value);
+    setPersonaHeroPosition(profile.id, { ...heroPosition, zoom });
+  }
+
+  function startHeroPan(event: PointerEvent) {
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    target.setPointerCapture(event.pointerId);
+    heroDrag = {
+      pointerID: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: heroPosition.x,
+      startY: heroPosition.y,
+      width: Math.max(1, rect.width),
+      height: Math.max(1, rect.height),
+    };
+  }
+
+  function moveHeroPan(event: PointerEvent) {
+    if (!heroDrag || heroDrag.pointerID !== event.pointerId) return;
+    setPersonaHeroPosition(profile.id, {
+      ...heroPosition,
+      x: clampPercent(heroDrag.startX - ((event.clientX - heroDrag.startClientX) / heroDrag.width) * 200),
+      y: clampPercent(heroDrag.startY - ((event.clientY - heroDrag.startClientY) / heroDrag.height) * 100),
+    });
+  }
+
+  function endHeroPan(event: PointerEvent) {
+    if (heroDrag?.pointerID !== event.pointerId) return;
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
+    heroDrag = null;
+  }
+
+  function moveHeroWithKeyboard(event: KeyboardEvent) {
+    const delta = event.shiftKey ? 10 : 2;
+    const next = { ...heroPosition };
+    if (event.key === "ArrowLeft") next.x = clampPercent(next.x - delta);
+    else if (event.key === "ArrowRight") next.x = clampPercent(next.x + delta);
+    else if (event.key === "ArrowUp") next.y = clampPercent(next.y - delta);
+    else if (event.key === "ArrowDown") next.y = clampPercent(next.y + delta);
+    else return;
+    event.preventDefault();
+    setPersonaHeroPosition(profile.id, next);
   }
 
   async function saveIdentity() {
@@ -120,29 +180,41 @@
         </div>
       </div>
       <section class="profile-editor__hero-position" aria-label="Sidebar hero crop">
-        <Avatar
-          class="profile-editor__hero-preview"
-          id={profile.id}
-          name={displayName || profile.display_name}
-          src={avatarURL}
-          lightSrc={avatarURLLight}
-          size={320}
-          loading="eager"
-          fetchPriority="auto"
-          imagePosition={`${heroPosition.x}% ${heroPosition.y}%`}
-        />
+        <div
+          class="profile-editor__hero-pan"
+          class:is-dragging={heroDrag !== null}
+          role="img"
+          tabindex="0"
+          aria-label="Sidebar hero preview. Drag to pan. Use arrow keys for fine adjustment."
+          onpointerdown={startHeroPan}
+          onpointermove={moveHeroPan}
+          onpointerup={endHeroPan}
+          onpointercancel={endHeroPan}
+          onkeydown={moveHeroWithKeyboard}
+        >
+          <Avatar
+            class="profile-editor__hero-preview"
+            id={profile.id}
+            name={displayName || profile.display_name}
+            src={avatarURL}
+            lightSrc={avatarURLLight}
+            size={320}
+            loading="eager"
+            fetchPriority="auto"
+            imagePosition={`${heroPosition.x}% ${heroPosition.y}%`}
+            imageTransformOrigin={`${heroPosition.x}% 50%`}
+            imageScale={heroPosition.zoom / 100}
+          />
+          <span class="profile-editor__hero-pan-hint" aria-hidden="true">Drag to pan</span>
+        </div>
         <div class="profile-editor__hero-controls">
           <div class="profile-editor__hero-heading">
             <strong>Sidebar hero crop</strong>
-            <button type="button" class="text-action" disabled={heroPosition.x === 50 && heroPosition.y === 20} onclick={() => setPersonaHeroPosition(profile.id, { x: 50, y: 20 })}>Reset</button>
+            <button type="button" class="text-action" disabled={heroPosition.x === 50 && heroPosition.y === 20 && heroPosition.zoom === 118} onclick={() => setPersonaHeroPosition(profile.id, { x: 50, y: 20, zoom: 118 })}>Reset</button>
           </div>
           <label class="profile-editor__range">
-            <span>Horizontal <output>{heroPosition.x}%</output></span>
-            <input type="range" min="0" max="100" value={heroPosition.x} aria-label="Sidebar hero horizontal position" oninput={(event) => updateHeroPosition("x", event)} />
-          </label>
-          <label class="profile-editor__range">
-            <span>Vertical <output>{heroPosition.y}%</output></span>
-            <input type="range" min="0" max="100" value={heroPosition.y} aria-label="Sidebar hero vertical position" oninput={(event) => updateHeroPosition("y", event)} />
+            <span>Zoom <output>{heroPosition.zoom}%</output></span>
+            <input type="range" min="100" max="250" value={heroPosition.zoom} aria-label="Sidebar hero zoom" oninput={updateHeroZoom} />
           </label>
           {#if $personaHeroPositionSaveState === "saving"}
             <p class="profile-editor__hero-save" role="status">Saving crop...</p>

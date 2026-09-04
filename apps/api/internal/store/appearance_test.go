@@ -149,20 +149,24 @@ func TestNormalizePersonaHeroPositions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := (*patch.PersonaHeroPositions)["bot-a"]; got.X != 23 || got.Y != 78 {
+	if got := (*patch.PersonaHeroPositions)["bot-a"]; got.X != 23 || got.Y != 78 || got.Zoom != 100 {
 		t.Fatalf("position = %#v", got)
 	}
 	encoded, err := EncodePersonaHeroPositions(*patch.PersonaHeroPositions)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := DecodePersonaHeroPositions(encoded)["bot-a"]; got.X != 23 || got.Y != 78 {
+	if got := DecodePersonaHeroPositions(encoded)["bot-a"]; got.X != 23 || got.Y != 78 || got.Zoom != 100 {
 		t.Fatalf("round trip = %#v", got)
 	}
 
 	invalid := map[string]PersonaHeroPosition{"bot-a": {X: 101, Y: 50}}
 	if _, err := NormalizeAppearancePreferencesPatch(AppearancePreferencesPatch{PersonaHeroPositions: &invalid}); err == nil {
 		t.Fatal("expected out-of-range position to be rejected")
+	}
+	invalidZoom := map[string]PersonaHeroPosition{"bot-a": {X: 50, Y: 50, Zoom: 251}}
+	if _, err := NormalizeAppearancePreferencesPatch(AppearancePreferencesPatch{PersonaHeroPositions: &invalidZoom}); err == nil {
+		t.Fatal("expected out-of-range zoom to be rejected")
 	}
 }
 

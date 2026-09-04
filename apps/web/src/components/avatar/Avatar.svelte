@@ -17,6 +17,8 @@
     fetchPriority?: AvatarFetchPriority;
     buttonLabel?: string;
     imagePosition?: string;
+    imageTransformOrigin?: string;
+    imageScale?: number;
     onclick?: (event: MouseEvent) => void;
   };
 
@@ -31,6 +33,8 @@
     fetchPriority = "low",
     buttonLabel,
     imagePosition = "50% 50%",
+    imageTransformOrigin = "50% 50%",
+    imageScale = 1,
     onclick,
   }: Props = $props();
 
@@ -63,6 +67,8 @@
         width={size}
         height={size}
         style:object-position={imagePosition}
+        style:transform-origin={imageTransformOrigin}
+        style:transform={`scale(${imageScale})`}
         {loading}
         decoding="async"
         fetchpriority={fetchPriority}
@@ -81,6 +87,8 @@
         width={size}
         height={size}
         style:object-position={imagePosition}
+        style:transform-origin={imageTransformOrigin}
+        style:transform={`scale(${imageScale})`}
         {loading}
         decoding="async"
         fetchpriority={fetchPriority}

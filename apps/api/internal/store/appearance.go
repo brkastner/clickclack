@@ -94,6 +94,12 @@ func NormalizeAppearancePreferencesPatch(input AppearancePreferencesPatch) (Appe
 			if position.X < 0 || position.X > 100 || position.Y < 0 || position.Y > 100 {
 				return AppearancePreferencesPatch{}, errors.New("persona_hero_positions is invalid")
 			}
+			if position.Zoom == 0 {
+				position.Zoom = 100
+			}
+			if position.Zoom < 100 || position.Zoom > 250 {
+				return AppearancePreferencesPatch{}, errors.New("persona_hero_positions zoom is invalid")
+			}
 			positions[id] = position
 		}
 		heroPositions = &positions

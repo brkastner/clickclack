@@ -2763,7 +2763,7 @@ components:
           maximum: 64
         persona_hero_positions:
           type: object
-          description: Per-bot sidebar hero crop positions as X/Y percentages.
+          description: Per-bot sidebar hero crop positions and zoom.
           maxProperties: 64
           additionalProperties:
             $ref: "#/components/schemas/PersonaHeroPosition"
@@ -2780,6 +2780,11 @@ components:
           type: integer
           minimum: 0
           maximum: 100
+        zoom:
+          type: integer
+          description: Hero image zoom percentage. 100 means no additional zoom.
+          minimum: 100
+          maximum: 250
     AppearancePreferencesPatch:
       type: object
       description: Partial appearance update. Omitted properties are unchanged and empty strings reset to defaults.

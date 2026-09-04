@@ -18,7 +18,7 @@ export type NotificationSettings = {
   pushover_user_key: string;
 };
 
-export type PersonaHeroPosition = { x: number; y: number };
+export type PersonaHeroPosition = { x: number; y: number; zoom?: number };
 
 export type AppearancePreferences = {
   color_mode?: "" | "light" | "dark";
