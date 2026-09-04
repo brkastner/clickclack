@@ -19,10 +19,11 @@ import {
   type Session,
   type WebContents,
 } from "electron";
-import { readFile, rename, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseURIList, readClipboardImageFiles } from "./clipboard-uri";
 import {
   appURL,
   clampUnreadCount,
@@ -519,11 +520,18 @@ function registerIPC() {
     await beginDesktopOAuth();
     return true;
   });
-  ipcMain.handle("desktop:read-clipboard", (event) => {
+  ipcMain.handle("desktop:read-clipboard", async (event) => {
     if (!isMainSender(event)) return null;
+    const uriFormat = clipboard
+      .availableFormats()
+      .find((format) => format.toLowerCase().split(";", 1)[0] === "text/uri-list");
+    const uriList = uriFormat ? clipboard.read(uriFormat) : "";
+    const hasLocalFileURI = parseURIList(uriList).length > 0;
+    const files = hasLocalFileURI ? await readClipboardImageFiles(uriList) : [];
     return {
-      hasImage: !clipboard.readImage().isEmpty(),
-      text: clipboard.readText(),
+      files,
+      hasImage: files.length === 0 && !clipboard.readImage().isEmpty(),
+      text: hasLocalFileURI ? "" : clipboard.readText(),
     };
   });
   ipcMain.on("desktop:paste-native", (event) => {

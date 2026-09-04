@@ -53,6 +53,11 @@ export type DesktopNotification = {
   title: string;
 };
 
+export type DesktopPasteAction =
+  | { files: unknown[]; kind: "files" }
+  | { kind: "image" }
+  | { kind: "text"; text: string };
+
 export type DesktopTerminalDimensions = {
   cols: number;
   rows: number;
@@ -234,6 +239,19 @@ export function desktopAudioPermissionAllowed(
   } catch {
     return false;
   }
+}
+
+export function desktopPasteAction(input: unknown): DesktopPasteAction | null {
+  if (!input || typeof input !== "object") return null;
+  const payload = input as Record<string, unknown>;
+  if (Array.isArray(payload.files) && payload.files.length > 0 && payload.files.length <= 10) {
+    return { files: payload.files, kind: "files" };
+  }
+  if (payload.hasImage === true) return { kind: "image" };
+  if (typeof payload.text === "string" && payload.text) {
+    return { kind: "text", text: payload.text };
+  }
+  return null;
 }
 
 export function desktopMainWindowNavigationAllowed(

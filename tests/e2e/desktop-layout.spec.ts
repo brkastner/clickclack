@@ -9,6 +9,7 @@ async function installDesktopBridge(page: Page) {
         platform: "linux",
         notify: async () => false,
         onNavigate: () => () => {},
+        onPasteFiles: () => () => {},
         onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},

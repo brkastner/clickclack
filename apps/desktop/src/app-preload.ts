@@ -3,13 +3,26 @@ import {
   DESKTOP_SERVER_ORIGIN_ARG,
   DESKTOP_TITLEBAR_ARG,
   desktopBridgeAllowed,
+  desktopPasteAction,
   type DesktopNotification,
 } from "./contract";
+
+export type DesktopClipboardFile = {
+  bytes: Uint8Array;
+  name: string;
+  type: string;
+};
+
+export type DesktopPasteTarget = "composer";
 
 export type ClickClackDesktopBridge = {
   integratedTitleBar: boolean;
   notify(notification: DesktopNotification): Promise<boolean>;
   onNavigate(callback: (route: string) => void): () => void;
+  onPasteFiles(
+    target: DesktopPasteTarget,
+    callback: (files: DesktopClipboardFile[]) => void,
+  ): () => void;
   onPasteText(callback: (text: string) => void): () => void;
   onQuickCompose(callback: () => void): () => void;
   openSettings(): void;
@@ -22,27 +35,47 @@ export type ClickClackDesktopBridge = {
   writeClipboardText(text: string): Promise<boolean>;
 };
 
+const pasteFileCallbacks = new Map<
+  DesktopPasteTarget,
+  Set<(files: DesktopClipboardFile[]) => void>
+>();
 const pasteTextCallbacks = new Set<(text: string) => void>();
+let allowNextNativePaste = false;
 
-async function deliverDesktopPaste() {
+function requestNativePaste() {
+  allowNextNativePaste = true;
+  ipcRenderer.send("desktop:paste-native");
+}
+
+async function deliverDesktopPaste(target: DesktopPasteTarget) {
   let payload: unknown;
   try {
     payload = await ipcRenderer.invoke("desktop:read-clipboard");
   } catch {
+    requestNativePaste();
     return;
   }
-  if (!payload || typeof payload !== "object") return;
-  const { hasImage, text } = payload as { hasImage?: unknown; text?: unknown };
-  if (hasImage === true) {
-    ipcRenderer.send("desktop:paste-native");
+  const action = desktopPasteAction(payload);
+  if (!action) {
+    requestNativePaste();
     return;
   }
-  if (typeof text !== "string" || !text) return;
-  for (const callback of pasteTextCallbacks) callback(text);
+  if (action.kind === "files") {
+    for (const callback of pasteFileCallbacks.get(target) ?? []) {
+      callback(action.files as DesktopClipboardFile[]);
+    }
+    return;
+  }
+  if (action.kind === "image") {
+    requestNativePaste();
+    return;
+  }
+  for (const callback of pasteTextCallbacks) callback(action.text);
 }
 
-function isComposerTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest(".composer-editor__content"));
+function pasteTarget(target: EventTarget | null): DesktopPasteTarget | null {
+  if (!(target instanceof Element)) return null;
+  return target.closest(".composer-editor__content") ? "composer" : null;
 }
 
 function selectedText(target: EventTarget | null): string {
@@ -58,9 +91,10 @@ function installDesktopClipboardHandling() {
   globalThis.addEventListener(
     "keydown",
     (event) => {
+      const target = pasteTarget(event.target);
       if (
         !event.isTrusted ||
-        !isComposerTarget(event.target) ||
+        !target ||
         (!event.ctrlKey && !event.metaKey) ||
         event.altKey ||
         event.key.toLowerCase() !== "v"
@@ -68,7 +102,7 @@ function installDesktopClipboardHandling() {
         return;
       }
       event.preventDefault();
-      void deliverDesktopPaste();
+      void deliverDesktopPaste(target);
     },
     true,
   );
@@ -86,13 +120,18 @@ function installDesktopClipboardHandling() {
   globalThis.addEventListener(
     "paste",
     (event) => {
-      if (!event.isTrusted || !isComposerTarget(event.target)) return;
+      if (allowNextNativePaste) {
+        allowNextNativePaste = false;
+        return;
+      }
+      const target = pasteTarget(event.target);
+      if (!event.isTrusted || !target) return;
       const hasImage = Array.from(event.clipboardData?.items ?? []).some(
         (item) => item.kind === "file" && item.type.startsWith("image/"),
       );
       if (hasImage) return;
       event.preventDefault();
-      void deliverDesktopPaste();
+      void deliverDesktopPaste(target);
     },
     true,
   );
@@ -113,6 +152,18 @@ const bridge: ClickClackDesktopBridge = {
     const listener = (_event: Electron.IpcRendererEvent, route: string) => callback(route);
     ipcRenderer.on("desktop:navigate", listener);
     return () => ipcRenderer.removeListener("desktop:navigate", listener);
+  },
+  onPasteFiles: (target, callback) => {
+    let callbacks = pasteFileCallbacks.get(target);
+    if (!callbacks) {
+      callbacks = new Set();
+      pasteFileCallbacks.set(target, callbacks);
+    }
+    callbacks.add(callback);
+    return () => {
+      callbacks?.delete(callback);
+      if (callbacks?.size === 0) pasteFileCallbacks.delete(target);
+    };
   },
   onPasteText: (callback) => {
     pasteTextCallbacks.add(callback);

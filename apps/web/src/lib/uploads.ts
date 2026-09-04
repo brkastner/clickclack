@@ -1,8 +1,42 @@
 import type { Upload } from "./types";
-import { apiURL } from "./api";
+import { api, apiURL } from "./api";
+import { probeMediaDimensions } from "./media";
+
+export function uploadResourcePath(upload: Upload): string {
+  return `/api/uploads/${encodeURIComponent(upload.id)}`;
+}
 
 export function uploadURL(upload: Upload): string {
-  return apiURL(`/api/uploads/${encodeURIComponent(upload.id)}`);
+  return apiURL(uploadResourcePath(upload));
+}
+
+export function newUploadNonce(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID().replace(/-/g, "");
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+  }
+  throw new Error("Secure random values are unavailable");
+}
+
+export async function uploadWorkspaceFile(
+  workspaceID: string,
+  file: File,
+  nonce = newUploadNonce(),
+): Promise<Upload> {
+  const probe = await probeMediaDimensions(file);
+  const form = new FormData();
+  form.set("workspace_id", workspaceID);
+  form.set("file", file);
+  if (probe.width > 0) form.set("width", String(probe.width));
+  if (probe.height > 0) form.set("height", String(probe.height));
+  if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
+  const path = `/api/uploads?workspace_id=${encodeURIComponent(workspaceID)}&nonce=${encodeURIComponent(nonce)}`;
+  const data = await api<{ upload: Upload }>(path, { method: "POST", body: form });
+  return data.upload;
 }
 
 export function isImageUpload(upload: Upload): boolean {

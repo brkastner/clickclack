@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import "./clipboard-uri.test";
 import {
   appURL,
   clampUnreadCount,
   desktopAudioPermissionAllowed,
   desktopBridgeAllowed,
   desktopMainWindowNavigationAllowed,
+  desktopPasteAction,
   desktopOAuthCallbackCode,
   desktopOAuthStartURL,
   desktopTitleBarOptions,
@@ -143,6 +145,23 @@ test("exposes the desktop bridge only to the configured server origin", () => {
   );
   assert.equal(desktopBridgeAllowed("https://github.com", "https://app.clickclack.chat"), false);
   assert.equal(desktopBridgeAllowed("https://app.clickclack.chat", undefined), false);
+});
+
+test("prioritizes URI files while preserving bitmap and text paste fallbacks", () => {
+  const file = { bytes: new Uint8Array([1]), name: "image.png", type: "image/png" };
+  assert.deepEqual(desktopPasteAction({ files: [file], hasImage: true, text: "fallback" }), {
+    files: [file],
+    kind: "files",
+  });
+  assert.deepEqual(desktopPasteAction({ files: [], hasImage: true, text: "fallback" }), {
+    kind: "image",
+  });
+  assert.deepEqual(desktopPasteAction({ files: [], hasImage: false, text: "plain text" }), {
+    kind: "text",
+    text: "plain text",
+  });
+  assert.equal(desktopPasteAction({ files: Array(11).fill(file) }), null);
+  assert.equal(desktopPasteAction({ files: [], text: "" }), null);
 });
 
 test("keeps integrated desktop chrome on app routes", () => {

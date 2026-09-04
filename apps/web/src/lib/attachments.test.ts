@@ -7,7 +7,9 @@ import {
   mergeUploads,
   pendingAttachmentsForUploads,
   readyUploads,
+  revokePendingAttachmentPreviews,
   uploadsMissingAttachments,
+  withoutPendingAttachmentPreview,
   type PendingAttachment,
 } from "./attachments.ts";
 import type { Upload } from "./types.ts";
@@ -81,6 +83,28 @@ test("retains the existing queue and rejects files beyond the message limit", ()
   assert.equal(result.attachments.length, MAX_MESSAGE_ATTACHMENTS);
   assert.equal(result.attachments.at(-1)?.file.name, "accepted.txt");
   assert.equal(result.rejectedCount, 1);
+});
+
+test("creates immediate image previews and revokes them on completion or removal", () => {
+  const image = { name: "photo.png", size: 10, type: "image/png" } as File;
+  const revoked: string[] = [];
+  const result = appendPendingAttachments(
+    [],
+    [image],
+    "workspace-1",
+    () => "image-1",
+    () => "blob:preview-1",
+  );
+
+  assert.equal(result.attachments[0].previewURL, "blob:preview-1");
+  const completed = withoutPendingAttachmentPreview(result.attachments[0], (url) =>
+    revoked.push(url),
+  );
+  assert.equal(completed.previewURL, undefined);
+  revokePendingAttachmentPreviews([{ ...completed, previewURL: "blob:preview-2" }], (url) =>
+    revoked.push(url),
+  );
+  assert.deepEqual(revoked, ["blob:preview-1", "blob:preview-2"]);
 });
 
 test("turns existing uploads into ready composer attachments", () => {

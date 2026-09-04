@@ -892,8 +892,8 @@
 }
 
 .composer-attachments__list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
   gap: 7px;
 }
 
@@ -902,8 +902,8 @@
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  width: fit-content;
-  max-width: min(100%, 360px);
+  width: 100%;
+  max-width: 360px;
   padding: 5px 7px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -934,13 +934,25 @@
   color: var(--accent);
 }
 
+.composer-attachment.has-image {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  max-width: none;
+}
+
 .pending-image {
-  width: 42px;
-  height: 32px;
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 96px;
   object-fit: cover;
   border-radius: 7px;
   border: 1px solid var(--line);
   background: var(--panel-2);
+}
+
+.composer-attachment.has-image .attachment-copy {
+  grid-column: 1;
 }
 
 .attachment-copy {

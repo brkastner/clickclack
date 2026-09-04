@@ -11,7 +11,7 @@
     type PendingAttachment,
   } from "../../lib/attachments";
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
-  import { desktop } from "../../lib/desktop";
+  import { browserFilesFromDesktop, desktop } from "../../lib/desktop";
   import { formatBytes, isImageUpload, uploadURL } from "../../lib/uploads";
   import {
     completedShortcodeAt,
@@ -337,11 +337,20 @@
     return () => onInputRef(null);
   });
 
-  $effect(() =>
-    desktop?.onPasteText((text) => {
+  $effect(() => {
+    const removeFiles = desktop?.onPasteFiles("composer", (payload) => {
+      if (editorInstance?.isFocused && onPasteFiles) {
+        onPasteFiles(browserFilesFromDesktop(payload));
+      }
+    });
+    const removeText = desktop?.onPasteText((text) => {
       if (editorInstance?.isFocused) insertPastedText(text, true);
-    }),
-  );
+    });
+    return () => {
+      removeFiles?.();
+      removeText?.();
+    };
+  });
 
   $effect(() => {
     if (activeSuggestions.length === 0) {
@@ -842,12 +851,15 @@
         </div>
         <div class="composer-attachments__list" role="list">
           {#each pendingAttachments as attachment (attachment.key)}
-            <div class="composer-attachment" class:is-failed={attachment.state === "failed"} class:is-uploading={attachment.state === "uploading"} role="listitem">
-              <span class="attachment-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21.44 11.05 12.5 20a6 6 0 0 1-8.49-8.49l8.49-8.48a4 4 0 0 1 5.66 5.66l-8.49 8.49a2 2 0 0 1-2.83-2.83L13.41 7.5"/></svg>
-              </span>
-              {#if attachment.upload && isImageUpload(attachment.upload)}
+            <div class="composer-attachment" class:has-image={Boolean(attachment.previewURL || (attachment.upload && isImageUpload(attachment.upload)))} class:is-failed={attachment.state === "failed"} class:is-uploading={attachment.state === "uploading"} role="listitem">
+              {#if attachment.previewURL}
+                <img class="pending-image" src={attachment.previewURL} alt={attachment.file.name} />
+              {:else if attachment.upload && isImageUpload(attachment.upload)}
                 <img class="pending-image" src={uploadURL(attachment.upload)} alt={attachment.file.name} />
+              {:else}
+                <span class="attachment-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21.44 11.05 12.5 20a6 6 0 0 1-8.49-8.49l8.49-8.48a4 4 0 0 1 5.66 5.66l-8.49 8.49a2 2 0 0 1-2.83-2.83L13.41 7.5"/></svg>
+                </span>
               {/if}
               <span class="attachment-copy">
                 <span class="attachment-name">{attachment.file.name}</span>

@@ -1533,6 +1533,7 @@ test("desktop shell moves sidebar and search controls into the title bar", async
         integratedTitleBar: true,
         notify: async () => true,
         onNavigate: () => () => {},
+        onPasteFiles: () => () => {},
         onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},
@@ -1660,6 +1661,7 @@ test("desktop title bar preserves Windows caption-control space", async ({ page 
         integratedTitleBar: true,
         notify: async () => true,
         onNavigate: () => () => {},
+        onPasteFiles: () => () => {},
         onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},
@@ -1694,6 +1696,7 @@ test("desktop bridge keeps native frame layout when renderer chrome is disabled"
         integratedTitleBar: false,
         notify: async () => true,
         onNavigate: () => () => {},
+        onPasteFiles: () => () => {},
         onPasteText: () => () => {},
         onQuickCompose: () => () => {},
         openSettings: () => {},
@@ -1802,7 +1805,9 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(page.getByRole("heading", { name: "Profile settings" })).toBeVisible();
   await page.getByLabel("Display name").fill("Peter Steinberger");
   await page.getByLabel("Handle").fill("@steipete");
-  await page.getByLabel("Avatar URL").fill("https://avatars.githubusercontent.com/u/280?v=4");
+  await page
+    .getByLabel("Default or dark avatar URL")
+    .fill("https://avatars.githubusercontent.com/u/280?v=4");
   await page.getByRole("button", { name: "Save profile" }).click();
   await expect(page.getByRole("button", { name: /@steipete/ })).toBeVisible();
 

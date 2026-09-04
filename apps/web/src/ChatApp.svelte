@@ -9,7 +9,6 @@
     directConversationIDForRecencyEvent,
     promoteDirectConversation,
   } from "./lib/directConversationRecency";
-  import { probeMediaDimensions } from "./lib/media";
   import { messageContentForResend } from "./lib/messageResend";
   import {
     DEFAULT_SIDEBAR_WIDTH,
@@ -28,7 +27,9 @@
     mergeUploads,
     pendingAttachmentsForUploads,
     readyUploads,
+    revokePendingAttachmentPreviews,
     uploadsMissingAttachments,
+    withoutPendingAttachmentPreview,
     type PendingAttachment,
   } from "./lib/attachments";
   import { gifLibrary } from "./lib/gifs";
@@ -36,7 +37,12 @@
     markdownImageViewerItems,
     markdownImageViewerURL,
   } from "./lib/actions/markdown";
-  import { imageViewerItems, type ImageViewerItem } from "./lib/uploads";
+  import {
+    imageViewerItems,
+    newUploadNonce,
+    uploadWorkspaceFile,
+    type ImageViewerItem,
+  } from "./lib/uploads";
   import {
     INITIAL_MESSAGE_LIMIT,
     MAX_RETAINED_MESSAGE_WINDOWS,
@@ -948,6 +954,7 @@
     if (agentProgressSweeper) window.clearInterval(agentProgressSweeper);
     if (activityClockSweeper) window.clearInterval(activityClockSweeper);
     if (hiddenDirectUndoTimer) clearTimeout(hiddenDirectUndoTimer);
+    revokePendingAttachmentPreviews(pendingAttachments);
     syncArtifactModalInert(false, null);
   });
 
@@ -1268,6 +1275,7 @@
       captureScrollMemory();
       editController.clear();
       selectedWorkspaceID = workspace.id;
+      revokePendingAttachmentPreviews(pendingAttachments);
       pendingAttachments = [];
       topicsLoadSerial += 1;
       slashCommandsLoadSerial += 1;
@@ -2887,10 +2895,7 @@
   let pendingDrafts = new Map<string, OutgoingDraft>();
 
   function newNonce(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID().replace(/-/g, "");
-    }
-    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    return newUploadNonce();
   }
 
   function buildOptimisticMessage(nonce: string, draft: OutgoingDraft, id = `tmp_${nonce}`): Message {
@@ -2982,6 +2987,7 @@
     };
     messageBody = "";
     if (quote) clearReplyTarget();
+    revokePendingAttachmentPreviews(pendingAttachments);
     pendingAttachments = [];
     await dispatchDraft(draft);
   }
@@ -3025,6 +3031,7 @@
     stopTyping();
     composerNotice = null;
     messageBody = content.body;
+    revokePendingAttachmentPreviews(pendingAttachments);
     pendingAttachments = pendingAttachmentsForUploads(content.uploads, newNonce);
     if (replyTarget) clearReplyTarget();
     activeComposerContext = "message";
@@ -3832,29 +3839,18 @@
       error: undefined,
     }));
     try {
-      const probe = await probeMediaDimensions(pending.file);
-      const form = new FormData();
-      form.set("workspace_id", pending.workspaceID);
-      form.set("file", pending.file);
-      if (probe.width > 0) form.set("width", String(probe.width));
-      if (probe.height > 0) form.set("height", String(probe.height));
-      if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
-      const uploadPath = `/api/uploads?workspace_id=${encodeURIComponent(pending.workspaceID)}&nonce=${encodeURIComponent(pending.key)}`;
-      const data = await api<{ upload: Upload }>(uploadPath, {
-        method: "POST",
-        body: form,
-      });
+      const upload = await uploadWorkspaceFile(pending.workspaceID, pending.file, pending.key);
       if (pending.workspaceID !== selectedWorkspaceID) return;
       updatePendingAttachment(key, (attachment) => ({
-        ...attachment,
+        ...withoutPendingAttachmentPreview(attachment),
         state: "ready",
-        upload: data.upload,
+        upload,
         error: undefined,
       }));
     } catch (error) {
       if (pending.workspaceID !== selectedWorkspaceID) return;
       updatePendingAttachment(key, (attachment) => ({
-        ...attachment,
+        ...withoutPendingAttachmentPreview(attachment),
         state: "failed",
         upload: undefined,
         error: readableAPIError(error),
@@ -3904,6 +3900,8 @@
   }
 
   function removePendingAttachment(key: string) {
+    const removed = pendingAttachments.find((attachment) => attachment.key === key);
+    if (removed) revokePendingAttachmentPreviews([removed]);
     pendingAttachments = pendingAttachments.filter((attachment) => attachment.key !== key);
   }
 

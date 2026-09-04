@@ -11,6 +11,7 @@ export type PendingAttachment = {
   state: PendingAttachmentState;
   upload?: Upload;
   error?: string;
+  previewURL?: string;
 };
 
 type ClipboardItem = Pick<DataTransferItem, "kind" | "type" | "getAsFile">;
@@ -31,6 +32,7 @@ export function appendPendingAttachments(
   files: Iterable<File>,
   workspaceID: string,
   createKey: () => string,
+  createObjectURL: (file: File) => string = (file) => URL.createObjectURL(file),
 ): { attachments: PendingAttachment[]; rejectedCount: number } {
   const selected = [...files];
   const available = Math.max(0, MAX_MESSAGE_ATTACHMENTS - existing.length);
@@ -39,11 +41,31 @@ export function appendPendingAttachments(
     file,
     workspaceID,
     state: "uploading" as const,
+    ...(file.type.startsWith("image/") ? { previewURL: createObjectURL(file) } : {}),
   }));
   return {
     attachments: [...existing, ...accepted],
     rejectedCount: selected.length - accepted.length,
   };
+}
+
+export function revokePendingAttachmentPreviews(
+  attachments: Iterable<PendingAttachment>,
+  revokeObjectURL: (url: string) => void = (url) => URL.revokeObjectURL(url),
+): void {
+  for (const attachment of attachments) {
+    if (attachment.previewURL) revokeObjectURL(attachment.previewURL);
+  }
+}
+
+export function withoutPendingAttachmentPreview(
+  attachment: PendingAttachment,
+  revokeObjectURL: (url: string) => void = (url) => URL.revokeObjectURL(url),
+): PendingAttachment {
+  if (!attachment.previewURL) return attachment;
+  revokeObjectURL(attachment.previewURL);
+  const { previewURL: _previewURL, ...remaining } = attachment;
+  return remaining;
 }
 
 export function readyUploads(attachments: PendingAttachment[]): Upload[] {

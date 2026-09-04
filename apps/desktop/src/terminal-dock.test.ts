@@ -26,6 +26,16 @@ test("keeps terminal I/O out of the page-facing preload while exposing its toggl
   assert.match(preload, /contextBridge\.exposeInMainWorld\("clickclackDesktop"/u);
 });
 
+test("routes URI-list files only to the focused composer", () => {
+  const preload = readSource("./app-preload.ts");
+
+  assert.match(preload, /DesktopPasteTarget = "composer"/u);
+  assert.match(preload, /pasteFileCallbacks\.get\(target\)/u);
+  assert.match(preload, /for \(const callback of pasteTextCallbacks\)/u);
+  assert.match(preload, /requestNativePaste\(\)/u);
+  assert.doesNotMatch(preload, /profile-(?:dark|light)/u);
+});
+
 test("uses the full Rosé Pine Moon ANSI palette", () => {
   const source = readSource("./terminal-dock.tsx");
 
