@@ -12,6 +12,7 @@
     eager?: boolean;
     onOpenImage?: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact?: (upload: Upload) => void;
+    onAddToMessage?: (upload: Upload) => void;
   };
 
   let {
@@ -21,6 +22,7 @@
     eager = true,
     onOpenImage = () => {},
     onOpenArtifact = () => {},
+    onAddToMessage = () => {},
   }: Props = $props();
 
   const MAX_MEDIA_HEIGHT = 360;
@@ -63,6 +65,15 @@
     return `aspect-ratio: ${w} / ${h}; max-height: ${ratioH}px;`;
   });
 
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
   function formatDuration(ms: number): string {
     if (!ms || ms <= 0) return "";
     const total = Math.floor(ms / 1000);
@@ -87,6 +98,7 @@
   }
 
   function dismissImageContextMenu() {
+    imageContextMenuElement?.hidePopover();
     imageContextMenu = null;
     imageContextMenuStatus = "";
   }
@@ -96,17 +108,29 @@
     void tick().then(() => imageOpenButton?.focus({ preventScroll: true }));
   }
 
-  async function showImageContextMenu(x: number, y: number) {
+  async function showImageContextMenu(x: number, y: number, focusFirstItem = false) {
     const menuWidth = 210;
-    const menuHeight = 108;
+    const menuHeight = 142;
     const margin = 8;
-    imageContextMenu = {
-      x: Math.max(margin, Math.min(x, window.innerWidth - menuWidth - margin)),
-      y: Math.max(margin, Math.min(y, window.innerHeight - menuHeight - margin)),
-    };
+    const desiredX = Math.max(margin, Math.min(x, window.innerWidth - menuWidth - margin));
+    const desiredY = Math.max(margin, Math.min(y, window.innerHeight - menuHeight - margin));
+    imageContextMenu = { x: desiredX, y: desiredY };
     imageContextMenuStatus = "";
     await tick();
-    imageContextMenuElement?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    if (imageContextMenuElement) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      imageContextMenuElement.style.cssText = `left: ${desiredX}px; top: ${desiredY}px; right: auto; bottom: auto; margin: 0;`;
+      imageContextMenuElement.showPopover();
+    }
+    if (focusFirstItem) {
+      imageContextMenuElement
+        ?.querySelector<HTMLButtonElement>('[role="menuitem"]')
+        ?.focus({ preventScroll: true });
+    }
+  }
+
+  function preventSecondaryButtonFocus(event: MouseEvent) {
+    if (event.button === 2) event.preventDefault();
   }
 
   function openImageContextMenu(event: MouseEvent) {
@@ -124,7 +148,11 @@
         ? event.currentTarget.getBoundingClientRect()
         : imageOpenButton?.getBoundingClientRect();
     if (!bounds) return;
-    void showImageContextMenu(bounds.left + Math.min(bounds.width / 2, 80), bounds.top + 24);
+    void showImageContextMenu(
+      bounds.left + Math.min(bounds.width / 2, 80),
+      bounds.top + 24,
+      true,
+    );
   }
 
   function handleImageContextMenuKeydown(event: KeyboardEvent) {
@@ -180,16 +208,28 @@
     }
   }
 
+  function addInlineImageToMessage() {
+    onAddToMessage(upload);
+    dismissImageContextMenu();
+  }
+
   $effect(() => {
     if (!imageContextMenu) return;
     const dismiss = (event: PointerEvent) => {
       if (!imageContextMenuElement?.contains(event.target as Node)) dismissImageContextMenu();
     };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeImageContextMenu();
+    };
     window.addEventListener("pointerdown", dismiss);
+    window.addEventListener("keydown", dismissOnEscape);
     window.addEventListener("blur", dismissImageContextMenu);
     window.addEventListener("resize", dismissImageContextMenu);
     return () => {
       window.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("keydown", dismissOnEscape);
       window.removeEventListener("blur", dismissImageContextMenu);
       window.removeEventListener("resize", dismissImageContextMenu);
     };
@@ -205,11 +245,18 @@
 
 {#if (isImage || isVideo || isAudio) && !mediaLoaded}
   <button
+    bind:this={imageOpenButton}
     type="button"
     class="media-tile media-tile--deferred"
     style={mediaStyle}
     aria-label={`Load preview for ${upload.filename}`}
+    aria-haspopup={isImage ? "menu" : undefined}
+    aria-expanded={isImage ? imageContextMenu !== null : undefined}
+    aria-keyshortcuts={isImage ? "Shift+F10" : undefined}
     onclick={() => (manuallyLoaded = true)}
+    onmousedown={isImage ? preventSecondaryButtonFocus : undefined}
+    oncontextmenu={isImage ? openImageContextMenu : undefined}
+    onkeydown={isImage ? openImageContextMenuFromKeyboard : undefined}
   >
     <span class="media-tile__deferred-icon" aria-hidden="true">
       {isVideo ? "▶" : isAudio ? "♪" : "◫"}
@@ -230,6 +277,7 @@
       aria-expanded={imageContextMenu !== null}
       aria-keyshortcuts="Shift+F10"
       onclick={() => onOpenImage(url, upload.filename, attachments)}
+      onmousedown={preventSecondaryButtonFocus}
       oncontextmenu={openImageContextMenu}
       onkeydown={openImageContextMenuFromKeyboard}
     >
@@ -384,21 +432,29 @@
   </a>
 {/if}
 
-{#if imageContextMenu}
+{#if isImage}
   <div
     bind:this={imageContextMenuElement}
+    use:portal
     class="image-viewer__context-menu"
     role="menu"
     tabindex="-1"
+    popover="manual"
     aria-label="Image options"
     aria-busy={copyingImage}
-    style={`left: ${imageContextMenu.x}px; top: ${imageContextMenu.y}px;`}
+    style="right: auto; bottom: auto; margin: 0;"
     oncontextmenu={(event) => event.preventDefault()}
     onkeydown={handleImageContextMenuKeydown}
   >
     <button type="button" role="menuitem" aria-disabled={copyingImage} onclick={copyInlineImage}
       >Copy image</button
     >
+    <button
+      type="button"
+      role="menuitem"
+      aria-disabled={copyingImage}
+      onclick={addInlineImageToMessage}
+    >Add to message</button>
     <button
       type="button"
       role="menuitem"

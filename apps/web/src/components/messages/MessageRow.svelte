@@ -63,6 +63,7 @@
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
+    onAddAttachmentToMessage: (upload: Upload) => void;
     onResend?: (message: Message) => void;
     onRetry?: (message: Message) => void;
     onDiscard?: (message: Message) => void;
@@ -102,6 +103,7 @@
     onJumpToQuote,
     onOpenImage,
     onOpenArtifact,
+    onAddAttachmentToMessage,
     onResend,
     onRetry,
     onDiscard,
@@ -798,6 +800,7 @@
             eager={autoLoadAttachmentIDs?.has(attachment.id) ?? false}
             onOpenImage={onOpenImage}
             onOpenArtifact={onOpenArtifact}
+            onAddToMessage={onAddAttachmentToMessage}
           />
         {/each}
       </div>

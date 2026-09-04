@@ -77,6 +77,7 @@
     onJumpToQuote: (message: Message) => void;
     onOpenImage: (url: string, title: string, attachments: Upload[]) => void;
     onOpenArtifact: (upload: Upload) => void;
+    onAddAttachmentToMessage: (upload: Upload) => void;
     onResend?: (message: Message) => void;
     onLoadOlder?: () => void;
     onLoadNewer?: (source?: "scroll" | "wheel") => void;
@@ -144,6 +145,7 @@
     onJumpToQuote,
     onOpenImage,
     onOpenArtifact,
+    onAddAttachmentToMessage,
     onResend,
     onLoadOlder,
     onLoadNewer,
@@ -1144,6 +1146,7 @@
               {onJumpToQuote}
               {onOpenImage}
               {onOpenArtifact}
+              {onAddAttachmentToMessage}
               {onResend}
               {onRetry}
               {onDiscard}

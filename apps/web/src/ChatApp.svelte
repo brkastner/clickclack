@@ -24,6 +24,7 @@
   } from "./lib/sidebar-width";
   import {
     appendPendingAttachments,
+    MAX_MESSAGE_ATTACHMENTS,
     mergeUploads,
     pendingAttachmentsForUploads,
     readyUploads,
@@ -3953,6 +3954,26 @@
     await enqueueFiles(files);
   }
 
+  function addAttachmentToMessage(upload: Upload) {
+    if (upload.workspace_id !== selectedWorkspaceID) return;
+    if (!pendingAttachments.some((attachment) => attachment.upload?.id === upload.id)) {
+      if (pendingAttachments.length >= MAX_MESSAGE_ATTACHMENTS) {
+        composerNotice = {
+          kind: "error",
+          text: `This message already has ${MAX_MESSAGE_ATTACHMENTS} attachments.`,
+        };
+        return;
+      }
+      pendingAttachments = [
+        ...pendingAttachments,
+        ...pendingAttachmentsForUploads([upload], newNonce),
+      ];
+    }
+    composerNotice = null;
+    activeComposerContext = "message";
+    void tick().then(() => messageInput?.focus());
+  }
+
   function removePendingAttachment(key: string) {
     const removed = pendingAttachments.find((attachment) => attachment.key === key);
     if (removed) revokePendingAttachmentPreviews([removed]);
@@ -5482,6 +5503,7 @@
       onJumpToQuote={(message) => void jumpToQuotedMessage(message)}
       onOpenImage={openImageViewer}
       onOpenArtifact={openArtifactViewer}
+      onAddAttachmentToMessage={addAttachmentToMessage}
       onResend={resendMessage}
       onLoadOlder={requestOlderMessages}
       onLoadNewer={(source) => requestNewerMessages(source === "wheel")}

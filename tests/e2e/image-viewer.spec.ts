@@ -65,9 +65,9 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   await expect(conversationTrigger).toBeVisible();
 
   await conversationTrigger.getByRole("img", { name: filename }).click({ button: "right" });
-  const inlineImageMenu = page.getByRole("menu", { name: "Image options" });
+  const inlineImageMenu = page.locator('.image-viewer__context-menu:popover-open');
   await expect(inlineImageMenu).toBeVisible();
-  await expect(inlineImageMenu.getByRole("menuitem", { name: "Copy image" })).toBeFocused();
+  await expect(inlineImageMenu.getByRole("menuitem", { name: "Copy image" })).toBeVisible();
   await expect(
     inlineImageMenu.getByRole("menuitem", { name: "Copy attachment link" }),
   ).toBeVisible();
@@ -104,7 +104,7 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   await page.keyboard.press("Tab");
   await expect(displayedImage).toBeFocused();
   await page.keyboard.press("Shift+F10");
-  const imageMenu = page.getByRole("menu", { name: "Image options" });
+  const imageMenu = dialog.getByRole("menu", { name: "Image options" });
   const copyImageItem = imageMenu.getByRole("menuitem", { name: "Copy image" });
   const copyLinkItem = imageMenu.getByRole("menuitem", { name: "Copy attachment link" });
   await expect(imageMenu).toBeVisible();
@@ -141,6 +141,81 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   await page.locator(".image-viewer-scrim > .modal-backdrop").click({ position: { x: 4, y: 4 } });
   await expect(dialog).toHaveCount(0);
   await expect(threadTrigger).toBeFocused();
+});
+
+test("opens an unopened image menu in place and adds it to the draft", async ({ page }) => {
+  const suffix = Date.now();
+  const messageText = `deferred image menu ${suffix}`;
+  const pixel = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64",
+  );
+  const files = Array.from({ length: 12 }, (_, index) => ({
+    name: `deferred-${suffix}-${String(index).padStart(2, "0")}.png`,
+    mimeType: "image/png",
+    buffer: pixel,
+  }));
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await page.getByLabel("Upload file").setInputFiles(files.slice(0, 2));
+  await page.getByLabel("Message body").fill(messageText);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByLabel("Upload file").setInputFiles(files.slice(2));
+  await page.getByLabel("Message body").fill(`newer images ${suffix}`);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+
+  const filename = files[0]!.name;
+  const imageRow = page.locator(".message-row").filter({ hasText: messageText });
+  const deferredImage = imageRow.getByRole("button", { name: `Load preview for ${filename}` });
+  await deferredImage.scrollIntoViewIfNeeded();
+  await expect(deferredImage).toBeVisible();
+  const clickPoint = await deferredImage.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
+  });
+  const scrollTopBefore = await page
+    .locator(".messages-scroll")
+    .evaluate((element) => element.scrollTop);
+
+  await deferredImage.evaluate((element, point) => {
+    element.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        clientX: point.x,
+        clientY: point.y,
+      }),
+    );
+  }, clickPoint);
+
+  const menu = page.locator('.image-viewer__context-menu:popover-open');
+  await expect(menu).toBeVisible();
+  await expect(deferredImage).toBeVisible();
+  await expect
+    .poll(() => page.locator(".messages-scroll").evaluate((element) => element.scrollTop))
+    .toBe(scrollTopBefore);
+  const menuPosition = await menu.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { x: bounds.left, y: bounds.top };
+  });
+  const expectedX = Math.max(
+    8,
+    Math.min(clickPoint.x, (await page.evaluate(() => innerWidth)) - 218),
+  );
+  const expectedY = Math.max(
+    8,
+    Math.min(clickPoint.y, (await page.evaluate(() => innerHeight)) - 150),
+  );
+  expect(menuPosition.x).toBeCloseTo(expectedX, 0);
+  expect(menuPosition.y).toBeCloseTo(expectedY, 0);
+  await expect(imageRow.getByRole("button", { name: `Open image ${filename}` })).toHaveCount(0);
+
+  await menu.getByRole("menuitem", { name: "Add to message" }).click();
+  const pending = page.getByLabel("Pending attachments");
+  await expect(pending.getByText(filename)).toBeVisible();
+  await expect(menu).toHaveCount(0);
 });
 
 test("pages through image attachments with controls and arrow keys", async ({ page }) => {

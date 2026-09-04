@@ -636,6 +636,10 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+.image-viewer__context-menu[popover]:not(:popover-open) {
+  display: none;
+}
+
 .image-viewer__context-menu {
   position: fixed;
   z-index: 1000;
