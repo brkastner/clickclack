@@ -405,6 +405,28 @@
   max-width: 380px;
 }
 
+.settings-modal__content .settings-avatar-upload-preview {
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.settings-modal__content .settings-field-note,
+.settings-modal__content .settings-field-error {
+  margin: 0;
+  font-size: 12px;
+}
+
+.settings-modal__content .settings-field-note {
+  color: var(--muted);
+}
+
+.settings-modal__content .settings-field-error {
+  color: var(--danger);
+}
+
 .settings-modal__content .settings-row2__control--end {
   align-items: flex-end;
   justify-content: center;

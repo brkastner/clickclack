@@ -1,11 +1,19 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import Avatar from "../avatar/Avatar.svelte";
   import BrowserNotificationSetting from "./BrowserNotificationSetting.svelte";
+  import { readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
+  import { clipboardImageFiles } from "../../lib/attachments";
+  import { browserFilesFromDesktop, desktop, type DesktopPasteTarget } from "../../lib/desktop";
+  import { uploadResourcePath, uploadWorkspaceFile } from "../../lib/uploads";
   import type { User } from "../../lib/types";
+
+  type AvatarTarget = "dark" | "light";
 
   type Props = {
     user: User;
+    workspaceID: string;
     hideCommentary: boolean;
     hideToolCalls: boolean;
     userAlign: "left" | "right";
@@ -22,6 +30,7 @@
 
   let {
     user,
+    workspaceID,
     hideCommentary,
     hideToolCalls,
     userAlign,
@@ -42,12 +51,21 @@
   let handle = $state("");
   let avatarURL = $state("");
   let avatarURLLight = $state("");
+  let darkPreviewURL = $state("");
+  let lightPreviewURL = $state("");
+  let darkUploadError = $state("");
+  let lightUploadError = $state("");
+  let darkUploading = $state(false);
+  let lightUploading = $state(false);
+  let darkUploadGeneration = 0;
+  let lightUploadGeneration = 0;
   let status = $state("");
   let statusError = $state(false);
   let saving = $state(false);
 
   const previewName = $derived(displayName.trim() || currentUser.display_name || "Your name");
   const previewHandle = $derived(handle.trim().replace(/^@+/, "") || currentUser.handle || "");
+  const avatarUploading = $derived(darkUploading || lightUploading);
 
   $effect(() => {
     displayName = currentUser.display_name;
@@ -60,13 +78,109 @@
     if (!avatarURL.trim()) avatarURLLight = "";
   });
 
+  $effect(() => {
+    const removers = (["profile-dark", "profile-light"] as const).map((target) =>
+      desktop?.onPasteFiles(target, (payload) => {
+        void uploadAvatar(desktopTarget(target), browserFilesFromDesktop(payload));
+      }),
+    );
+    return () => removers.forEach((remove) => remove?.());
+  });
+
+  onDestroy(() => {
+    darkUploadGeneration += 1;
+    lightUploadGeneration += 1;
+    revokePreview("dark");
+    revokePreview("light");
+  });
+
+  function desktopTarget(target: DesktopPasteTarget): AvatarTarget {
+    return target === "profile-light" ? "light" : "dark";
+  }
+
+  function previewURL(target: AvatarTarget): string {
+    return target === "dark" ? darkPreviewURL : lightPreviewURL;
+  }
+
+  function setPreviewURL(target: AvatarTarget, value: string) {
+    if (target === "dark") darkPreviewURL = value;
+    else lightPreviewURL = value;
+  }
+
+  function revokePreview(target: AvatarTarget) {
+    const value = previewURL(target);
+    if (!value) return;
+    URL.revokeObjectURL(value);
+    setPreviewURL(target, "");
+  }
+
+  function setUploadError(target: AvatarTarget, value: string) {
+    if (target === "dark") darkUploadError = value;
+    else lightUploadError = value;
+  }
+
+  function setUploading(target: AvatarTarget, value: boolean) {
+    if (target === "dark") darkUploading = value;
+    else lightUploading = value;
+  }
+
+  function nextUploadGeneration(target: AvatarTarget): number {
+    if (target === "dark") return ++darkUploadGeneration;
+    return ++lightUploadGeneration;
+  }
+
+  function currentUploadGeneration(target: AvatarTarget): number {
+    return target === "dark" ? darkUploadGeneration : lightUploadGeneration;
+  }
+
+  async function uploadAvatar(target: AvatarTarget, files: File[]) {
+    if (files.length === 0) return;
+    setUploadError(target, "");
+    if (files.length !== 1) {
+      setUploadError(target, "Paste exactly one image for this profile photo.");
+      return;
+    }
+    if (!workspaceID) {
+      setUploadError(target, "Choose a workspace before uploading a profile photo.");
+      return;
+    }
+
+    const generation = nextUploadGeneration(target);
+    revokePreview(target);
+    const localPreviewURL = URL.createObjectURL(files[0]);
+    setPreviewURL(target, localPreviewURL);
+    setUploading(target, true);
+    try {
+      const upload = await uploadWorkspaceFile(workspaceID, files[0]);
+      if (generation !== currentUploadGeneration(target)) return;
+      revokePreview(target);
+      const hostedURL = uploadResourcePath(upload);
+      if (target === "dark") avatarURL = hostedURL;
+      else avatarURLLight = hostedURL;
+    } catch (error) {
+      if (generation !== currentUploadGeneration(target)) return;
+      revokePreview(target);
+      setUploadError(target, readableAPIError(error, "Could not upload profile photo"));
+    } finally {
+      if (generation === currentUploadGeneration(target)) setUploading(target, false);
+    }
+  }
+
+  function handleAvatarPaste(target: AvatarTarget, event: ClipboardEvent) {
+    if (!event.clipboardData) return;
+    const files = clipboardImageFiles(event.clipboardData.items);
+    if (files.length === 0) return;
+    event.preventDefault();
+    void uploadAvatar(target, files);
+  }
+
   function normalizedHandleForSave(): string {
     const trimmed = handle.trim().replace(/^@+/, "");
     return trimmed ? `@${trimmed}` : "";
   }
 
   async function save() {
-    if (saving) return;
+    if (saving || avatarUploading) return;
     saving = true;
     status = "";
     statusError = false;
@@ -94,7 +208,18 @@
   }
 
   function clearAvatar() {
+    nextUploadGeneration("dark");
+    revokePreview("dark");
+    darkUploading = false;
+    clearLightAvatar();
     avatarURL = "";
+  }
+
+  function clearLightAvatar() {
+    nextUploadGeneration("light");
+    revokePreview("light");
+    lightUploading = false;
+    avatarURLLight = "";
   }
 </script>
 
@@ -109,8 +234,8 @@
     <Avatar
       id={currentUser.id}
       name={previewName}
-      src={avatarURL}
-      lightSrc={avatarURLLight}
+      src={darkPreviewURL || avatarURL}
+      lightSrc={lightPreviewURL || avatarURLLight}
       size={52}
       loading="eager"
       fetchPriority="auto"
@@ -175,8 +300,18 @@
           aria-label="Default or dark avatar URL"
           placeholder="https://example.com/avatar-dark.png"
           inputmode="url"
+          onpaste={(event) => handleAvatarPaste("dark", event)}
         />
-        {#if avatarURL}
+        {#if darkPreviewURL}
+          <img class="settings-avatar-upload-preview" src={darkPreviewURL} alt="" data-avatar-preview="dark" />
+        {/if}
+        {#if darkUploading}
+          <span class="settings-field-note" role="status">Uploading photo...</span>
+        {/if}
+        {#if darkUploadError}
+          <p class="settings-field-error" role="status">{darkUploadError}</p>
+        {/if}
+        {#if avatarURL || darkPreviewURL}
           <button
             type="button"
             class="settings-linklike"
@@ -203,12 +338,22 @@
           placeholder="https://example.com/avatar-light.png"
           inputmode="url"
           disabled={!avatarURL.trim()}
+          onpaste={(event) => handleAvatarPaste("light", event)}
         />
-        {#if avatarURLLight}
+        {#if lightPreviewURL}
+          <img class="settings-avatar-upload-preview" src={lightPreviewURL} alt="" data-avatar-preview="light" />
+        {/if}
+        {#if lightUploading}
+          <span class="settings-field-note" role="status">Uploading photo...</span>
+        {/if}
+        {#if lightUploadError}
+          <p class="settings-field-error" role="status">{lightUploadError}</p>
+        {/if}
+        {#if avatarURLLight || lightPreviewURL}
           <button
             type="button"
             class="settings-linklike"
-            onclick={() => (avatarURLLight = "")}
+            onclick={clearLightAvatar}
             aria-label="Remove light mode avatar"
           >
             Remove
@@ -302,7 +447,7 @@
     {:else}
       <span class="settings-footer__spacer" aria-hidden="true"></span>
     {/if}
-    <button type="submit" class="settings-button settings-button--primary" disabled={saving}>
+    <button type="submit" class="settings-button settings-button--primary" disabled={saving || avatarUploading}>
       {saving ? "Saving..." : "Save profile"}
     </button>
   </footer>

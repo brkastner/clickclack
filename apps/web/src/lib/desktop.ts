@@ -11,7 +11,7 @@ export type DesktopClipboardFile = {
   type: string;
 };
 
-export type DesktopPasteTarget = "composer";
+export type DesktopPasteTarget = "composer" | "profile-dark" | "profile-light";
 
 export type ClickClackDesktopBridge = {
   integratedTitleBar: boolean;

@@ -84,6 +84,17 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 		Workspaces []store.Workspace `json:"workspaces"`
 	}](t, server.URL+"/api/workspaces")
 	workspace := workspaces.Workspaces[0]
+	profileUpload := uploadFileAsUserWithContentType(t, owner.ID, server.URL+"/api/uploads", workspace.ID, "profile.png", "image/png", "fake profile png")
+	profileUploadURL := "/api/uploads/" + profileUpload.ID
+	uploadedProfile := patchJSON[struct {
+		User store.User `json:"user"`
+	}](t, server.URL+"/api/me", map[string]string{
+		"avatar_url":       profileUploadURL,
+		"avatar_url_light": profileUploadURL,
+	})
+	if uploadedProfile.User.AvatarURL != profileUploadURL || uploadedProfile.User.AvatarURLLight != profileUploadURL {
+		t.Fatalf("unexpected uploaded profile URLs: %#v", uploadedProfile.User)
+	}
 	createdWorkspace := postJSON[struct {
 		Workspace store.Workspace `json:"workspace"`
 	}](t, server.URL+"/api/workspaces", map[string]string{"name": "Side Dock"})
@@ -98,6 +109,9 @@ func TestChatAPIVerticalSlice(t *testing.T) {
 	}
 	if err := st.AddWorkspaceMember(ctx, workspace.ID, second.ID, "member"); err != nil {
 		t.Fatal(err)
+	}
+	if body := getBodyAsUser(t, second.ID, server.URL+profileUploadURL); body != "fake profile png" {
+		t.Fatalf("unexpected visible profile upload body %q", body)
 	}
 
 	channels := getJSON[struct {

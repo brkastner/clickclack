@@ -192,6 +192,12 @@ func normalizeAvatarURL(value string) (string, error) {
 	if len(avatarURL) > 500 {
 		return "", errors.New("avatar_url is too long")
 	}
+	if uploadID, ok := strings.CutPrefix(avatarURL, "/api/uploads/"); ok {
+		if uploadID != "" && !strings.Contains(uploadID, "/") {
+			return avatarURL, nil
+		}
+		return "", errors.New("avatar_url has an invalid upload path")
+	}
 	parsed, err := url.Parse(avatarURL)
 	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
 		return "", errors.New("avatar_url must be an http or https URL")

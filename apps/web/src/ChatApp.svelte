@@ -5725,6 +5725,7 @@
 {#if settingsModalOpen && user}
   <SettingsModal
     {user}
+    workspaceID={selectedWorkspaceID}
     {workspaces}
     initialSection={settingsModalSection}
     {hideCommentary}

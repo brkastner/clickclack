@@ -283,6 +283,13 @@ func (s *Store) UpdateCurrentUser(ctx context.Context, input store.UpdateCurrent
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
+	for _, candidate := range []*string{avatarURL, avatarURLLight} {
+		if candidate != nil {
+			if err := validateProfileAvatarUpload(ctx, tx, input.UserID, *candidate); err != nil {
+				return store.CurrentUserState{}, err
+			}
+		}
+	}
 	profileChanged := displayName != nil || handle != nil || avatarURL != nil || avatarURLLight != nil
 	if displayName != nil {
 		if err := qtx.UpdateUserDisplayName(ctx, storedb.UpdateUserDisplayNameParams{
@@ -405,6 +412,27 @@ func normalizeUserProfilePatch(displayNameInput, handleInput, avatarURLInput *st
 		avatarURL = &normalized
 	}
 	return displayName, handle, avatarURL, nil
+}
+
+func validateProfileAvatarUpload(ctx context.Context, tx *sql.Tx, userID, avatarURL string) error {
+	uploadID, ok := strings.CutPrefix(avatarURL, "/api/uploads/")
+	if !ok {
+		return nil
+	}
+	var ownerID, contentType string
+	if err := tx.QueryRowContext(ctx, `SELECT owner_id, content_type FROM uploads WHERE id = $1`, uploadID).Scan(&ownerID, &contentType); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("profile photo upload was not found")
+		}
+		return err
+	}
+	if ownerID != userID {
+		return errors.New("profile photo upload is not owned by the user")
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		return errors.New("profile photo upload must be an image")
+	}
+	return nil
 }
 
 func normalizeAvatarURLPatch(input *string) (*string, error) {

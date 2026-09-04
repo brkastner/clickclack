@@ -13,7 +13,7 @@ export type DesktopClipboardFile = {
   type: string;
 };
 
-export type DesktopPasteTarget = "composer";
+export type DesktopPasteTarget = "composer" | "profile-dark" | "profile-light";
 
 export type ClickClackDesktopBridge = {
   integratedTitleBar: boolean;
@@ -70,12 +70,19 @@ async function deliverDesktopPaste(target: DesktopPasteTarget) {
     requestNativePaste();
     return;
   }
-  for (const callback of pasteTextCallbacks) callback(action.text);
+  if (target === "composer") {
+    for (const callback of pasteTextCallbacks) callback(action.text);
+    return;
+  }
+  requestNativePaste();
 }
 
 function pasteTarget(target: EventTarget | null): DesktopPasteTarget | null {
   if (!(target instanceof Element)) return null;
-  return target.closest(".composer-editor__content") ? "composer" : null;
+  if (target.closest(".composer-editor__content")) return "composer";
+  if (target.matches("#profile-avatar-url")) return "profile-dark";
+  if (target.matches("#profile-avatar-url-light")) return "profile-light";
+  return null;
 }
 
 function selectedText(target: EventTarget | null): string {

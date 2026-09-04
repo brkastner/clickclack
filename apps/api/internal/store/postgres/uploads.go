@@ -337,6 +337,13 @@ func (s *Store) GetUpload(ctx context.Context, uploadID, userID string) (store.U
 	if iconVisible {
 		return upload, nil
 	}
+	profileVisible, err := profileAvatarUploadVisibleTx(ctx, s.db, uploadID)
+	if err != nil {
+		return store.Upload{}, err
+	}
+	if profileVisible {
+		return upload, nil
+	}
 	hasLiveAttachments, err := uploadHasLiveAttachmentsTx(ctx, s.db, uploadID)
 	if err != nil {
 		return store.Upload{}, err
@@ -485,6 +492,20 @@ func uploadVisibleToUserTx(ctx context.Context, q uploadVisibilityQueryer, uploa
 		LIMIT 1`,
 		userID, userID, uploadID, store.WorkspaceRoleGuest, store.WorkspaceRoleGuest,
 	).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func profileAvatarUploadVisibleTx(ctx context.Context, q uploadVisibilityQueryer, uploadID string) (bool, error) {
+	var one int
+	avatarURL := "/api/uploads/" + uploadID
+	err := q.QueryRowContext(ctx, `
+		SELECT 1
+		FROM users
+		WHERE avatar_url = $1 OR avatar_url_light = $2
+		LIMIT 1`, avatarURL, avatarURL).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}

@@ -20,6 +20,7 @@
 
   type Props = {
     user: User;
+    workspaceID: string;
     workspaces?: Workspace[];
     initialSection?: AccountSettingsSectionId;
     hideCommentary: boolean;
@@ -38,6 +39,7 @@
 
   let {
     user: initialUser,
+    workspaceID,
     workspaces = [],
     initialSection = DEFAULT_ACCOUNT_SETTINGS_SECTION,
     hideCommentary,
@@ -227,6 +229,7 @@
         </header>
         <ProfileSettingsForm
           {user}
+          {workspaceID}
           {hideCommentary}
           {hideToolCalls}
           {userAlign}
