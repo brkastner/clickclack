@@ -221,24 +221,23 @@ export function desktopBridgeAllowed(currentOrigin: string, trustedOrigin: strin
   }
 }
 
-export function desktopAudioPermissionAllowed(
+export function desktopPermissionAllowed(
   permission: string,
   requestingOrigin: string,
   serverUrl: string,
   mediaTypes: readonly string[],
 ): boolean {
-  if (
-    permission !== "media" ||
-    mediaTypes.length === 0 ||
-    mediaTypes.some((mediaType) => mediaType !== "audio")
-  ) {
-    return false;
-  }
   try {
-    return new URL(requestingOrigin).origin === normalizeServerURL(serverUrl);
+    if (new URL(requestingOrigin).origin !== normalizeServerURL(serverUrl)) return false;
   } catch {
     return false;
   }
+  if (permission === "fullscreen") return true;
+  return (
+    permission === "media" &&
+    mediaTypes.length > 0 &&
+    mediaTypes.every((mediaType) => mediaType === "audio")
+  );
 }
 
 export function desktopPasteAction(input: unknown): DesktopPasteAction | null {

@@ -4,7 +4,7 @@ import "./clipboard-uri.test";
 import {
   appURL,
   clampUnreadCount,
-  desktopAudioPermissionAllowed,
+  desktopPermissionAllowed,
   desktopBridgeAllowed,
   desktopMainWindowNavigationAllowed,
   desktopPasteAction,
@@ -59,28 +59,33 @@ test("normalizes hosted and loopback servers", () => {
   assert.throws(() => normalizeServerURL("https://chat.example.com/tenant"), /extra path/);
 });
 
-test("allows only microphone access from the configured ClickClack origin", () => {
+test("allows fullscreen and microphone access only from the configured ClickClack origin", () => {
   const serverUrl = "http://127.0.0.1:5173";
   assert.equal(
-    desktopAudioPermissionAllowed("media", "http://127.0.0.1:5173/app", serverUrl, ["audio"]),
+    desktopPermissionAllowed("media", "http://127.0.0.1:5173/app", serverUrl, ["audio"]),
     true,
   );
   assert.equal(
-    desktopAudioPermissionAllowed("media", "http://localhost:5173/app", serverUrl, ["audio"]),
+    desktopPermissionAllowed("media", "http://localhost:5173/app", serverUrl, ["audio"]),
     false,
   );
   assert.equal(
-    desktopAudioPermissionAllowed("media", "http://127.0.0.1:5173", serverUrl, ["video"]),
+    desktopPermissionAllowed("media", "http://127.0.0.1:5173", serverUrl, ["video"]),
     false,
   );
   assert.equal(
-    desktopAudioPermissionAllowed("media", "http://127.0.0.1:5173", serverUrl, ["audio", "video"]),
+    desktopPermissionAllowed("media", "http://127.0.0.1:5173", serverUrl, ["audio", "video"]),
     false,
   );
   assert.equal(
-    desktopAudioPermissionAllowed("notifications", "http://127.0.0.1:5173", serverUrl, ["audio"]),
+    desktopPermissionAllowed("notifications", "http://127.0.0.1:5173", serverUrl, ["audio"]),
     false,
   );
+  assert.equal(
+    desktopPermissionAllowed("fullscreen", "http://127.0.0.1:5173/app", serverUrl, []),
+    true,
+  );
+  assert.equal(desktopPermissionAllowed("fullscreen", "https://example.com", serverUrl, []), false);
 });
 
 test("keeps navigation inside ClickClack app routes", () => {

@@ -27,7 +27,7 @@ import { parseURIList, readClipboardImageFiles } from "./clipboard-uri";
 import {
   appURL,
   clampUnreadCount,
-  desktopAudioPermissionAllowed,
+  desktopPermissionAllowed,
   DESKTOP_AUTH_PROTOCOL,
   deepLinkToRoute,
   defaultSettings,
@@ -690,7 +690,7 @@ function secureSession() {
           applicationView &&
           !mainWindow.isDestroyed() &&
           applicationView.webContents.id === webContents.id &&
-          desktopAudioPermissionAllowed(permission, securityOrigin, settings.serverUrl, mediaTypes),
+          desktopPermissionAllowed(permission, securityOrigin, settings.serverUrl, mediaTypes),
         ),
       );
     },
@@ -703,7 +703,7 @@ function secureSession() {
         webContents &&
         !mainWindow.isDestroyed() &&
         applicationView.webContents.id === webContents.id &&
-        desktopAudioPermissionAllowed(
+        desktopPermissionAllowed(
           permission,
           details.securityOrigin ?? requestingOrigin,
           settings.serverUrl,
