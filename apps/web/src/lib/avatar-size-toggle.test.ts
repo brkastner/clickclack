@@ -84,23 +84,37 @@ test("left-anchors persona identity headers without changing nested channels", (
   );
 });
 
-test("persona headers bleed the portrait behind a left-anchored plate", () => {
+test("persona headers use the tinted profile hero behind a left-anchored plate", () => {
   const styles = readSource("../styles/sidebar.css");
   const channelList = readSource("../components/navigation/ChannelList.svelte");
 
   assert.match(channelList, /class="persona-band"/u);
+  assert.match(channelList, /style=\{`--hue: \$\{avatarHue\(group\.profile\.id\)\}deg`\}/u);
   assert.match(channelList, /class="persona-band-scrim"/u);
   assert.match(channelList, /class="persona-name"/u);
 
-  // The band mask stays closed across the plate so the avatar reads crisply.
   assert.match(
     styles,
-    /\.sidebar-profile-groups \.persona-band\s*\{[\s\S]*?mask-image: linear-gradient\(\s*to right,\s*transparent 0%,\s*transparent 34%,/u,
+    /\.sidebar-profile-groups \.persona-band\s*\{[\s\S]*?url\("\/profile-cover\.webp"\)[\s\S]*?background-blend-mode:\s*overlay, normal, normal;/u,
   );
   assert.match(
     styles,
-    /\.sidebar-profile-groups \.persona-band img\s*\{[\s\S]*?object-position:\s*50% 20%;/u,
+    /\.sidebar-profile-groups \.persona-band\s*\{[\s\S]*?mask-image: linear-gradient\(\s*to right,\s*transparent 0%,\s*transparent 24%,/u,
   );
+});
+
+test("persona headers support persisted pointer and keyboard reordering", () => {
+  const sidebar = readSource("../components/navigation/Sidebar.svelte");
+  const channelList = readSource("../components/navigation/ChannelList.svelte");
+  const styles = readSource("../styles/sidebar.css");
+
+  assert.match(sidebar, /clickclack:sidebar-persona-order:v1:/u);
+  assert.match(sidebar, /profiles=\{orderedProfileShortcuts\}/u);
+  assert.match(sidebar, /onReorderProfiles=\{savePersonaOrder\}/u);
+  assert.match(channelList, /class="profile-drag-handle"/u);
+  assert.match(channelList, /ondragover=\{\(event\) => personaDragOver/u);
+  assert.match(channelList, /onkeydown=\{\(event\) => \{[\s\S]*?movePersonaBy/u);
+  assert.match(styles, /\.profile-subgroup-header\.persona-drop-before::before/u);
 });
 
 test("double mode scales avatar-linked names with their avatars", () => {

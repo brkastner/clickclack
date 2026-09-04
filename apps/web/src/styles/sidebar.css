@@ -322,10 +322,9 @@
   margin-top: 0;
 }
 
-/* Persona identity header: a solid avatar plate anchored left, with the same
-   portrait cropped to its head band bleeding behind the name. The band's mask
-   only opens to the right of the plate so the plate stays crisp and the bleed
-   reads as atmosphere rather than a second competing avatar. */
+/* Persona identity header: a solid avatar plate over the same shared ukiyo-e
+   cover used by profile heroes. Each persona's hue tints the cover while the
+   left mask keeps the foreground avatar crisp. */
 .sidebar-profile-groups .channel-subgroup-toggle {
   position: relative;
   min-height: var(--persona-band-h, 46px);
@@ -345,49 +344,45 @@
   z-index: 0;
   inset: 0;
   display: block;
-  overflow: hidden;
   pointer-events: none;
-  opacity: 0.42;
-  filter: saturate(0.8) contrast(1.05);
+  opacity: 0.72;
+  background:
+    linear-gradient(
+      135deg,
+      hsl(var(--hue, 220deg) 72% 50% / 0.58),
+      hsl(calc(var(--hue, 220deg) + 54deg) 70% 34% / 0.66)
+    ),
+    url("/profile-cover.webp") 72% center / cover no-repeat,
+    linear-gradient(
+      135deg,
+      hsl(var(--hue, 220deg) 76% 58%),
+      hsl(calc(var(--hue, 220deg) + 54deg) 74% 38%)
+    );
+  background-blend-mode: overlay, normal, normal;
+  filter: saturate(0.82) contrast(1.04);
+  transition: opacity 180ms ease, filter 180ms ease;
   -webkit-mask-image: linear-gradient(
     to right,
     transparent 0%,
-    transparent 34%,
-    #000 56%,
-    #000 74%,
+    transparent 24%,
+    #000 44%,
+    #000 88%,
     transparent 100%
   );
   mask-image: linear-gradient(
     to right,
     transparent 0%,
-    transparent 34%,
-    #000 56%,
-    #000 74%,
+    transparent 24%,
+    #000 44%,
+    #000 88%,
     transparent 100%
   );
 }
 
-.sidebar-profile-groups .persona-band img {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: calc(var(--persona-band-h, 46px) * 3.1);
-  top: calc(var(--persona-band-h, 46px) * -0.92);
-  object-fit: cover;
-  object-position: 50% 20%;
-  transition: transform 400ms ease;
-}
-
-.sidebar-profile-groups .channel-subgroup-toggle:hover .persona-band {
-  opacity: 0.6;
-}
-
-.sidebar-profile-groups .channel-subgroup-toggle:hover .persona-band img {
-  transform: scale(1.05);
-}
-
+.sidebar-profile-groups .channel-subgroup-toggle:hover .persona-band,
 .sidebar-profile-groups .channel-subgroup-toggle.active .persona-band {
-  opacity: 0.62;
+  opacity: 0.9;
+  filter: saturate(1) contrast(1.08);
 }
 
 .persona-band-scrim {
@@ -899,6 +894,53 @@
 
 .profile-subgroup-header {
   position: relative;
+}
+
+.profile-drag-handle {
+  position: absolute;
+  z-index: 4;
+  inset-block: 0;
+  left: -10px;
+  display: grid;
+  width: 14px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: grab;
+  opacity: 0.4;
+}
+
+.profile-drag-handle:hover,
+.profile-drag-handle:focus-visible {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.profile-drag-handle:active {
+  cursor: grabbing;
+}
+
+.profile-subgroup-header.persona-drop-before::before,
+.profile-subgroup-header.persona-drop-after::after {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  left: 2px;
+  right: 2px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.profile-subgroup-header.persona-drop-before::before {
+  top: -2px;
+}
+
+.profile-subgroup-header.persona-drop-after::after {
+  bottom: -2px;
 }
 
 .profile-add-button {

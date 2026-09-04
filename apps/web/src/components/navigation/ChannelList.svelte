@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { channelDisplayTitle } from "../../lib/chat/channels";
-  import { directConversationForUser, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
+  import { avatarHue, directConversationForUser, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
   import type { PersonaChannelPins } from "../../lib/personaNavigation";
   import type { Channel, DirectConversation, User } from "../../lib/types";
   import Avatar from "../avatar/Avatar.svelte";
@@ -25,6 +25,7 @@
     onCreateChannel: (profile?: ChannelProfileShortcut) => void;
     onToggle: () => void;
     onReorder: (channelIDs: string[]) => void;
+    onReorderProfiles: (profileIDs: string[]) => void;
     onAssignProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
     personaChannelPins: PersonaChannelPins;
     onPinPersonaChannel: (personaID: string, channelID: string) => void;
@@ -33,7 +34,8 @@
   let {
     variant = "active", expanded, channels, profiles, directConversations, selectedChannelID, selectedDirectID,
     workingConversationIDs, hrefForChannel, hrefForDirect, onSelectChannel, onSelectDirect, onStartDirect,
-    onCreateChannel, onToggle, onReorder, onAssignProfile, personaChannelPins, onPinPersonaChannel,
+    onCreateChannel, onToggle, onReorder, onReorderProfiles, onAssignProfile, personaChannelPins,
+    onPinPersonaChannel,
   }: Props = $props();
 
   let moveMenuChannelID = $state("");
@@ -45,6 +47,9 @@
   let dropTargetID = $state("");
   let dropBefore = $state(true);
   let dropGroupKey = $state("");
+  let draggedPersonaID = $state("");
+  let personaDropTargetID = $state("");
+  let personaDropBefore = $state(true);
 
   const activeChannels = $derived(channels.filter((channel) => !channel.archived_at));
   const archivedChannels = $derived(channels.filter((channel) => Boolean(channel.archived_at)));
@@ -96,6 +101,46 @@
     const index = scope.findIndex((channel) => channel.id === channelID);
     const target = index + offset;
     if (index >= 0 && target >= 0 && target < scope.length) moveChannel(channelID, scope[target].id, offset < 0);
+  }
+
+  function movePersona(personaID: string, targetID: string, before: boolean) {
+    const current = profiles.map((profile) => profile.bot_user_id);
+    const order = moveChannelInOrder(current, personaID, targetID, before);
+    if (order === current) return;
+    onReorderProfiles(order);
+    const profile = profiles.find((candidate) => candidate.bot_user_id === personaID);
+    if (profile) {
+      announceMove(
+        `Moved ${profile.display_name} to position ${order.indexOf(personaID) + 1} of ${order.length}`,
+      );
+    }
+  }
+
+  function movePersonaBy(personaID: string, offset: number) {
+    const index = profiles.findIndex((profile) => profile.bot_user_id === personaID);
+    const target = index + offset;
+    if (index >= 0 && target >= 0 && target < profiles.length) {
+      movePersona(personaID, profiles[target].bot_user_id, offset < 0);
+    }
+  }
+
+  function personaDragOver(event: DragEvent, targetID: string) {
+    if (!draggedPersonaID || draggedPersonaID === targetID) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    personaDropTargetID = targetID;
+    personaDropBefore = event.clientY < rect.top + rect.height / 2;
+  }
+
+  function personaDrop(event: DragEvent, targetID: string) {
+    if (!draggedPersonaID) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const moving = draggedPersonaID;
+    draggedPersonaID = "";
+    personaDropTargetID = "";
+    movePersona(moving, targetID, personaDropBefore);
   }
 
   async function toggleMoveMenu(channelID: string, trigger: HTMLElement) {
@@ -223,20 +268,47 @@
         ondragover={(event) => groupDragOver(event, `bot:${group.profile.bot_user_id}`)}
         ondragleave={() => { if (dropGroupKey === `bot:${group.profile.bot_user_id}`) dropGroupKey = ""; }}
         ondrop={(event) => groupDrop(event, `bot:${group.profile.bot_user_id}`, group.profile)}>
-        <div class="channel-subgroup-header profile-subgroup-header">
+        <div
+          class="channel-subgroup-header profile-subgroup-header"
+          class:persona-drop-before={personaDropTargetID === group.profile.bot_user_id && personaDropBefore}
+          class:persona-drop-after={personaDropTargetID === group.profile.bot_user_id && !personaDropBefore}
+          ondragover={(event) => personaDragOver(event, group.profile.bot_user_id)}
+          ondragleave={() => {
+            if (personaDropTargetID === group.profile.bot_user_id) personaDropTargetID = "";
+          }}
+          ondrop={(event) => personaDrop(event, group.profile.bot_user_id)}
+        >
+          <button
+            type="button"
+            class="profile-drag-handle"
+            draggable="true"
+            aria-label={`Move ${group.profile.display_name}`}
+            title="Move persona"
+            ondragstart={(event) => {
+              draggedPersonaID = group.profile.bot_user_id;
+              event.dataTransfer?.setData("text/plain", group.profile.bot_user_id);
+            }}
+            ondragend={() => {
+              draggedPersonaID = "";
+              personaDropTargetID = "";
+            }}
+            onkeydown={(event) => {
+              if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                event.preventDefault();
+                movePersonaBy(group.profile.bot_user_id, event.key === "ArrowUp" ? -1 : 1);
+              }
+            }}
+          >
+            <svg viewBox="0 0 12 16" width="12" height="16" aria-hidden="true"><circle cx="3" cy="4" r="1"/><circle cx="9" cy="4" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="9" cy="8" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="9" cy="12" r="1"/></svg>
+          </button>
           <a href={conversation ? hrefForDirect(conversation.id) : "#"} class="channel-subgroup-toggle profile-source-link" class:active={conversation?.id === selectedDirectID}
             onclick={(event) => { event.preventDefault(); if (conversation) onSelectDirect(conversation.id); else onStartDirect(group.profile.bot_user_id); }}>
-            {#if group.profile.avatar_url || group.profile.avatar_url_light}
-              <Avatar
-                class="persona-band"
-                id={group.profile.id}
-                name={group.profile.display_name}
-                src={group.profile.avatar_url}
-                lightSrc={group.profile.avatar_url_light}
-                size={160}
-              />
-              <span class="persona-band-scrim" aria-hidden="true"></span>
-            {/if}
+            <span
+              class="persona-band"
+              style={`--hue: ${avatarHue(group.profile.id)}deg`}
+              aria-hidden="true"
+            ></span>
+            <span class="persona-band-scrim" aria-hidden="true"></span>
             <Avatar
               class="channel-profile-avatar"
               id={group.profile.id}

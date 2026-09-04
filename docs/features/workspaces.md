@@ -102,12 +102,12 @@ a channel and assigns it to that bot before navigating into it. Unassigned
 channels stay in the ordinary channel list. Managers can also link an existing
 channel by dragging it under a bot. Bot tokens cannot mutate assignments.
 
-Profile groups render above ordinary alphabetized sections, in the viewer's own
-channel order keyed by each profile's source channel. Managers reorder them by
-dragging a profile header onto another one, or by holding Alt with Arrow Up or
-Arrow Down while the header has focus. That order is the same browser-local
-per-user channel order that positions ordinary channels, so it is not shared
-across users and needs no server state.
+Profile groups render above ordinary alphabetized sections. Each header uses the
+shared profile hero artwork, tinted by the bot's identity color behind its
+avatar. Viewers reorder groups by dragging the header's move handle onto another
+profile, or by focusing the handle and pressing Arrow Up or Arrow Down. The
+browser stores persona order separately for each user and workspace, so it is
+not shared and needs no server state.
 
 Guest workspace members are waiting-room users. They can only see `#guest`, can
 post three messages per day, and cannot create rooms or DMs. Moderators and

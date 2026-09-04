@@ -240,6 +240,37 @@
     }
   }
 
+  const PERSONA_ORDER_STORAGE_PREFIX = "clickclack:sidebar-persona-order:v1:";
+  let personaOrder = $state<string[]>([]);
+
+  function personaOrderStorageKey(workspaceID: string, userID: string): string {
+    return `${PERSONA_ORDER_STORAGE_PREFIX}${userID}:${workspaceID}`;
+  }
+
+  function loadPersonaOrder(workspaceID: string, userID: string): string[] {
+    if (!workspaceID || !userID) return [];
+    try {
+      return parseChannelOrder(
+        window.localStorage.getItem(personaOrderStorageKey(workspaceID, userID)),
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  function savePersonaOrder(order: string[]) {
+    personaOrder = order;
+    if (!workspaceID || !currentUser?.id) return;
+    try {
+      window.localStorage.setItem(
+        personaOrderStorageKey(workspaceID, currentUser.id),
+        JSON.stringify(order),
+      );
+    } catch {
+      // The order remains active for this session when storage is unavailable.
+    }
+  }
+
   const PERSONA_CHANNEL_PIN_STORAGE_PREFIX = "clickclack:persona-channel-pins:v1:";
   let personaChannelPins = $state<PersonaChannelPins>({});
 
@@ -275,10 +306,23 @@
     if (!workspaceID || !currentUser?.id) return;
     if (event.key === channelOrderStorageKey(workspaceID, currentUser.id)) {
       channelOrder = parseChannelOrder(event.newValue);
+    } else if (event.key === personaOrderStorageKey(workspaceID, currentUser.id)) {
+      personaOrder = parseChannelOrder(event.newValue);
     } else if (event.key === personaChannelPinStorageKey(workspaceID, currentUser.id)) {
       personaChannelPins = parsePersonaChannelPins(event.newValue);
     }
   }
+
+  const orderedProfileShortcuts = $derived.by(() => {
+    const byID = new Map(profileShortcuts.map((profile) => [profile.bot_user_id, profile]));
+    const saved = personaOrder.flatMap((id) => {
+      const profile = byID.get(id);
+      if (!profile) return [];
+      byID.delete(id);
+      return [profile];
+    });
+    return [...saved, ...byID.values()];
+  });
 
   let orderedChannels = $derived.by(() => {
     const byID = new Map(channels.map((channel) => [channel.id, channel]));
@@ -294,6 +338,7 @@
   $effect(() => {
     const userID = currentUser?.id || "";
     channelOrder = loadChannelOrder(workspaceID, userID);
+    personaOrder = loadPersonaOrder(workspaceID, userID);
     personaChannelPins = loadPersonaChannelPins(workspaceID, userID);
   });
 
@@ -424,7 +469,8 @@
       {workspaceID}
       expanded={sections.channels}
       channels={orderedChannels}
-      profiles={profileShortcuts}
+      profiles={orderedProfileShortcuts}
+      onReorderProfiles={savePersonaOrder}
       {directConversations}
       people={profilePeople}
       {selectedChannelID}
@@ -463,7 +509,8 @@
       variant="archived"
       expanded={sections.archived}
       channels={orderedChannels}
-      profiles={profileShortcuts}
+      profiles={orderedProfileShortcuts}
+      onReorderProfiles={savePersonaOrder}
       {directConversations}
       people={profilePeople}
       {selectedChannelID}
