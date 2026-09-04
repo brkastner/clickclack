@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { channelDisplayTitle } from "../../lib/chat/channels";
-  import { avatarHue, directConversationForUser, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
+  import { directConversationForUser, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
   import type { PersonaChannelPins } from "../../lib/personaNavigation";
   import type { Channel, DirectConversation, User } from "../../lib/types";
   import Avatar from "../avatar/Avatar.svelte";
@@ -303,20 +303,17 @@
           </button>
           <a href={conversation ? hrefForDirect(conversation.id) : "#"} class="channel-subgroup-toggle profile-source-link" class:active={conversation?.id === selectedDirectID}
             onclick={(event) => { event.preventDefault(); if (conversation) onSelectDirect(conversation.id); else onStartDirect(group.profile.bot_user_id); }}>
-            <span
-              class="persona-band"
-              style={`--hue: ${avatarHue(group.profile.id)}deg`}
-              aria-hidden="true"
-            ></span>
-            <span class="persona-band-scrim" aria-hidden="true"></span>
-            <Avatar
-              class="channel-profile-avatar"
-              id={group.profile.id}
-              name={group.profile.display_name}
-              src={group.profile.avatar_url}
-              lightSrc={group.profile.avatar_url_light}
-              size={36}
-            />
+            {#if group.profile.avatar_url || group.profile.avatar_url_light}
+              <Avatar
+                class="persona-band"
+                id={group.profile.id}
+                name={group.profile.display_name}
+                src={group.profile.avatar_url}
+                lightSrc={group.profile.avatar_url_light}
+                size={320}
+              />
+              <span class="persona-band-scrim" aria-hidden="true"></span>
+            {/if}
             <span class="persona-name">{group.profile.display_name}</span><span class="channel-subgroup-count">{group.channels.length}</span>
           </a>
           <button

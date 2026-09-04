@@ -67,10 +67,6 @@ test("double mode scales sidebar shelf and DM avatars to 150 percent", () => {
   );
   assert.match(
     styles,
-    /:root\[data-avatar-size="double"\] \.sidebar-profile-groups \.channel-profile-avatar\s*\{[\s\S]*?width:\s*53px;[\s\S]*?height:\s*63px;/u,
-  );
-  assert.match(
-    styles,
     /:root\[data-avatar-size="double"\] \.user-card \.dm-avatar\s*\{[\s\S]*?width:\s*48px;[\s\S]*?height:\s*48px;/u,
   );
 });
@@ -84,23 +80,22 @@ test("left-anchors persona identity headers without changing nested channels", (
   );
 });
 
-test("persona headers use the tinted profile hero behind a left-anchored plate", () => {
+test("persona headers use each avatar as the full clipped hero background", () => {
   const styles = readSource("../styles/sidebar.css");
   const channelList = readSource("../components/navigation/ChannelList.svelte");
 
-  assert.match(channelList, /class="persona-band"/u);
-  assert.match(channelList, /style=\{`--hue: \$\{avatarHue\(group\.profile\.id\)\}deg`\}/u);
+  assert.match(channelList, /class="persona-band"[\s\S]*?src=\{group\.profile\.avatar_url\}/u);
+  assert.match(channelList, /class="persona-band"[\s\S]*?size=\{320\}/u);
   assert.match(channelList, /class="persona-band-scrim"/u);
   assert.match(channelList, /class="persona-name"/u);
+  assert.doesNotMatch(channelList, /class="channel-profile-avatar"/u);
 
   assert.match(
     styles,
-    /\.sidebar-profile-groups \.persona-band\s*\{[\s\S]*?url\("\/profile-cover\.webp"\)[\s\S]*?background-blend-mode:\s*overlay, normal, normal;/u,
+    /\.sidebar-profile-groups \.persona-band img\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;[\s\S]*?object-fit:\s*cover;[\s\S]*?object-position:\s*50% 20%;/u,
   );
-  assert.match(
-    styles,
-    /\.sidebar-profile-groups \.persona-band\s*\{[\s\S]*?mask-image: linear-gradient\(\s*to right,\s*transparent 0%,\s*transparent 24%,/u,
-  );
+  assert.doesNotMatch(styles, /profile-cover\.webp/u);
+  assert.doesNotMatch(styles, /\.sidebar-profile-groups \.channel-profile-avatar/u);
 });
 
 test("persona headers support persisted pointer and keyboard reordering", () => {

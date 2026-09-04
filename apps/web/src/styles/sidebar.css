@@ -322,9 +322,8 @@
   margin-top: 0;
 }
 
-/* Persona identity header: a solid avatar plate over the same shared ukiyo-e
-   cover used by profile heroes. Each persona's hue tints the cover while the
-   left mask keeps the foreground avatar crisp. */
+/* Persona identity header: the persona's own avatar fills the section as a
+   clipped hero image, with its name over the quiet side of the crop. */
 .sidebar-profile-groups .channel-subgroup-toggle {
   position: relative;
   min-height: var(--persona-band-h, 46px);
@@ -344,39 +343,19 @@
   z-index: 0;
   inset: 0;
   display: block;
+  overflow: hidden;
   pointer-events: none;
   opacity: 0.72;
-  background:
-    linear-gradient(
-      135deg,
-      hsl(var(--hue, 220deg) 72% 50% / 0.58),
-      hsl(calc(var(--hue, 220deg) + 54deg) 70% 34% / 0.66)
-    ),
-    url("/profile-cover.webp") 72% center / cover no-repeat,
-    linear-gradient(
-      135deg,
-      hsl(var(--hue, 220deg) 76% 58%),
-      hsl(calc(var(--hue, 220deg) + 54deg) 74% 38%)
-    );
-  background-blend-mode: overlay, normal, normal;
   filter: saturate(0.82) contrast(1.04);
   transition: opacity 180ms ease, filter 180ms ease;
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    transparent 24%,
-    #000 44%,
-    #000 88%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    transparent 24%,
-    #000 44%,
-    #000 88%,
-    transparent 100%
-  );
+}
+
+.sidebar-profile-groups .persona-band img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: 50% 20%;
 }
 
 .sidebar-profile-groups .channel-subgroup-toggle:hover .persona-band,
@@ -392,10 +371,10 @@
   pointer-events: none;
   background: linear-gradient(
     to right,
-    color-mix(in srgb, var(--panel) 96%, transparent) 0%,
-    color-mix(in srgb, var(--panel) 72%, transparent) 34%,
-    color-mix(in srgb, var(--panel) 34%, transparent) 62%,
-    color-mix(in srgb, var(--panel) 90%, transparent) 100%
+    color-mix(in srgb, var(--panel) 78%, transparent) 0%,
+    color-mix(in srgb, var(--panel) 48%, transparent) 44%,
+    color-mix(in srgb, var(--panel) 22%, transparent) 72%,
+    color-mix(in srgb, var(--panel) 56%, transparent) 100%
   );
 }
 
@@ -412,27 +391,6 @@
     0 0 2px color-mix(in srgb, var(--panel) 90%, transparent);
 }
 
-.sidebar-profile-groups .channel-profile-avatar {
-  position: relative;
-  z-index: 2;
-  width: calc(var(--persona-band-h, 46px) * 0.78);
-  height: calc(var(--persona-band-h, 46px) * 0.92);
-  flex: 0 0 calc(var(--persona-band-h, 46px) * 0.78);
-  border-radius: 7px;
-  background: hsl(var(--hue) 62% 48%);
-  box-shadow:
-    0 0 0 1px var(--line-strong),
-    0 8px 20px -10px light-dark(color-mix(in srgb, var(--rp-text) 40%, transparent), #000);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.sidebar-profile-groups .channel-profile-avatar img {
-  object-position: 50% 22%;
-}
-
 :root[data-avatar-size="double"] .sidebar-profile-groups {
   --persona-band-h: 68px;
   --persona-name-size: 36px;
@@ -440,13 +398,6 @@
 
 :root[data-avatar-size="double"] .sidebar-profile-groups .channel-subgroup-toggle {
   font-size: 36px;
-}
-
-:root[data-avatar-size="double"] .sidebar-profile-groups .channel-profile-avatar {
-  width: 53px;
-  height: 63px;
-  flex-basis: 53px;
-  font-size: 18px;
 }
 
 .sidebar-channels-title {
