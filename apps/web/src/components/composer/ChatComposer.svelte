@@ -16,6 +16,7 @@
   import {
     completedShortcodeAt,
     rememberRecentEmoji,
+    replaceShortcodesOutsideCode,
     searchEmoji,
     type EmojiEntry,
   } from "../../lib/emoji";
@@ -567,8 +568,11 @@
       return true;
     }
     if (!event.clipboardData) return false;
-    const text = event.clipboardData.getData("text/plain");
-    if (!insertPastedText(text)) return false;
+    const raw = event.clipboardData.getData("text/plain");
+    const text = replaceShortcodesOutsideCode(raw);
+    /* When expansion changed the text we must own the insert, otherwise the
+       browser would paste the original shortcodes over it. */
+    if (!insertPastedText(text, text !== raw)) return false;
     event.preventDefault();
     return true;
   }

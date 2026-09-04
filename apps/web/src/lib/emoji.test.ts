@@ -7,6 +7,7 @@ import {
   emojiForShortcode,
   mergeRecentEmoji,
   replaceShortcodes,
+  replaceShortcodesOutsideCode,
   searchEmoji,
 } from "./emoji.ts";
 
@@ -75,4 +76,19 @@ test("group membership covers every catalog entry", () => {
   for (const entry of EMOJI_CATALOG) {
     assert.ok(emojiForShortcode(entry.name)?.group === entry.group);
   }
+});
+
+test("paste expansion skips fenced and inline code", () => {
+  assert.equal(
+    replaceShortcodesOutsideCode("ship :rocket: `a:rocket:b` done"),
+    "ship \u{1F680} `a:rocket:b` done",
+  );
+  assert.equal(
+    replaceShortcodesOutsideCode("```\nkey: :rocket:\n```\nafter :tada:"),
+    "```\nkey: :rocket:\n```\nafter \u{1F389}",
+  );
+  assert.equal(replaceShortcodesOutsideCode("~~~\n:fire:\n~~~"), "~~~\n:fire:\n~~~");
+  // A fence wins over the backticks nested inside it.
+  assert.equal(replaceShortcodesOutsideCode("```\n`:fire:`\n```"), "```\n`:fire:`\n```");
+  assert.equal(replaceShortcodesOutsideCode("plain :sob:"), "plain \u{1F62D}");
 });

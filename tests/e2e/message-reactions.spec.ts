@@ -814,3 +814,21 @@ test("touch thread messages use accessible action sheets instead of persistent c
 
   await mobileContext.close();
 });
+
+test("the reaction picker searches the full emoji catalog", async ({ page }) => {
+  const { suffix } = await openReactionChannel(page);
+  const row = await sendMessage(page, `Reaction search proof ${suffix}`);
+
+  await row.hover();
+  await row.getByRole("button", { name: "Add reaction" }).click();
+  const picker = row.getByRole("group", { name: "Choose a reaction" });
+  await expect(picker).toBeVisible();
+
+  // An emoji outside the quick row is reachable by shortcode search.
+  await picker.getByRole("searchbox", { name: "Search emoji" }).fill("crab");
+  const crab = picker.getByRole("button", { name: "React with :crab:" });
+  await expect(crab).toBeVisible();
+  await crab.click();
+
+  await expect(row.getByRole("button", { name: "\u{1F980} \u2014 1 reaction" })).toBeVisible();
+});

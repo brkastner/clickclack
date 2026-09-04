@@ -740,6 +740,23 @@ export function replaceShortcodes(text: string): string {
   });
 }
 
+/* Fenced blocks and inline spans, in that order, so a fence wins over the
+   backticks inside it. */
+const CODE_SPAN = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
+
+/** Replaces shortcodes in prose while leaving Markdown code untouched. Pasted
+    source frequently contains `:foo:` sequences that must survive verbatim. */
+export function replaceShortcodesOutsideCode(text: string): string {
+  let result = "";
+  let cursor = 0;
+  for (const match of text.matchAll(CODE_SPAN)) {
+    const start = match.index ?? 0;
+    result += replaceShortcodes(text.slice(cursor, start)) + match[0];
+    cursor = start + match[0].length;
+  }
+  return result + replaceShortcodes(text.slice(cursor));
+}
+
 const RECENTS_KEY = "clickclack:emoji-recents";
 const RECENTS_LIMIT = 24;
 

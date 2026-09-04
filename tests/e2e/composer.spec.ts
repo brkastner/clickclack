@@ -193,3 +193,22 @@ test("replaces emoji shortcodes and inserts from the picker", async ({ page }) =
   const payload = (await created).postDataJSON() as { body: string };
   expect(payload.body).toContain("🚀");
 });
+
+test("expands pasted shortcodes but leaves code untouched", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, stamp);
+  await createChannel(page, workspace.id);
+  await openChannel(page, workspace.route_id);
+
+  const editor = page.getByLabel("Message body");
+  await editor.focus();
+  await editor.evaluate((node) => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", "shipping :rocket: with `a:rocket:b` intact");
+    node.dispatchEvent(
+      new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }),
+    );
+  });
+  await expect(editor).toContainText("shipping \u{1F680} with");
+  await expect(editor.locator("code")).toHaveText("a:rocket:b");
+});
