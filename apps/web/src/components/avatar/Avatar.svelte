@@ -18,6 +18,7 @@
     buttonLabel?: string;
     imagePosition?: string;
     imageTransformOrigin?: string;
+    imageOffsetX?: number;
     imageScale?: number;
     onclick?: (event: MouseEvent) => void;
   };
@@ -34,6 +35,7 @@
     buttonLabel,
     imagePosition = "50% 50%",
     imageTransformOrigin = "50% 50%",
+    imageOffsetX = 0,
     imageScale = 1,
     onclick,
   }: Props = $props();
@@ -68,7 +70,7 @@
         height={size}
         style:object-position={imagePosition}
         style:transform-origin={imageTransformOrigin}
-        style:transform={`scale(${imageScale})`}
+        style:transform={`translate3d(${imageOffsetX}%, 0, 0) scale(${imageScale})`}
         {loading}
         decoding="async"
         fetchpriority={fetchPriority}
@@ -88,7 +90,7 @@
         height={size}
         style:object-position={imagePosition}
         style:transform-origin={imageTransformOrigin}
-        style:transform={`scale(${imageScale})`}
+        style:transform={`translate3d(${imageOffsetX}%, 0, 0) scale(${imageScale})`}
         {loading}
         decoding="async"
         fetchpriority={fetchPriority}

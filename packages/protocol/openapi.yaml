@@ -2774,8 +2774,9 @@ components:
       properties:
         x:
           type: integer
-          minimum: 0
-          maximum: 100
+          description: Horizontal focal position. Values outside 0–100 allow the image to move beyond either edge.
+          minimum: -100
+          maximum: 200
         y:
           type: integer
           minimum: 0
@@ -2783,7 +2784,7 @@ components:
         zoom:
           type: integer
           description: Hero image zoom percentage. 100 means no additional zoom.
-          minimum: 100
+          minimum: 25
           maximum: 250
     AppearancePreferencesPatch:
       type: object

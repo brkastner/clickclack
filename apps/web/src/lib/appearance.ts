@@ -310,9 +310,9 @@ export function setBotShelfLimit(limit: number) {
 
 export function setPersonaHeroPosition(botID: string, position: PersonaHeroPosition) {
   const normalized = {
-    x: Math.max(0, Math.min(100, Math.round(position.x))),
+    x: Math.max(-100, Math.min(200, Math.round(position.x))),
     y: Math.max(0, Math.min(100, Math.round(position.y))),
-    zoom: Math.max(100, Math.min(250, Math.round(position.zoom ?? 100))),
+    zoom: Math.max(25, Math.min(250, Math.round(position.zoom ?? 100))),
   };
   const next = { ...personaHeroPositionSnapshot };
   if (normalized.x === 50 && normalized.y === 20 && normalized.zoom === 118) delete next[botID];

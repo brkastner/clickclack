@@ -345,6 +345,7 @@
   display: block;
   overflow: hidden;
   pointer-events: none;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
   opacity: 0.72;
   filter: saturate(0.82) contrast(1.04);
   transition: opacity 180ms ease, filter 180ms ease;
@@ -356,6 +357,8 @@
   display: block;
   object-fit: cover;
   object-position: 50% 20%;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%);
 }
 
 .sidebar-profile-groups .channel-subgroup-toggle:hover .persona-band,

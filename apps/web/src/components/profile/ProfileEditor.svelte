@@ -70,6 +70,10 @@
     return Math.max(0, Math.min(100, Math.round(value)));
   }
 
+  function clampHeroX(value: number): number {
+    return Math.max(-100, Math.min(200, Math.round(value)));
+  }
+
   function updateHeroZoom(event: Event) {
     const zoom = Number((event.currentTarget as HTMLInputElement).value);
     setPersonaHeroPosition(profile.id, { ...heroPosition, zoom });
@@ -94,7 +98,7 @@
     if (!heroDrag || heroDrag.pointerID !== event.pointerId) return;
     setPersonaHeroPosition(profile.id, {
       ...heroPosition,
-      x: clampPercent(heroDrag.startX - ((event.clientX - heroDrag.startClientX) / heroDrag.width) * 200),
+      x: clampHeroX(heroDrag.startX - ((event.clientX - heroDrag.startClientX) / heroDrag.width) * 200),
       y: clampPercent(heroDrag.startY - ((event.clientY - heroDrag.startClientY) / heroDrag.height) * 100),
     });
   }
@@ -109,8 +113,8 @@
   function moveHeroWithKeyboard(event: KeyboardEvent) {
     const delta = event.shiftKey ? 10 : 2;
     const next = { ...heroPosition };
-    if (event.key === "ArrowLeft") next.x = clampPercent(next.x - delta);
-    else if (event.key === "ArrowRight") next.x = clampPercent(next.x + delta);
+    if (event.key === "ArrowLeft") next.x = clampHeroX(next.x - delta);
+    else if (event.key === "ArrowRight") next.x = clampHeroX(next.x + delta);
     else if (event.key === "ArrowUp") next.y = clampPercent(next.y - delta);
     else if (event.key === "ArrowDown") next.y = clampPercent(next.y + delta);
     else return;
@@ -201,8 +205,8 @@
             size={320}
             loading="eager"
             fetchPriority="auto"
-            imagePosition={`${heroPosition.x}% ${heroPosition.y}%`}
-            imageTransformOrigin={`${heroPosition.x}% 50%`}
+            imagePosition={`50% ${heroPosition.y}%`}
+            imageOffsetX={50 - heroPosition.x}
             imageScale={heroPosition.zoom / 100}
           />
           <span class="profile-editor__hero-pan-hint" aria-hidden="true">Drag to pan</span>
@@ -214,7 +218,7 @@
           </div>
           <label class="profile-editor__range">
             <span>Zoom <output>{heroPosition.zoom}%</output></span>
-            <input type="range" min="100" max="250" value={heroPosition.zoom} aria-label="Sidebar hero zoom" oninput={updateHeroZoom} />
+            <input type="range" min="25" max="250" value={heroPosition.zoom} aria-label="Sidebar hero zoom" oninput={updateHeroZoom} />
           </label>
           {#if $personaHeroPositionSaveState === "saving"}
             <p class="profile-editor__hero-save" role="status">Saving crop...</p>

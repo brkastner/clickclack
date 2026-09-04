@@ -1693,6 +1693,7 @@ export interface components {
       };
     };
     PersonaHeroPosition: {
+      /** @description Horizontal focal position. Values outside 0–100 allow the image to move beyond either edge. */
       x: number;
       y: number;
       /** @description Hero image zoom percentage. 100 means no additional zoom. */
