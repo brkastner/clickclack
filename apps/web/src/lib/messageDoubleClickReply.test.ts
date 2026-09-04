@@ -16,10 +16,16 @@ function message(overrides: Partial<Message> = {}): Message {
 
 test("double-click reply accepts only settled messages from another author", () => {
   assert.equal(canReplyOnMessageDoubleClick(message(), "current-user"), true);
-  assert.equal(canReplyOnMessageDoubleClick(message({ author_id: "current-user" }), "current-user"), false);
+  assert.equal(
+    canReplyOnMessageDoubleClick(message({ author_id: "current-user" }), "current-user"),
+    false,
+  );
   assert.equal(canReplyOnMessageDoubleClick(message({ status: "pending" }), "current-user"), false);
   assert.equal(canReplyOnMessageDoubleClick(message({ status: "failed" }), "current-user"), false);
-  assert.equal(canReplyOnMessageDoubleClick(message({ deleted_at: "2026-09-04T00:01:00Z" }), "current-user"), false);
+  assert.equal(
+    canReplyOnMessageDoubleClick(message({ deleted_at: "2026-09-04T00:01:00Z" }), "current-user"),
+    false,
+  );
   assert.equal(canReplyOnMessageDoubleClick(message(), undefined), false);
 });
 
@@ -43,5 +49,8 @@ test("timeline and thread message surfaces wire double-click reply", () => {
   assert.match(messageRow, /ondblclick=\{handleMessageDoubleClick\}/u);
   assert.match(messageRow, /target\?\.closest\(MESSAGE_DOUBLE_CLICK_INTERACTIVE_TARGETS\)/u);
   assert.match(threadPanel, /ondblclick=\{\(event\) => handleMessageDoubleClick\(event, root\)\}/u);
-  assert.match(threadPanel, /ondblclick=\{\(event\) => handleMessageDoubleClick\(event, reply\)\}/u);
+  assert.match(
+    threadPanel,
+    /ondblclick=\{\(event\) => handleMessageDoubleClick\(event, reply\)\}/u,
+  );
 });

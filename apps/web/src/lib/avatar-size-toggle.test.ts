@@ -110,8 +110,14 @@ test("persona hero crop controls preview and persist per-bot positions", () => {
   assert.match(avatar, /style:transform-origin=\{imageTransformOrigin\}/u);
   assert.match(avatar, /translate3d\(\$\{imageOffsetX\}%, 0, 0\) scale\(\$\{imageScale\}\)/u);
   assert.match(channelList, /\$personaHeroPositions\[group\.profile\.bot_user_id\]/u);
-  assert.match(channelList, /imageScale=\{\(\$personaHeroPositions\[group\.profile\.bot_user_id\]\?\.zoom \?\? 118\) \/ 100\}/u);
-  assert.match(channelList, /imageOffsetX=\{50 - \(\$personaHeroPositions\[group\.profile\.bot_user_id\]\?\.x \?\? 50\)\}/u);
+  assert.match(
+    channelList,
+    /imageScale=\{\(\$personaHeroPositions\[group\.profile\.bot_user_id\]\?\.zoom \?\? 118\) \/ 100\}/u,
+  );
+  assert.match(
+    channelList,
+    /imageOffsetX=\{50 - \(\$personaHeroPositions\[group\.profile\.bot_user_id\]\?\.x \?\? 50\)\}/u,
+  );
   assert.match(editor, /onpointerdown=\{startHeroPan\}/u);
   assert.match(editor, /onpointermove=\{moveHeroPan\}/u);
   assert.match(editor, /onkeydown=\{moveHeroWithKeyboard\}/u);
@@ -124,7 +130,10 @@ test("persona hero crop controls preview and persist per-bot positions", () => {
   assert.match(appearance, /x: Math\.max\(-100, Math\.min\(200,/u);
   assert.match(appearance, /persona_hero_positions: next/u);
   assert.match(sidebarStyles, /\.persona-band img[\s\S]*?mask-image: linear-gradient\(to right,/u);
-  assert.match(threadStyles, /\.profile-editor__hero-preview img[\s\S]*?mask-image: linear-gradient\(to right,/u);
+  assert.match(
+    threadStyles,
+    /\.profile-editor__hero-preview img[\s\S]*?mask-image: linear-gradient\(to right,/u,
+  );
   assert.match(editor, /Could not save this crop/u);
   assert.match(editor, /onclick=\{retryPersonaHeroPositions\}/u);
 });
