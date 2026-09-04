@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { artifactKindLabel, classifyArtifact } from "../lib/artifacts";
+  import { writeClipboardText } from "../lib/clipboard";
+  import { copyAttachmentLink, copyViewerImage } from "../lib/image-viewer-clipboard";
   import type { Upload } from "../lib/types";
 
   type Props = {
@@ -24,6 +27,11 @@
   const MIN_MEDIA_HEIGHT = 120;
 
   let videoEl: HTMLVideoElement | null = $state(null);
+  let imageOpenButton: HTMLButtonElement | null = $state(null);
+  let imageContextMenuElement: HTMLDivElement | null = $state(null);
+  let imageContextMenu = $state<{ x: number; y: number } | null>(null);
+  let imageContextMenuStatus = $state("");
+  let copyingImage = $state(false);
   let manuallyLoaded = $state(false);
   let mediaLoaded = $derived(eager || manuallyLoaded);
   let started = $state(false);
@@ -78,6 +86,115 @@
     void videoEl.play();
   }
 
+  function dismissImageContextMenu() {
+    imageContextMenu = null;
+    imageContextMenuStatus = "";
+  }
+
+  function closeImageContextMenu() {
+    dismissImageContextMenu();
+    void tick().then(() => imageOpenButton?.focus({ preventScroll: true }));
+  }
+
+  async function showImageContextMenu(x: number, y: number) {
+    const menuWidth = 210;
+    const menuHeight = 108;
+    const margin = 8;
+    imageContextMenu = {
+      x: Math.max(margin, Math.min(x, window.innerWidth - menuWidth - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - menuHeight - margin)),
+    };
+    imageContextMenuStatus = "";
+    await tick();
+    imageContextMenuElement?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }
+
+  function openImageContextMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    void showImageContextMenu(event.clientX, event.clientY);
+  }
+
+  function openImageContextMenuFromKeyboard(event: KeyboardEvent) {
+    if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds =
+      event.currentTarget instanceof HTMLElement
+        ? event.currentTarget.getBoundingClientRect()
+        : imageOpenButton?.getBoundingClientRect();
+    if (!bounds) return;
+    void showImageContextMenu(bounds.left + Math.min(bounds.width / 2, 80), bounds.top + 24);
+  }
+
+  function handleImageContextMenuKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeImageContextMenu();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const buttons = Array.from(
+      imageContextMenuElement?.querySelectorAll<HTMLButtonElement>(
+        'button[role="menuitem"]:not([aria-disabled="true"])',
+      ) ?? [],
+    );
+    if (buttons.length === 0) return;
+    const current =
+      document.activeElement instanceof HTMLButtonElement
+        ? buttons.indexOf(document.activeElement)
+        : -1;
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    buttons[(current + direction + buttons.length) % buttons.length]?.focus();
+  }
+
+  async function copyInlineImage() {
+    if (copyingImage) return;
+    copyingImage = true;
+    imageContextMenuStatus = "";
+    try {
+      await copyViewerImage(url);
+      imageContextMenuStatus = "Image copied";
+    } catch (error) {
+      console.error("Could not copy image", error);
+      imageContextMenuStatus = "Could not copy image";
+    } finally {
+      copyingImage = false;
+    }
+  }
+
+  async function copyInlineAttachmentLink() {
+    if (copyingImage) return;
+    copyingImage = true;
+    imageContextMenuStatus = "";
+    try {
+      await copyAttachmentLink(url, writeClipboardText);
+      imageContextMenuStatus = "Attachment link copied";
+    } catch (error) {
+      console.error("Could not copy attachment link", error);
+      imageContextMenuStatus = "Could not copy attachment link";
+    } finally {
+      copyingImage = false;
+    }
+  }
+
+  $effect(() => {
+    if (!imageContextMenu) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!imageContextMenuElement?.contains(event.target as Node)) dismissImageContextMenu();
+    };
+    window.addEventListener("pointerdown", dismiss);
+    window.addEventListener("blur", dismissImageContextMenu);
+    window.addEventListener("resize", dismissImageContextMenu);
+    return () => {
+      window.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("blur", dismissImageContextMenu);
+      window.removeEventListener("resize", dismissImageContextMenu);
+    };
+  });
+
   function formatBytes(size: number) {
     if (size < 1024) return `${size} B`;
     if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
@@ -105,10 +222,16 @@
 {:else if isImage}
   <div class="media-tile media-tile--image">
     <button
+      bind:this={imageOpenButton}
       type="button"
       class="media-tile__open"
       aria-label={`Open image ${upload.filename}`}
+      aria-haspopup="menu"
+      aria-expanded={imageContextMenu !== null}
+      aria-keyshortcuts="Shift+F10"
       onclick={() => onOpenImage(url, upload.filename, attachments)}
+      oncontextmenu={openImageContextMenu}
+      onkeydown={openImageContextMenuFromKeyboard}
     >
       <img
         src={url}
@@ -259,4 +382,31 @@
       <small>{formatBytes(upload.byte_size)}</small>
     </span>
   </a>
+{/if}
+
+{#if imageContextMenu}
+  <div
+    bind:this={imageContextMenuElement}
+    class="image-viewer__context-menu"
+    role="menu"
+    tabindex="-1"
+    aria-label="Image options"
+    aria-busy={copyingImage}
+    style={`left: ${imageContextMenu.x}px; top: ${imageContextMenu.y}px;`}
+    oncontextmenu={(event) => event.preventDefault()}
+    onkeydown={handleImageContextMenuKeydown}
+  >
+    <button type="button" role="menuitem" aria-disabled={copyingImage} onclick={copyInlineImage}
+      >Copy image</button
+    >
+    <button
+      type="button"
+      role="menuitem"
+      aria-disabled={copyingImage}
+      onclick={copyInlineAttachmentLink}
+    >Copy attachment link</button>
+    {#if imageContextMenuStatus}
+      <p role="status">{imageContextMenuStatus}</p>
+    {/if}
+  </div>
 {/if}

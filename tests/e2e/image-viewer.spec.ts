@@ -64,6 +64,17 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   const conversationTrigger = imageRow.getByRole("button", { name: `Open image ${filename}` });
   await expect(conversationTrigger).toBeVisible();
 
+  await conversationTrigger.getByRole("img", { name: filename }).click({ button: "right" });
+  const inlineImageMenu = page.getByRole("menu", { name: "Image options" });
+  await expect(inlineImageMenu).toBeVisible();
+  await expect(inlineImageMenu.getByRole("menuitem", { name: "Copy image" })).toBeFocused();
+  await expect(
+    inlineImageMenu.getByRole("menuitem", { name: "Copy attachment link" }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog", { name: `Image viewer: ${filename}` })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(inlineImageMenu).toHaveCount(0);
+
   await page.getByRole("button", { name: /Account settings for/ }).click({ button: "right" });
   const settingsDialog = page.getByRole("dialog", { name: "Account settings" });
   await expect(settingsDialog).toBeVisible();
@@ -114,6 +125,11 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   const threadPane = page.getByLabel("Thread pane", { exact: true });
   const threadTrigger = threadPane.getByRole("button", { name: `Open image ${filename}` });
   await expect(threadTrigger).toBeVisible();
+  await threadTrigger.getByRole("img", { name: filename }).click({ button: "right" });
+  await expect(inlineImageMenu).toBeVisible();
+  await expect(page.getByRole("dialog", { name: `Image viewer: ${filename}` })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(inlineImageMenu).toHaveCount(0);
   await threadTrigger.click();
   await expect(dialog).toBeVisible();
   await expect(displayedImage).toHaveAttribute("src", uploadedImageURL!);
