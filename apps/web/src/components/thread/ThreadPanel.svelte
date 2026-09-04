@@ -5,6 +5,10 @@
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { handleLabel, isDeletedBot, userHandle } from "../../lib/chat/people";
+  import {
+    canReplyOnMessageDoubleClick,
+    MESSAGE_DOUBLE_CLICK_INTERACTIVE_TARGETS,
+  } from "../../lib/chat/messageDoubleClickReply";
   import { markdown, time } from "../../lib/format";
   import { writeClipboardText } from "../../lib/clipboard";
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
@@ -163,8 +167,7 @@
 
   const LONG_PRESS_MS = 450;
   const LONG_PRESS_SLOP_PX = 10;
-  const MESSAGE_INTERACTIVE_TARGETS =
-    "a, button, input, textarea, select, .attachment-grid, .media-tile, .markdown img, .gif-player, .markdown-table-scroll";
+  const MESSAGE_INTERACTIVE_TARGETS = MESSAGE_DOUBLE_CLICK_INTERACTIVE_TARGETS;
   let actionMessage = $state<Message>();
   let actionSheetReturnFocus = $state<HTMLElement>();
   let actionCopyStatus = $state<"copied" | "failed" | "">("");
@@ -265,6 +268,14 @@
 
   function handleMessageContextMenu(event: MouseEvent) {
     if (actionMessage || longPressTimer !== undefined) event.preventDefault();
+  }
+
+  function handleMessageDoubleClick(event: MouseEvent, message: Message) {
+    if (isEditing(message) || !canReplyOnMessageDoubleClick(message, currentUserID)) return;
+    const target = event.target as Element | null;
+    if (target?.closest(MESSAGE_DOUBLE_CLICK_INTERACTIVE_TARGETS)) return;
+    event.preventDefault();
+    onSetReplyTarget(message, "thread");
   }
 
   function sheetReact(emoji: string) {
@@ -437,6 +448,7 @@
     class="thread-root"
     data-message-id={root.id}
     onpointerdown={(event) => handleMessagePointerDown(event, root)}
+    ondblclick={(event) => handleMessageDoubleClick(event, root)}
     oncontextmenu={handleMessageContextMenu}
   >
     <Avatar
@@ -600,6 +612,7 @@
         class="reply"
         data-message-id={reply.id}
         onpointerdown={(event) => handleMessagePointerDown(event, reply)}
+        ondblclick={(event) => handleMessageDoubleClick(event, reply)}
         oncontextmenu={handleMessageContextMenu}
       >
         <Avatar

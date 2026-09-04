@@ -4,6 +4,10 @@
   import { enhanceCodeBlockCopy } from "../../lib/actions/code-block-copy";
   import { enhanceMarkdown } from "../../lib/actions/markdown";
   import { threadActivityLabel, threadActivityTime, threadSummary } from "../../lib/chat/messages";
+  import {
+    canReplyOnMessageDoubleClick,
+    MESSAGE_DOUBLE_CLICK_INTERACTIVE_TARGETS,
+  } from "../../lib/chat/messageDoubleClickReply";
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { time, markdown } from "../../lib/format";
   import { writeClipboardText } from "../../lib/clipboard";
@@ -170,6 +174,15 @@
   let canResendMessage = $derived(
     isOwnMessage && !isDeleted && !isPending && !isFailed && Boolean(onResend),
   );
+
+  function handleMessageDoubleClick(event: MouseEvent) {
+    if (editing || preambleBlock || !canReplyOnMessageDoubleClick(message, currentUserID)) return;
+    const target = event.target as Element | null;
+    if (target?.closest(MESSAGE_DOUBLE_CLICK_INTERACTIVE_TARGETS)) return;
+    event.preventDefault();
+    onReply(message, replyContext);
+  }
+
   // Consecutive tool rows become a synthetic collapsible preamble block.
   // Commentary rows remain ordinary text and split one turn into as many tool
   // blocks as its narration requires.
@@ -688,6 +701,7 @@
   class:actions-flip={actionsFlipped}
   data-message-id={message.id}
   onpointerdown={handleRowPointerDown}
+  ondblclick={handleMessageDoubleClick}
   oncontextmenu={handleRowContextMenu}
   onmouseenter={() => {
     // Measure only on the inactive → active transition. Re-measuring while
