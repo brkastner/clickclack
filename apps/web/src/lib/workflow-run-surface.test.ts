@@ -18,6 +18,13 @@ test("desktop titlebar exposes the active workflow run control", () => {
   );
 });
 
+test("workflow run panel renders step history newest-first", () => {
+  const panel = readSource("../components/workflow/RunPanel.svelte");
+
+  assert.match(panel, /newestSteps = \$derived\([\s\S]*\[\.\.\.run\.steps\]\.reverse\(\)/u);
+  assert.match(panel, /\{#each newestSteps as step \(step\.attemptId\)\}/u);
+});
+
 test("chat app wires workflow run state into the desktop titlebar", () => {
   const chatApp = readSource("../ChatApp.svelte");
   const titlebar = chatApp.match(/<DesktopTitlebar[\s\S]*?\/>/u)?.[0] ?? "";
