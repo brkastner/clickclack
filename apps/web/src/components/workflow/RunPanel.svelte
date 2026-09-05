@@ -29,6 +29,7 @@
 
   let finished = $derived(run !== null && isRunFinished(run));
   let waiting = $derived(run !== null && isRunWaiting(run));
+  let newestSteps = $derived(run === null ? [] : [...run.steps].reverse());
   // The host may send a window of steps rather than all of them.
   let hiddenSteps = $derived(run === null ? 0 : Math.max(0, run.stepTotal - run.steps.length));
 </script>
@@ -91,7 +92,7 @@
           </p>
         {/if}
         <ol>
-          {#each run.steps as step (step.attemptId)}
+          {#each newestSteps as step (step.attemptId)}
             <li class="run-step" class:run-step--failed={step.outcome !== "ok"}>
               <span class="run-step__node">{step.nodeId}</span>
               <span class="run-step__type">{step.nodeType}</span>
