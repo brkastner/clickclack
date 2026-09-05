@@ -20,23 +20,61 @@
   let loading = $state(false);
   let error = $state("");
   let serial = 0;
-  let selected = $derived(records.find((record) => record.id === selectedID) ?? records[0] ?? null);
+  let selected = $derived(selectedID
+    ? records.find((record) => record.id === selectedID) ?? null
+    : liveRun && liveRun.runId !== records[0]?.snapshot.source.runId ? null : records[0] ?? null);
   let displayedRun = $derived(selected ? snapshotRun(selected) : liveRun);
   let target = $derived(directID ? `dms/${encodeURIComponent(directID)}` : `channels/${encodeURIComponent(channelID)}`);
 
+  let activeScope = "";
+  let seenVersion = 0;
+  let refreshPending = false;
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Fixed window (not trailing debounce): bursts cannot postpone a refresh
+  // indefinitely. Updates during a request queue only one follow-up.
+  function scheduleRefresh(scope: string) {
+    refreshPending = true;
+    if (loading || refreshTimer !== undefined) return;
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined;
+      if (scope !== activeScope || loading) return;
+      refreshPending = false;
+      void refresh(scope);
+    }, 100);
+  }
+
   $effect(() => {
     const scope = target;
-    records = [];
-    selectedID = "";
-    cursor = "";
-    void load(scope, false);
-    return () => { serial += 1; };
-  });
-  $effect(() => {
     const version = refreshVersion;
-    const scope = target;
-    if (version > 0) untrack(() => { void refresh(scope); });
+    untrack(() => {
+      if (scope !== activeScope) {
+        serial += 1;
+        clearTimeout(refreshTimer);
+        refreshTimer = undefined;
+        refreshPending = false;
+        activeScope = scope;
+        seenVersion = version;
+        records = [];
+        selectedID = "";
+        cursor = "";
+        void load(scope, false);
+      } else if (version !== seenVersion) {
+        seenVersion = version;
+        scheduleRefresh(scope);
+      }
+    });
   });
+  $effect(() => () => {
+    serial += 1;
+    clearTimeout(refreshTimer);
+  });
+
+  function finishRequest(request: number, scope: string) {
+    if (request !== serial) return;
+    loading = false;
+    if (refreshPending) scheduleRefresh(scope);
+  }
 
   async function load(scope: string, more: boolean) {
     const request = ++serial;
@@ -50,7 +88,7 @@
     } catch {
       if (request === serial) error = "Workflow history unavailable. Retry to load recorded runs.";
     } finally {
-      if (request === serial) loading = false;
+      finishRequest(request, scope);
     }
   }
 
@@ -85,7 +123,7 @@
         }
       }
     } finally {
-      if (request === serial) loading = false;
+      finishRequest(request, scope);
     }
   }
 </script>
@@ -94,7 +132,7 @@
   <nav aria-label="Recorded runs">
     <strong>Recorded runs</strong>
     {#if loading}<p role="status">Loading workflow history…</p>{/if}
-    {#if error}<p role="alert">{error}</p><button onclick={() => refresh(target)}>Retry</button>{/if}
+    {#if error}<p role="alert">{error}</p><button disabled={loading} onclick={() => refresh(target)}>Retry</button>{/if}
     {#each records as record (record.id)}
       <button class:selected={selected?.id === record.id} onclick={() => selectedID = record.id}>
         <span>{record.snapshot.run.workflowName} · {record.snapshot.run.status}</span>

@@ -176,8 +176,15 @@ try {
     await page.getByRole("button", { name: "Workflow run", exact: true }).click();
     await expect(page.getByRole("navigation", { name: "Recorded runs" })).toBeVisible();
   };
+  let historyRequests = 0;
+  await page.route(`**/api/channels/${channel.id}/workflow-runs?*`, async (route) => {
+    historyRequests += 1;
+    await route.continue();
+  });
   await openHistory();
   await expect(page.getByRole("heading", { name: "Completed fixture", exact: true })).toBeVisible();
+  await page.waitForTimeout(250);
+  assert.equal(historyRequests, 1, "one initial scope load");
   await expect(page.locator(".run-step")).toHaveCount(2);
   await expect(
     page.getByText("Includes pre-existing changes; not all changes belong to this run."),
@@ -201,8 +208,51 @@ try {
   next.run.stepsComplete = false;
   next.run.stepTotal = 3;
   next.files = null;
+  const live = { ...next.run, runId: next.source.runId, live: true, steps: next.steps };
+  const publishLive = () => api("/api/realtime/ephemeral", {
+    workspace_id: workspace.id, channel_id: channel.id, type: "workflow.run",
+    payload: { run: live },
+  }, token.token);
+  await publishLive();
+  await expect(page.getByRole("heading", { name: "Waiting fixture", exact: true })).toBeVisible();
+  await expect(page.getByText("Live-only report. Durable history has not been supplied.")).toBeVisible();
+  await expect(page.getByText("File list truncated.")).toHaveCount(0);
+  await page.getByRole("button", { name: /Completed fixture · completed/ }).click();
+  await publishLive();
+  await expect(page.getByRole("heading", { name: "Completed fixture", exact: true })).toBeVisible();
+  console.log("PASS new live pointer ahead of durable publication; explicit historical selection retained");
   await publish(next);
   await expect(page.getByRole("button", { name: /Waiting fixture · waiting/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Completed fixture", exact: true })).toBeVisible();
+
+  // Hold a real response while many real notifications arrive: one in-flight
+  // refresh and at most one coalesced follow-up, never one fetch per frame.
+  await page.unroute(`**/api/channels/${channel.id}/workflow-runs?*`);
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  let refreshRequests = 0;
+  await page.route(`**/api/channels/${channel.id}/workflow-runs?*`, async (route) => {
+    refreshRequests += 1;
+    const response = await route.fetch();
+    if (refreshRequests === 1) await held;
+    await route.fulfill({ response });
+  });
+  next.source.revision += 1;
+  await publish(next);
+  await expect.poll(() => refreshRequests).toBe(1);
+  for (let i = 0; i < 15; i++) {
+    next.source.revision += 1;
+    await publish(next);
+  }
+  await page.waitForTimeout(250);
+  assert.equal(refreshRequests, 1, "burst cannot start concurrent refreshes");
+  release();
+  await expect.poll(() => refreshRequests).toBe(2);
+  await page.waitForTimeout(250);
+  assert.equal(refreshRequests, 2, "burst queues only one follow-up");
+  await expect(page.getByRole("heading", { name: "Completed fixture", exact: true })).toBeVisible();
+  await page.unroute(`**/api/channels/${channel.id}/workflow-runs?*`);
+  console.log("PASS rapid snapshot notifications bounded to one in-flight and one follow-up");
   await page.getByRole("button", { name: /Waiting fixture · waiting/ }).click();
   await expect(
     page.getByText("File evidence unavailable. No clean workspace is implied."),
@@ -219,6 +269,37 @@ try {
     token.token,
   );
   await expect(page.getByRole("button", { name: /Completed fixture · completed/ })).toBeVisible();
+  const { channel: otherChannel } = await api(`/api/workspaces/${workspace.id}/channels`, {
+    name: "workflow-other", kind: "public",
+  });
+  let releaseStale;
+  const staleHeld = new Promise((resolve) => { releaseStale = resolve; });
+  let staleStarted = false;
+  await page.route(`**/api/channels/${channel.id}/workflow-runs?*`, async (route) => {
+    const response = await route.fetch();
+    staleStarted = true;
+    await staleHeld;
+    await route.fulfill({ response });
+  });
+  next.source.revision += 1;
+  await publish(next);
+  await expect.poll(() => staleStarted).toBe(true);
+  let otherRequests = 0;
+  await page.route(`**/api/channels/${otherChannel.id}/workflow-runs?*`, async (route) => {
+    otherRequests += 1;
+    await route.continue();
+  });
+  await page.locator(`a[href$="/${otherChannel.route_id}"]`).first().click();
+  await expect(page.getByText("No durable runs reported for this conversation.")).toBeVisible();
+  releaseStale();
+  await page.waitForTimeout(300);
+  assert.equal(otherRequests, 1, "scope switch does not duplicate initial load");
+  await expect(page.getByRole("button", { name: /Waiting fixture · waiting/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Completed fixture · completed/ })).toHaveCount(0);
+  await page.unroute(`**/api/channels/${channel.id}/workflow-runs?*`);
+  await page.locator(`a[href$="/${channel.route_id}"]`).first().click();
+  await expect(page.getByRole("button", { name: /Waiting fixture · waiting/ })).toBeVisible();
+  console.log("PASS scope switch single load and late previous-target response isolation");
   await page.getByRole("button", { name: "Close workflow run", exact: true }).last().click();
   const decision =
     "Approve fixture?\n\n```clickclack-decision\n" +

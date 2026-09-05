@@ -207,6 +207,58 @@ func TestWorkflowSnapshotAPI(t *testing.T) {
 			if sentinel.ChannelID != ch.ID {
 				t.Fatalf("private snapshot leaked: %#v", sentinel)
 			}
+			// Private kind does not restrict regular workspace members. Exercise
+			// the enforced guest boundary instead, with a readable sentinel.
+			guest, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Guest", Email: "snapshot-guest@example.com"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			guestWS, err := st.EnsureDefaultGuestWorkspaceMember(ctx, guest.ID, store.WorkspaceRoleGuest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.AddWorkspaceMember(ctx, guestWS.ID, owner.ID, store.WorkspaceRoleOwner); err != nil {
+				t.Fatal(err)
+			}
+			private, _, err := st.CreateChannel(ctx, store.CreateChannelInput{WorkspaceID: guestWS.ID, UserID: owner.ID, Name: "snapshot-private", Kind: "private"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			guestBot, guestToken, err := st.CreateBot(ctx, store.CreateBotInput{WorkspaceID: guestWS.ID, OwnerUserID: owner.ID, CreatedBy: owner.ID, DisplayName: "Guest Snapshot Bot", Scopes: []string{"bot:write", store.AgentActivityWriteScope}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.AddWorkspaceMember(ctx, guestWS.ID, guestBot.ID, "bot"); err != nil {
+				t.Fatal(err)
+			}
+			guestChannels, err := st.ListChannels(ctx, guestWS.ID, guest.ID)
+			if err != nil || len(guestChannels) != 1 {
+				t.Fatalf("guest channels: %#v %v", guestChannels, err)
+			}
+			guestConn := dialRealtimeAsUser(t, server.URL, guestWS.ID, guest.ID)
+			defer func() { _ = guestConn.Close(websocket.StatusNormalClosure, "done") }()
+			time.Sleep(100 * time.Millisecond)
+			body["workspace_id"] = guestWS.ID
+			delete(body, "direct_conversation_id")
+			body["channel_id"] = private.ID
+			expectStatusWithBearer(t, guestToken.Token, http.MethodPost, endpoint, strings.NewReader(encode()), http.StatusOK)
+			expectStatusAsUser(t, guest.ID, http.MethodGet, server.URL+"/api/channels/"+private.ID+"/workflow-runs", nil, http.StatusForbidden)
+			expectStatusAsUser(t, outsider.ID, http.MethodGet, server.URL+"/api/channels/"+private.ID+"/workflow-runs", nil, http.StatusBadRequest)
+			body["channel_id"] = guestChannels[0].ID
+			expectStatusWithBearer(t, guestToken.Token, http.MethodPost, endpoint, strings.NewReader(encode()), http.StatusOK)
+			expectStatusAsUser(t, guest.ID, http.MethodGet, server.URL+"/api/channels/"+guestChannels[0].ID+"/workflow-runs", nil, http.StatusOK)
+			if event := readEventType(t, guestConn, "workflow.snapshot"); event.ChannelID != guestChannels[0].ID {
+				t.Fatalf("guest received inaccessible private snapshot before sentinel: %#v", event)
+			}
+			// The original workspace viewer must not receive either guest-workspace frame.
+			body["workspace_id"] = ws.ID
+			body["channel_id"] = ch.ID
+			snapshot.Source.Revision = 4
+			body["snapshot"] = snapshot
+			expectStatusWithBearer(t, token.Token, http.MethodPost, endpoint, strings.NewReader(encode()), http.StatusOK)
+			if event := readEventType(t, viewerConn, "workflow.snapshot"); event.ChannelID != ch.ID {
+				t.Fatalf("cross-workspace snapshot leaked: %#v", event)
+			}
 			delete(body, "channel_id")
 			expectStatusWithBearer(t, token.Token, http.MethodPost, endpoint, strings.NewReader(encode()), http.StatusBadRequest)
 		})
