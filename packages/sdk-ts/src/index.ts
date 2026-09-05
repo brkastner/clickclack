@@ -1,6 +1,6 @@
-import type { components } from "./generated/openapi";
+import type { components } from "./generated/openapi.js";
 
-export type { components, paths } from "./generated/openapi";
+export type { components, paths } from "./generated/openapi.js";
 
 export type WorkflowSnapshot = components["schemas"]["WorkflowSnapshot"];
 export type WorkflowFiles = components["schemas"]["WorkflowFiles"];
