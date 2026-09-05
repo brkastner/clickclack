@@ -438,6 +438,7 @@
             }}
           >
             <Avatar
+              isBot={person?.kind === "bot" && !person?.deleted_at}
               id={person.id}
               name={person.display_name}
               src={person.avatar_url}
@@ -553,6 +554,7 @@
       aria-label={`Account settings for ${currentUser.display_name} ${handleLabel(currentUser.handle)}`}
     >
       <Avatar
+        isBot={currentUser?.kind === "bot" && !currentUser?.deleted_at}
         class="dm-avatar"
         id={currentUser.id}
         name={currentUser.display_name}

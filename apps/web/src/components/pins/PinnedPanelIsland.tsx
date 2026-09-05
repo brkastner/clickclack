@@ -1,3 +1,4 @@
+import { BotAvatarImage } from "../avatar/BotAvatarImage";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createReactIsland, type ReactIsland } from "../../lib/react-island";
 import { enhanceMarkdown } from "../../lib/actions/markdown";
@@ -11,6 +12,7 @@ import "./pinned-panel.css";
 
 export type PinnedPanelProps = {
   messages: Message[];
+  avatarCandidates?: Record<string, string[]>;
   loading?: boolean;
   error?: string;
   topics?: Topic[];
@@ -220,6 +222,7 @@ function Attachment({
 
 function PinnedMessage({
   message,
+  avatarCandidates,
   topic,
   people,
   attentionUserID,
@@ -231,6 +234,7 @@ function PinnedMessage({
   onSelectTopic,
 }: {
   message: Message;
+  avatarCandidates?: string[];
   topic?: Topic;
   people: User[];
   attentionUserID?: string;
@@ -261,7 +265,11 @@ function PinnedMessage({
       <div className="pinned-item__meta">
         <div className="pinned-item__identity">
           <span className="pinned-item__avatar" aria-hidden="true">
-            {(message.author?.display_name || "?").slice(0, 1).toUpperCase()}
+            <BotAvatarImage
+              id={message.author_id}
+              name={message.author?.display_name}
+              candidates={avatarCandidates}
+            />
           </span>
           <span className="pinned-item__author">{message.author?.display_name || "Unknown"}</span>
         </div>
@@ -326,6 +334,7 @@ function PinnedMessage({
 
 function PinnedPanel({
   messages,
+  avatarCandidates = {},
   loading = false,
   error = "",
   topics = [],
@@ -363,6 +372,7 @@ function PinnedPanel({
               <PinnedMessage
                 key={message.id}
                 message={message}
+                avatarCandidates={avatarCandidates[message.author_id]}
                 topic={message.topic_id ? topicsByID.get(message.topic_id) : undefined}
                 people={mentionPeople}
                 attentionUserID={mentionAttentionUserID}

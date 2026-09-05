@@ -29,6 +29,7 @@ hook in `cmd/clickclack/main.go`.
 | `--addr`              | `CLICKCLACK_ADDR`                | `:8080`     | HTTP listen address. |
 | `--data`              | `CLICKCLACK_DATA`                | `./data`    | Data root for DB, uploads, logs. |
 | `--db`                | `CLICKCLACK_DB`                  | derived     | DB URL. Defaults to `sqlite://<data>/clickclack.db`. |
+| `--avatar-packs-dir` | `CLICKCLACK_AVATAR_PACKS_DIR` | `<data>/avatar-packs` | Read-only server-wide bot avatar pack root. No images are bundled. |
 | `--uploads`           | `CLICKCLACK_UPLOADS`             | derived     | Upload storage URL. Defaults to `file://<data>/uploads`; use `r2://bucket/prefix` for Cloudflare R2. |
 | `--environment`       | `CLICKCLACK_ENVIRONMENT`         | unset       | Low-cardinality deployment label used only by opt-in metrics. |
 | `--metrics-enabled`   | `CLICKCLACK_METRICS_ENABLED`     | `false`     | Expose metadata-only Prometheus metrics at `/metrics`; keep private. |
@@ -258,3 +259,28 @@ clickclack serve \
 Combine with real auth (CLI-created magic links or GitHub OAuth) so the
 "first-user-in-DB" dev auth fallback never kicks in. In containers, this is
 already the default; `CLICKCLACK_DEV_BOOTSTRAP=false` is only an explicit guard.
+
+## Custom bot avatar packs
+
+Set `--avatar-packs-dir`, `CLICKCLACK_AVATAR_PACKS_DIR`, or the JSON config field
+`avatar_packs_dir`. By default the root is `<data>/avatar-packs`, resolved after data
+flag overrides. The server does not create or write this directory.
+
+Each immediate subdirectory is a named pack. Use trimmed names of at most 128
+Unicode characters, without `/`, `\`, NUL, or `..`. Files accept `.png`, `.jpg`,
+`.jpeg`, `.gif`, `.webp`, and `.avif` (case-insensitive). Listings sort filenames
+before URL encoding and include at most 1,000 images, without pagination. Missing,
+unreadable, or unknown packs list as empty. Images must be regular files contained
+within the root; symlink escapes and unsupported extensions are rejected.
+
+```sh
+export CLICKCLACK_AVATAR_PACKS_DIR=/var/lib/clickclack/avatar-packs
+mkdir -p "$CLICKCLACK_AVATAR_PACKS_DIR/neutral"
+# Copy your own images into neutral/; ClickClack ships none.
+```
+
+All signed-in users can read all packs, regardless of workspace. Bot tokens need
+`messages:read`, as for uploads. These are operator-managed presentation assets,
+not an access-control or content-classification system. Do not place private files
+inside the configured root. The API exposes the configured path to signed-in users
+for settings guidance. See [Bots](features/bots.md) for viewer behavior.

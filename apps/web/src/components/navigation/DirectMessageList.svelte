@@ -94,6 +94,7 @@
           }}
         >
           <Avatar
+            isBot={dmUser?.kind === "bot" && !dmUser?.deleted_at}
             class="dm-avatar"
             id={dmUser?.id || conversation.id}
             name={dmUser?.display_name}

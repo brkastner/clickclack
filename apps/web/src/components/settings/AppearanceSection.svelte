@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BotAvatarPacksSection from "./BotAvatarPacksSection.svelte";
   import {
     BOARD_THEMES,
     COLOR_MODES,
@@ -96,7 +97,7 @@
   <p class="settings-page__eyebrow">Account</p>
   <h2 class="settings-page__h1">Appearance</h2>
   <p class="settings-page__lead">
-    Changes apply instantly and follow your account on every device.
+    Appearance changes follow your account, except custom bot avatars, which stay on this device.
   </p>
 </header>
 
@@ -275,4 +276,5 @@
       </div>
     </div>
   </div>
+  <BotAvatarPacksSection />
 </div>

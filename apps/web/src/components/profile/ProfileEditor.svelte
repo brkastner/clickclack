@@ -156,6 +156,7 @@
     {:else}
       <div class="profile-editor__avatar-row">
         <Avatar
+          isBot={false}
           id={profile.id}
           name={displayName || profile.display_name}
           src={avatarURL}
@@ -197,6 +198,7 @@
           onkeydown={moveHeroWithKeyboard}
         >
           <Avatar
+            isBot={false}
             class="profile-editor__hero-preview"
             id={profile.id}
             name={displayName || profile.display_name}

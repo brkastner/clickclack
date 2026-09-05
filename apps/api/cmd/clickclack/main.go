@@ -85,6 +85,7 @@ func serve(args []string) error {
 	flags.String("addr", ":8080", "HTTP listen address")
 	flags.String("data", defaultData(), "data directory")
 	flags.String("db", defaultDB(), "database URL")
+	flags.String("avatar-packs-dir", "", "read-only bot avatar pack directory (default <data>/avatar-packs)")
 	flags.String("uploads", defaultUploads(), "upload storage URL")
 	flags.String("environment", "", "deployment environment label")
 	configPath := flags.String("config", "", "config file")
@@ -141,6 +142,7 @@ func serve(args []string) error {
 	log.Printf("ClickClack listening on %s", displayURL(cfg.Addr))
 	server := httpapi.New(st, realtime.NewHub(), httpapi.Options{
 		UploadStorage:       uploads,
+		AvatarPacksDir:      cfg.AvatarPacksPath(),
 		DisableDevAuth:      !cfg.DevBootstrap,
 		PasswordAuthEnabled: cfg.PasswordAuthEnabled,
 		CookieNames:         cookieNames,
@@ -735,6 +737,8 @@ func applyFlagOverrides(flags *flag.FlagSet, cfg *config.Config) {
 			cfg.Data = f.Value.String()
 		case "db":
 			cfg.DB = f.Value.String()
+		case "avatar-packs-dir":
+			cfg.AvatarPacksDir = f.Value.String()
 		case "uploads":
 			cfg.Uploads = f.Value.String()
 		case "environment":

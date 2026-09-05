@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -14,6 +15,7 @@ import (
 )
 
 type Config struct {
+	AvatarPacksDir         string   `json:"avatar_packs_dir"`
 	Addr                   string   `json:"addr"`
 	Data                   string   `json:"data"`
 	DB                     string   `json:"db"`
@@ -73,6 +75,9 @@ func Load(path string) (Config, error) {
 	}
 	if env := os.Getenv("CLICKCLACK_DB"); env != "" {
 		cfg.DB = env
+	}
+	if env := os.Getenv("CLICKCLACK_AVATAR_PACKS_DIR"); env != "" {
+		cfg.AvatarPacksDir = env
 	}
 	if env := os.Getenv("CLICKCLACK_UPLOADS"); env != "" {
 		cfg.Uploads = env
@@ -328,4 +333,12 @@ func normalizeHomeLink(rawURL, rawLabel string) (string, string, error) {
 		return "", "", fmt.Errorf("CLICKCLACK_HOME_LABEL must be at most %d characters", MaxHomeLabelLength)
 	}
 	return homeURL, homeLabel, nil
+}
+
+// AvatarPacksPath resolves the default after data and flag overrides.
+func (c Config) AvatarPacksPath() string {
+	if c.AvatarPacksDir != "" {
+		return c.AvatarPacksDir
+	}
+	return filepath.Join(c.Data, "avatar-packs")
 }

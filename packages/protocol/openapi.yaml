@@ -1751,6 +1751,84 @@ paths:
           description: Invalid search scope, sort, limit, query, or cursor
         "403":
           description: Bot token lacks messages:read, the requested workspace binding, or dms:read for direct-conversation search.
+  /api/avatar-packs:
+    get:
+      operationId: listAvatarPacks
+      summary: List server-wide custom bot avatar packs
+      description: Authenticated like uploads (bot tokens require messages:read), but server-wide rather than workspace-scoped. Missing or unreadable roots return an empty list. No images are bundled.
+      responses:
+        "200":
+          description: Sorted pack names and configured directory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvatarPackListResponse"
+        "401":
+          description: Authentication required
+        "403":
+          description: Token lacks messages:read
+  /api/avatar-packs/{pack}:
+    get:
+      operationId: listAvatarPackFiles
+      summary: List sorted image URLs in an avatar pack
+      description: Authenticated like uploads. Unknown or unreadable packs return an empty list. Names must be trimmed, at most 128 Unicode characters, and contain no path separator, NUL, or "..". URLs are sorted by filename before URL encoding and capped at 1000, without pagination.
+      parameters:
+        - name: pack
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          description: Sorted allowlisted image URLs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvatarPackFilesResponse"
+        "401":
+          description: Authentication required
+        "403":
+          description: Token lacks messages:read
+        "404":
+          description: Invalid pack name
+  /api/avatar-packs/{pack}/{file}:
+    get:
+      operationId: getAvatarPackFile
+      summary: Read an avatar pack image
+      description: Authenticated like uploads. Serves only regular PNG, JPEG, GIF, WebP, or AVIF files contained in the configured root. Names cannot contain path separators, NUL, or "..". Symlink escapes are rejected. Content-Type is derived from the extension; responses are private and require cache revalidation.
+      parameters:
+        - name: pack
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Image bytes
+          content:
+            image/png:
+              schema: {type: string, format: binary}
+            image/jpeg:
+              schema: {type: string, format: binary}
+            image/gif:
+              schema: {type: string, format: binary}
+            image/webp:
+              schema: {type: string, format: binary}
+            image/avif:
+              schema: {type: string, format: binary}
+        "401":
+          description: Authentication required
+        "403":
+          description: Token lacks messages:read
+        "404":
+          description: Invalid, disallowed, missing, or unreadable pack or file
   /api/uploads:
     post:
       operationId: createUpload
@@ -4137,3 +4215,25 @@ components:
           type: string
         user_name:
           type: string
+    AvatarPackListResponse:
+      type: object
+      required: [packs, directory]
+      properties:
+        packs:
+          type: array
+          description: Sorted immediate pack directory names.
+          items:
+            type: string
+        directory:
+          type: string
+          description: Configured read-only server directory, for settings guidance.
+    AvatarPackFilesResponse:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          maxItems: 1000
+          description: API-origin image URLs, sorted by filename before encoding.
+          items:
+            type: string

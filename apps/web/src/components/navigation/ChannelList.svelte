@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { botAvatarFiles } from "../../lib/bot-avatar-packs";
   import { tick } from "svelte";
   import { personaHeroPositions } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
@@ -307,8 +308,9 @@
           <a href={conversation ? hrefForDirect(conversation.id) : "#"} class="channel-subgroup-toggle profile-source-link" class:active={conversation?.id === selectedDirectID} class:has-unread={unread.total > 0}
             aria-label={unread.total > 0 ? `${group.profile.display_name}, ${unread.total} unread` : group.profile.display_name}
             onclick={(event) => { event.preventDefault(); if (conversation) onSelectDirect(conversation.id); else onStartDirect(group.profile.bot_user_id); }}>
-            {#if group.profile.avatar_url || group.profile.avatar_url_light}
+            {#if $botAvatarFiles.length > 0 || group.profile.avatar_url || group.profile.avatar_url_light}
               <Avatar
+                isBot={true}
                 class="persona-band"
                 id={group.profile.id}
                 name={group.profile.display_name}

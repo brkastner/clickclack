@@ -307,6 +307,7 @@
             onclick={() => toggleExpand(bot.id)}
           >
             <Avatar
+              isBot={bot?.kind === "bot" && !bot?.deleted_at}
               class="ws-members__avatar ws-members__avatar--{isServiceBot(bot) ? 'human' : 'bot'}"
               id={bot.id}
               name={bot.display_name || bot.handle || "?"}

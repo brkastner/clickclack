@@ -21,6 +21,7 @@
     "generate:sqlc": "go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate",
     "lint": "oxlint apps/desktop/src apps/web/src packages/sdk-ts/src examples tests/e2e deploy/fakeco/aws/*.mjs playwright.config.ts",
     "test:e2e": "playwright test",
+    "test:avatar-packs:electron": "node scripts/test-bot-avatar-packs-electron.mjs",
     "test:desktop": "pnpm --filter @clickclack/desktop test",
     "test:fakeco-aws": "node --check deploy/fakeco/aws/owner.mjs && bash -n deploy/fakeco/aws/bootstrap.sh && node --test deploy/fakeco/aws/owner.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",

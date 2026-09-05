@@ -1,14 +1,16 @@
 # Proposed bot avatar packs
 
-**Status: Proposed, not implemented.** This document preserves planning work from
-run `6b5c54cb`. It is not a description of supported configuration or a published
-API contract. No avatar-pack code or images are included. The workflow could not
+**Status: Implemented in this worktree; not deployed.** This document preserves planning work from
+run `6b5c54cb`. The original proposal is retained below as planning history. Current behavior is
+documented in [Configuration](../configuration.md#custom-bot-avatar-packs),
+[Bots](../features/bots.md#custom-bot-avatars-per-device), and the canonical OpenAPI
+contract. No images are bundled. The workflow could not
 be finalized because its status operation returned `FOREIGN KEY constraint failed`.
 Committing this proposal does not complete that workflow.
 
 The proposed feature lets a viewer replace every bot's displayed avatar with an
-image from an operator-provided pack. It would be a per-account appearance
-preference, not a change to bot identity or workspace settings. Existing behavior
+image from an operator-provided pack. It will be a per-device appearance
+preference, off by default, not a change to bot identity or workspace settings. Existing behavior
 is documented in [Bots](../features/bots.md) and
 [Configuration](../configuration.md).
 
@@ -19,8 +21,7 @@ is documented in [Bots](../features/bots.md) and
 - Each immediate subdirectory would be one pack, named after that directory.
 - Allow `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, and `.avif` images only.
   Ignore other files when listing and reject them when serving.
-- Cap each pack's listing at a server-defined maximum. The limit remains to be
-  chosen.
+- Sort each pack's listing and cap it at 1,000 images. No pagination in v1.
 - Ship no images. A missing, unconfigured, or unreadable root would yield empty
   listings rather than an error. The settings control would be disabled, explain
   the configured directory, and leave normal bot avatars in place.
@@ -38,34 +39,34 @@ location containing other files they do not intend to serve.
 
 ## Proposed display and preference behavior
 
-Appearance settings would expose an SFW/NSFW toggle and a pack picker. SFW would
-be the default and mean no override. These labels would not classify, moderate,
-or age-gate image content. Their mapping to pack names needs clarification before
-implementation.
+Appearance settings will expose a **custom bot avatars** toggle and a pack picker.
+There are no SFW/NSFW labels. The control is an appearance preference, not a content
+filter or access restriction. Packs are server-wide and readable by signed-in users.
 
-The optional `bot_avatar_pack` string would roam with the account across devices,
-including during screen sharing. Empty would mean off. Writes would trim the
-value, enforce a 128-character maximum, and reject path separators and `..`.
-Omitting the field on update would preserve its stored value. An unknown pack
-name would be accepted and resolve to an empty list.
+Selection and enabled state will be stored locally per device, off by default,
+without account roaming or an appearance-preferences API field. Pack names are
+trimmed, limited to 128 characters, and reject path separators and `..`. Unknown
+packs resolve to an empty list. The operator will supply images later; no images
+are bundled.
 
-The override would apply only to bots. It would never write `avatar_url` or
-`avatar_url_light`, alter identity-sync behavior, or affect human avatars.
+The override applies to bot avatars everywhere, including profiles and avatar-based
+sidebar backgrounds. It never writes `avatar_url` or `avatar_url_light`, alters
+identity-sync behavior, or affects human avatars.
 
-Clients would hash each bot's user ID and index into the sorted file list. The
+Clients will SHA-256 hash the UTF-8 bot user ID and index into the sorted file list.
+Interpret the digest as an unsigned big-endian integer and take it modulo the list
+length. Duplicates across bots are allowed. The
 same bot would keep its assignment across re-renders, navigation, and reloads
 while the directory is unchanged. Adding or removing files could reassign every
-bot. There would be no per-bot image pinning. The hash algorithm remains to be
-specified.
+bot. There is no per-bot image pinning.
 
 No selected pack, an empty or unknown pack, or a failed listing request would
 fall back to the bot's normal stored avatar.
 
-**Open decision: image-load fallback.** The original planning text conflicts:
-one passage says every image-load failure falls back to the stored avatar,
-while another says a pack image returning 404 goes directly to the normal
-initial-and-hue placeholder. Neither behavior is selected here. Decide the
-fallback chain, including failure of the stored avatar, before implementing it.
+**Image-load fallback:** Try the assigned image, then one distinct alternate image
+(the next index, wrapping once). If both fail, use the normal light/dark stored
+avatar, then the initial-and-hue placeholder. A one-image pack skips the alternate.
+Never retry indefinitely.
 
 ## Proposed API and security
 
@@ -86,8 +87,8 @@ moves away from the filesystem. Stable ordering is part of the selection
 contract. Unknown packs would return 200 with an empty file list.
 
 The following is a **noncanonical OpenAPI fragment**, not a complete OpenAPI
-document. The appearance schemas show proposed property additions only; they do
-not replace the existing schemas in `packages/protocol/openapi.yaml`.
+document. Per-device preferences require no appearance schema changes. These routes
+do not replace the existing schemas in `packages/protocol/openapi.yaml`.
 
 ```yaml
 paths:
@@ -142,20 +143,6 @@ paths:
           description: Unknown pack or file, disallowed extension, or rejected path
 components:
   schemas:
-    AppearancePreferences:
-      type: object
-      properties:
-        bot_avatar_pack:
-          type: string
-          maxLength: 128
-          description: Proposed per-account bot display override. Empty means off; unknown packs fall back to stored avatars.
-    AppearancePreferencesPatch:
-      type: object
-      properties:
-        bot_avatar_pack:
-          type: string
-          maxLength: 128
-          description: Proposed pack name; empty disables, omission preserves. Trim and reject path separators and "..".
     AvatarPackListResponse:
       type: object
       required: [packs]
@@ -183,11 +170,11 @@ components:
 - Test authenticated and unauthorized requests, path traversal, encoded separators,
   NUL bytes, symlink escapes, root containment, and response Content-Type. Define
   invalid-name responses for listing routes and confirm safe URL encoding.
-- Test preference trimming, length limits, rejected names, empty and omitted
-  values, account roaming, and unchanged bot identities and human avatars.
-- Specify and test a deterministic hash, unchanged-directory stability, and
-  reassignment after directory edits.
-- Resolve and test the image-failure fallback chain and toggle/pack relationship.
+- Test local preference persistence, off-by-default behavior, absence of account
+  roaming, rejected names, and unchanged bot identities and human avatars.
+- Test SHA-256 assignment, unchanged-directory stability, and reassignment after
+  directory edits.
+- Test the bounded alternate/stored-avatar/placeholder fallback chain and controls.
 - Verify settings, bot avatar surfaces, light avatars, and failure behavior in
   Electron. Confirm empty-root explanatory text and disabled controls.
 - Implement and test the API before adding these paths and properties to the

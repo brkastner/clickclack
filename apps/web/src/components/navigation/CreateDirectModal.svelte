@@ -72,6 +72,7 @@
         {#each choices as person (person.id)}
           <button type="button" class="person-choice" disabled={pending} onclick={() => startRecipient(person.id)}>
             <Avatar
+              isBot={person?.kind === "bot" && !person?.deleted_at}
               class="dm-avatar"
               id={person.id}
               name={person.display_name}

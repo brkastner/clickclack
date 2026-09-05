@@ -17,7 +17,10 @@ test("selects a portrait for direct chats and single-persona channels", () => {
     app,
     /activePortraitSource = activePortraitUser\?\.avatar_url \|\| activePortraitUser\?\.avatar_url_light/u,
   );
-  assert.match(app, /\{#if activePortraitUser && activePortraitSource\}/u);
+  assert.match(
+    app,
+    /\{#if activePortraitUser && \(\(activePortraitUser.kind === "bot" && !activePortraitUser.deleted_at && \$botAvatarFiles.length > 0\) \|\| activePortraitSource\)\}/u,
+  );
   assert.match(app, /class="chat-portrait-bleed"/u);
   assert.match(app, /loading="eager"/u);
   assert.match(app, /fetchPriority="high"/u);

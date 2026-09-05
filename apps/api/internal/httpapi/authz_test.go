@@ -37,6 +37,9 @@ func TestHTTPUnauthorizedRoutes(t *testing.T) {
 		body   string
 	}{
 		{http.MethodGet, "/api/me", ""},
+		{http.MethodGet, "/api/avatar-packs", ""},
+		{http.MethodGet, "/api/avatar-packs/test", ""},
+		{http.MethodGet, "/api/avatar-packs/test/image.png", ""},
 		{http.MethodGet, "/api/event-types", ""},
 		{http.MethodGet, "/api/workspaces", ""},
 		{http.MethodPost, "/api/workspaces", `{"name":"x"}`},

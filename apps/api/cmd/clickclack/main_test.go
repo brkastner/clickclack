@@ -748,3 +748,21 @@ func TestStatusDistinguishesEmptyListsFromDiscoveryErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyFlagOverridesAvatarPacks(t *testing.T) {
+	flags := flag.NewFlagSet("test", flag.ContinueOnError)
+	flags.String("avatar-packs-dir", "", "")
+	flags.String("data", "", "")
+	if err := flags.Parse([]string{"--avatar-packs-dir", "/flag/packs", "--data", "/flag/data"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{AvatarPacksDir: "/env/packs"}
+	applyFlagOverrides(flags, &cfg)
+	if cfg.AvatarPacksPath() != "/flag/packs" {
+		t.Fatal(cfg.AvatarPacksPath())
+	}
+	cfg.AvatarPacksDir = ""
+	if cfg.AvatarPacksPath() != "/flag/data/avatar-packs" {
+		t.Fatal(cfg.AvatarPacksPath())
+	}
+}

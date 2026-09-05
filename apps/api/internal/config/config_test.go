@@ -317,3 +317,22 @@ func TestLoadPasswordAuthFlag(t *testing.T) {
 		t.Fatalf("expected the config file to enable password auth, got %#v err=%v", cfg, err)
 	}
 }
+
+func TestAvatarPacksPath(t *testing.T) {
+	cfg := Defaults()
+	if got := cfg.AvatarPacksPath(); got != "data/avatar-packs" {
+		t.Fatal(got)
+	}
+	cfg.Data = "/custom/data"
+	if got := cfg.AvatarPacksPath(); got != "/custom/data/avatar-packs" {
+		t.Fatal(got)
+	}
+	t.Setenv("CLICKCLACK_AVATAR_PACKS_DIR", "/custom/packs")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.AvatarPacksPath(); got != "/custom/packs" {
+		t.Fatal(got)
+	}
+}

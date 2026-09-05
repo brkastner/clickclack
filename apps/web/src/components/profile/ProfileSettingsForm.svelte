@@ -209,6 +209,7 @@
 >
   <section class="settings-identity" aria-label="Profile preview">
     <Avatar
+      isBot={user.kind === "bot" && !user.deleted_at}
       id={user.id}
       name={previewName}
       src={darkPreviewURL || avatarURL}

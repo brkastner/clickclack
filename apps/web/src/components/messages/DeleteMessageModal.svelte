@@ -57,6 +57,7 @@
 
       <div class="delete-message-preview">
         <Avatar
+          isBot={message.author?.kind === "bot" && !message.author?.deleted_at}
           class="avatar"
           id={message.author?.id || message.author_id}
           name={authorName}

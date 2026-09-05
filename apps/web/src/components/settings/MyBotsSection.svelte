@@ -90,6 +90,7 @@
           {#each group.entries as entry (entry.bot.id)}
             <li class="ws-bots__my-row">
               <Avatar
+                isBot={entry.bot?.kind === "bot" && !entry.bot?.deleted_at}
                 class="ws-members__avatar ws-members__avatar--bot"
                 id={entry.bot.id}
                 name={entry.bot.display_name || entry.bot.handle || "?"}

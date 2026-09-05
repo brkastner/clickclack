@@ -93,6 +93,7 @@
 
 <article class="message-group" class:is-agent={isBot} class:is-self={isSelf}>
   <Avatar
+    isBot={isBot && !group.authorDeleted}
     class={group.authorDeleted ? "avatar" : "avatar avatar-button"}
     id={group.authorID}
     name={group.authorName}

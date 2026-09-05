@@ -9,6 +9,7 @@
   } from "./lib/home-link";
   import { APIError, api, apiResourceURL, apiURL, authMethods, frontendBaseURL, readableAPIError, voiceBaseURL } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
+  import { botAvatarFiles } from "./lib/bot-avatar-packs";
   import { avatarSize } from "./lib/avatar-size";
   import { desktop } from "./lib/desktop";
   import {
@@ -5362,9 +5363,10 @@
   {/if}
 
   <main class="timeline" inert={mobileNavOpen}>
-    {#if activePortraitUser && activePortraitSource}
+    {#if activePortraitUser && ((activePortraitUser.kind === "bot" && !activePortraitUser.deleted_at && $botAvatarFiles.length > 0) || activePortraitSource)}
       {#key activePortraitUser.id}
         <Avatar
+          isBot={activePortraitUser?.kind === "bot" && !activePortraitUser?.deleted_at}
           class="chat-portrait-bleed"
           id={activePortraitUser.id}
           name={activePortraitUser.display_name}

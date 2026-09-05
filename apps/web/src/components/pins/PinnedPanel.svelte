@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { botAvatarCandidates, botAvatarFiles } from "../../lib/bot-avatar-packs";
+  import { resolvedColorMode } from "../../lib/appearance";
+  import { avatarImageSource, avatarURLForColorMode } from "../../lib/chat/avatars";
   import ReactIslandHost from "../ReactIslandHost.svelte";
   import type { Channel } from "../../lib/types";
   import { mountPinnedPanelIsland, type PinnedPanelProps } from "./PinnedPanelIsland";
@@ -23,8 +26,17 @@
     onSelectTopic,
   }: Props = $props();
 
+  const avatarCandidates = $derived(Object.fromEntries(messages.map(({ author_id, author }) => [
+    author_id,
+    author?.kind === "bot" && !author.deleted_at && $botAvatarFiles.length
+      ? botAvatarCandidates(author_id, true, $botAvatarFiles,
+          avatarURLForColorMode(author.avatar_url, author.avatar_url_light, $resolvedColorMode)).map(avatarImageSource)
+      : [],
+  ])));
+
   const islandProps: PinnedPanelProps = $derived({
     messages,
+    avatarCandidates,
     loading,
     error,
     topics,

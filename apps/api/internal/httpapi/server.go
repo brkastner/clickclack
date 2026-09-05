@@ -28,6 +28,7 @@ import (
 )
 
 type Server struct {
+	avatarPacksDir        string
 	store                 store.Store
 	hub                   *realtime.Hub
 	uploadDir             string
@@ -108,6 +109,7 @@ type actor struct {
 }
 
 type Options struct {
+	AvatarPacksDir      string
 	UploadDir           string
 	UploadStorage       uploadstore.Store
 	GitHubOAuth         GitHubOAuthConfig
@@ -147,6 +149,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	}
 	return &Server{
 		store:                 st,
+		avatarPacksDir:        options.AvatarPacksDir,
 		hub:                   hub,
 		uploadDir:             options.UploadDir,
 		uploadStorage:         uploadStorage,
@@ -282,6 +285,9 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/dms/{conversation_id}/workflow-runs", s.listWorkflowSnapshots)
 		r.Get("/realtime/ws", s.websocket)
 		r.Get("/search", s.search)
+		r.Get("/avatar-packs", s.listAvatarPacks)
+		r.Get("/avatar-packs/{pack}", s.listAvatarPackFiles)
+		r.Get("/avatar-packs/{pack}/{file}", s.getAvatarPackFile)
 		r.Post("/uploads", s.createUpload)
 		r.Get("/uploads/by-nonce", s.getUploadByNonce)
 		r.Get("/uploads/{upload_id}", s.getUpload)

@@ -106,6 +106,7 @@
               onclick={() => onOpenResult(result)}
             >
               <Avatar
+                isBot={author?.kind === "bot" && !author?.deleted_at}
                 class="dm-avatar"
                 id={author.id}
                 name={author.display_name}

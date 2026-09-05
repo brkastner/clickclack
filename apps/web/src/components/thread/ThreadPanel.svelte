@@ -582,6 +582,7 @@
     oncontextmenu={handleMessageContextMenu}
   >
     <Avatar
+      isBot={rootAuthor?.kind === "bot" && !rootAuthor?.deleted_at}
       class="avatar"
       id={rootAuthor?.id || root.author_id}
       name={rootAuthor?.display_name}
@@ -762,6 +763,7 @@
         oncontextmenu={handleMessageContextMenu}
       >
         <Avatar
+          isBot={replyAuthor?.kind === "bot" && !replyAuthor?.deleted_at}
           class="avatar small"
           id={replyAuthor?.id || reply.author_id}
           name={replyAuthor?.display_name}

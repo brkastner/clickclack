@@ -109,6 +109,7 @@
 <div class="profile-pane">
   <div class="profile-hero" style="--hue: {avatarHue(profile.id)}deg">
     <Avatar
+      isBot={profile?.kind === "bot" && !profile?.deleted_at}
       class="profile-avatar"
       id={profile.id}
       name={profile.display_name}

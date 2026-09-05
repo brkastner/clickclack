@@ -506,3 +506,29 @@ Secrets:
 7. Add SDK bot runner and example.
 8. Add OpenClaw ClickClack channel extension.
 9. Add local and Crabbox live tests.
+
+## Custom bot avatars (per device)
+
+Appearance settings offer **Custom bot avatars** and a pack picker. This neutral
+appearance override is off by default and stored only in local device storage;
+it never roams with account preferences or changes bot identity, `avatar_url`,
+`avatar_url_light`, humans, or workspace icons. Operators supply images through
+[avatar pack configuration](../configuration.md#custom-bot-avatar-packs).
+
+The override follows bots across messages, threads, DMs, search, pinned messages,
+profiles, bot lists, and avatar-based sidebar/background surfaces. The UTF-8 bot
+user ID is SHA-256 hashed, interpreted as an unsigned big-endian integer, and taken
+modulo the filename-sorted pack length. Assignments remain stable across navigation
+and reloads while the file list is unchanged. Duplicates across bots are allowed;
+adding/removing files can reassign bots. There is no per-bot pinning.
+
+An image failure tries the next distinct pack image once (wrapping), then the
+normal theme-aware stored avatar, then initials. One-image packs skip the alternate.
+No selection, empty/unknown packs, or failed listings preserve normal avatars. If
+no packs are available, controls are disabled and explain the configured directory.
+
+Read-only API: `GET /api/avatar-packs`, `GET /api/avatar-packs/{pack}`, and
+`GET /api/avatar-packs/{pack}/{file}`. Listing routes return `{packs, directory}`
+and `{files}` respectively. Unknown packs return 200 with an empty list; invalid
+names return 404. All routes require upload-equivalent authentication, without
+workspace membership filtering because packs are explicitly server-wide.

@@ -293,6 +293,7 @@
             <div class="ws-members__row" style="height: {ROW_HEIGHT}px">
               <span aria-hidden="true">
                 <Avatar
+                  isBot={member.user.kind === "bot" && !member.user.deleted_at}
                   id={member.user.id}
                   name={member.user.display_name?.trim() || member.user.handle?.trim() || member.user.id}
                   src={member.user.avatar_url}

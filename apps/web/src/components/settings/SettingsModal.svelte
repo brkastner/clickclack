@@ -159,6 +159,7 @@
               >
                 {#if section.id === "profile"}
                   <Avatar
+                    isBot={user?.kind === "bot" && !user?.deleted_at}
                     class="settings-modal__rail-avatar"
                     id={user.id}
                     name={user.display_name}

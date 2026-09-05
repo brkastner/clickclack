@@ -1161,6 +1161,66 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/avatar-packs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List server-wide custom bot avatar packs
+     * @description Authenticated like uploads (bot tokens require messages:read), but server-wide rather than workspace-scoped. Missing or unreadable roots return an empty list. No images are bundled.
+     */
+    get: operations["listAvatarPacks"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/avatar-packs/{pack}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List sorted image URLs in an avatar pack
+     * @description Authenticated like uploads. Unknown or unreadable packs return an empty list. Names must be trimmed, at most 128 Unicode characters, and contain no path separator, NUL, or "..". URLs are sorted by filename before URL encoding and capped at 1000, without pagination.
+     */
+    get: operations["listAvatarPackFiles"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/avatar-packs/{pack}/{file}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read an avatar pack image
+     * @description Authenticated like uploads. Serves only regular PNG, JPEG, GIF, WebP, or AVIF files contained in the configured root. Names cannot contain path separators, NUL, or "..". Symlink escapes are rejected. Content-Type is derived from the extension; responses are private and require cache revalidation.
+     */
+    get: operations["getAvatarPackFile"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/uploads": {
     parameters: {
       query?: never;
@@ -2424,6 +2484,16 @@ export interface components {
       command?: string;
       text?: string;
       user_name?: string;
+    };
+    AvatarPackListResponse: {
+      /** @description Sorted immediate pack directory names. */
+      packs: string[];
+      /** @description Configured read-only server directory, for settings guidance. */
+      directory: string;
+    };
+    AvatarPackFilesResponse: {
+      /** @description API-origin image URLs, sorted by filename before encoding. */
+      files: string[];
     };
   };
   responses: never;
@@ -5264,6 +5334,131 @@ export interface operations {
       };
       /** @description Bot token lacks messages:read, the requested workspace binding, or dms:read for direct-conversation search. */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  listAvatarPacks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Sorted pack names and configured directory */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AvatarPackListResponse"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Token lacks messages:read */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  listAvatarPackFiles: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pack: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Sorted allowlisted image URLs */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AvatarPackFilesResponse"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Token lacks messages:read */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid pack name */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getAvatarPackFile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pack: string;
+        file: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Image bytes */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "image/png": string;
+          "image/jpeg": string;
+          "image/gif": string;
+          "image/webp": string;
+          "image/avif": string;
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Token lacks messages:read */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid, disallowed, missing, or unreadable pack or file */
+      404: {
         headers: {
           [name: string]: unknown;
         };
