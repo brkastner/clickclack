@@ -44,6 +44,8 @@ DELETE /api/messages/{message_id}
 - `GET /api/messages/by-nonce` lets the authenticated author reconcile a
   durable create after an interrupted request. It returns the matching message,
   including attachments, or a capability-marked 404 when no message exists.
+  Recovery requires current access to the message's channel or direct
+  conversation, just like reading by message ID.
   The `X-ClickClack-Message-Nonce: supported` response header distinguishes
   that result from an older server that does not implement the endpoint.
 - `POST /read` accepts `{seq}` and updates the caller's monotonic read pointer
@@ -65,10 +67,16 @@ Message create, edit, delete, and read updates emit durable events:
 `message.created`, `message.updated`, `message.deleted`, `channel.read`.
 Read events are private to the user who advanced the pointer.
 
+Loading older history preserves the visible message's position, including when
+adjacent messages are grouped by author. The full app and embedded channel view
+share this behavior.
+
 The web message menu exposes **Copy link** for channel roots. It builds the
 absolute URL from the configured public frontend origin and the canonical
 `/app/{workspace_route_id}/{message_route_id}` path. If clipboard access is
 blocked, a focused read-only field exposes the selected URL for manual copy.
+Allocating a link updates only its route metadata; a delayed response cannot
+overwrite a newer message edit.
 
 ## Editing in the web app
 
@@ -84,12 +92,19 @@ direct-message view is temporarily unmounted, including virtualized timeline
 rows, while closing a thread explicitly discards an unsaved thread-surface
 draft.
 
+While an input method is composing text, its keys do not save or cancel the
+edit. Cancelling an edit preserves any reply quote in the composer.
+
 Each conversation can have one active editor. Starting another edit in the same
 conversation reveals and focuses the existing editor instead of discarding its
-draft. Drafts in other conversations are retained for a bounded number of
-recent views. Realtime updates refresh an untouched draft; if the user already
-changed it, the editor keeps that draft and warns that the message changed
-elsewhere.
+draft. Reopening that editor keeps it selected and its URL in sync even if an
+earlier navigation finishes later. Drafts in other conversations are retained for
+a bounded number of recent views. Realtime updates refresh an untouched draft;
+if the user already changed it, the editor keeps that draft and warns that the
+message changed elsewhere.
+A delayed save acknowledgement cannot replace a newer edit or restore deleted
+content. Edit acknowledgements also preserve author and attachment updates.
+A pinned-list refresh retains edits saved while it was loading.
 
 ## Durable agent activity
 
@@ -133,6 +148,8 @@ used when posting to that channel. Message responses include `topic_id` when a
 topic was supplied. The web channel composer lists the active topics available
 to that channel. Root-message topic labels can be clicked to filter the
 timeline; clearing the visible filter returns to the unfiltered channel.
+Clearing or choosing another filter takes effect while history is loading;
+an older response cannot restore the previous filter or message window.
 
 ### Channel attention
 
@@ -178,6 +195,20 @@ The web composer is a Slack-like message well with a format bar for bold,
 italic, inline code, code blocks, links, attachments, and GIF insertion. The GIF
 picker inserts standard Markdown image syntax, so no provider-specific durable
 schema is required for V1.
+Searching for a GIF never submits the message draft.
+`Escape` closes the active GIF picker or suggestion menu while preserving the
+draft and reply quote. Once both are closed, `Escape` clears the quote.
+
+Sending from history returns to the latest messages. A failed refresh keeps the
+confirmed message visible and reports the refresh error. Dismiss any open search
+results and press Escape to retry the jump. Selecting history while a send,
+attachment, or refresh is pending keeps that selection even if the operation fails.
+Background message edits, deletions, and deleted bot identities update in place
+without changing the history selection or cancelling that return to live chat.
+Changes received while history is loading stay applied when its snapshot arrives.
+Returning to live chat or pressing Escape also preserves pending message updates.
+A delayed refresh in an embedded channel cannot undo an acknowledged edit or
+restore a deleted message.
 
 ## Attachments
 

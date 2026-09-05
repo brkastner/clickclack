@@ -16,7 +16,7 @@
     scrollToMessage: (id: string) => boolean;
     scrollToDivider: (fallbackToAround?: boolean) => boolean;
     captureState: () => MessageListState | null;
-    isAtBottom: () => boolean;
+    isFollowing: () => boolean;
     isNearBottom: (tolerancePx?: number) => boolean;
   };
 </script>
@@ -28,7 +28,7 @@
   import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
   import { middleAutoscrollVelocity, pageScrollDelta } from "../../lib/chat/scrolling";
-  import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import type { MessageEdit, MessageEditController } from "../../lib/messageEditing.svelte";
   import { messageAudioPlayback } from "../../lib/messageAudioPlayback";
   import { recentAutoLoadAttachmentIDs } from "../../lib/media-loading";
   import type { ReactionController } from "../../lib/reactions.svelte";
@@ -106,7 +106,7 @@
     onDecisionPrefill?: (reply: string) => void;
     editController?: MessageEditController;
     editScope?: string;
-    onMessageEdited?: (message: Message) => void;
+    onMessageEdited?: (message: MessageEdit) => void;
     topics?: Topic[];
     onSelectTopic?: (topicID: string) => void;
   };
@@ -363,8 +363,12 @@
   let revealed = $state(false);
   let lastViewKey: string | undefined;
   let lastItemCount = 0;
+  let lastMessageID = "";
   let lastPreambleLayoutRevision = "";
   let lastRestoreState: MessageListState | undefined;
+  // A proxied snapshot keeps its identity when a parent stores it in $state.
+  let capturedScrollState = $state<MessageListState>();
+  let capturedScrollGeneration = 0;
   let pendingRestore = false;
   let suppressPagination = false;
   let newerEdgeConsumed = false;
@@ -709,17 +713,6 @@
     return items.findIndex((it) => it.kind === "divider");
   }
 
-  function firstUnreadMessageID(): string {
-    if (!canUseUnreadDivider) return "";
-    if (dividerUnreadCount <= 0) return "";
-    for (const message of messages) {
-      if (message.parent_message_id) continue;
-      if (message.author?.id === currentUserID || message.author_id === currentUserID) continue;
-      if ((message.channel_seq || 0) > unreadBoundarySeq) return message.id;
-    }
-    return "";
-  }
-
   function maxLoadedSeq(): number {
     let seq = 0;
     for (const message of messages) {
@@ -739,49 +732,6 @@
     return new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
 
-  function alignRenderedTarget(selector: string): boolean {
-    if (!scrollEl) return false;
-    const target = scrollEl.querySelector<HTMLElement>(selector);
-    if (!target) return false;
-    const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
-    if (Math.abs(delta) <= ANCHOR_THRESHOLD_PX) return true;
-    scrollEl.scrollTop += delta;
-    return false;
-  }
-
-  function visibleMessageBounds(): { first: number; last: number } | null {
-    if (!scrollEl) return null;
-    const viewport = scrollEl.getBoundingClientRect();
-    const byID = new Map(messages.map((message, index) => [message.id, index]));
-    let first = Number.POSITIVE_INFINITY;
-    let last = -1;
-    for (const row of scrollEl.querySelectorAll<HTMLElement>("[data-message-id]")) {
-      const rect = row.getBoundingClientRect();
-      if (rect.bottom < viewport.top || rect.top > viewport.bottom) continue;
-      const idx = byID.get(row.dataset.messageId || "");
-      if (idx === undefined) continue;
-      first = Math.min(first, idx);
-      last = Math.max(last, idx);
-    }
-    return last < 0 ? null : { first, last };
-  }
-
-  function nudgeTowardMessage(messageID: string): boolean {
-    if (!scrollEl || !virtualizer) return false;
-    const targetIndex = messages.findIndex((message) => message.id === messageID);
-    const visible = visibleMessageBounds();
-    if (targetIndex < 0 || !visible) return false;
-    if (visible.first > targetIndex) {
-      scrollEl.scrollTop -= Math.max(80, scrollEl.clientHeight * 0.85);
-      return true;
-    }
-    if (visible.last < targetIndex) {
-      scrollEl.scrollTop += Math.max(80, scrollEl.clientHeight * 0.85);
-      return true;
-    }
-    return false;
-  }
-
   function isCurrentView(key: string): boolean {
     return key === viewKey && key === lastViewKey;
   }
@@ -791,7 +741,7 @@
     generation: number,
     indexForTarget: () => number,
     selector: string,
-    targetMessageID = "",
+    pixelOffset = 0,
   ): Promise<boolean> {
     suppressProgrammaticPagination(3);
     for (let attempt = 0; attempt < 24; attempt++) {
@@ -799,7 +749,7 @@
       if (!virtualizer || !scrollEl) return false;
       const target = scrollEl.querySelector<HTMLElement>(selector);
       if (target) {
-        const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top;
+        const delta = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top - pixelOffset;
         if (Math.abs(delta) <= ANCHOR_THRESHOLD_PX) return true;
         scrollEl.scrollTop += delta;
       } else {
@@ -808,33 +758,26 @@
         scrollEl.scrollTop = historyLoaderHeight + virtualizer.getItemOffset(idx);
       }
       await nextFrame();
-      if (!isCurrentScrollCommand(key, generation)) return false;
-      if (alignRenderedTarget(selector)) return true;
-      if (targetMessageID && nudgeTowardMessage(targetMessageID)) await nextFrame();
     }
-    if (!isCurrentScrollCommand(key, generation)) return false;
-    return alignRenderedTarget(selector);
+    return false;
   }
 
   function scrollToTarget(
     indexForTarget: () => number,
     selector: string,
-    targetMessageID = "",
     onUnsettled?: () => void,
   ): boolean {
     if (!virtualizer || indexForTarget() < 0) return false;
     shouldStickToBottom = false;
     const key = viewKey;
     const generation = beginScrollCommand();
-    void settleVirtualTarget(key, generation, indexForTarget, selector, targetMessageID).then(async (settled) => {
+    void settleVirtualTarget(key, generation, indexForTarget, selector).then(async (settled) => {
       if (!isCurrentScrollCommand(key, generation)) return;
       emitHistorySettled();
       // Settling can remove the history loader above the target.
       await tick();
       if (!isCurrentScrollCommand(key, generation)) return;
-      if (settled) {
-        settled = await settleVirtualTarget(key, generation, indexForTarget, selector, targetMessageID);
-      }
+      if (settled) settled = await settleVirtualTarget(key, generation, indexForTarget, selector);
       if (!settled && isCurrentScrollCommand(key, generation)) onUnsettled?.();
     });
     return true;
@@ -844,7 +787,6 @@
     return scrollToTarget(
       () => findMessageIndex(messageID),
       `[data-message-id="${CSS.escape(messageID)}"]`,
-      messageID,
     );
   }
 
@@ -852,7 +794,6 @@
     return scrollToTarget(
       findDividerIndex,
       "[data-unread-divider='true']",
-      firstUnreadMessageID(),
       fallbackToAround ? onJumpToUnread : undefined,
     );
   }
@@ -866,25 +807,20 @@
   }
 
   function captureState(): MessageListState | null {
-    if (!virtualizer) return null;
-    const isAtBottom = checkAtBottom();
-    if (isAtBottom) return { atBottom: true };
-    const offset = virtualizer.getScrollOffset();
-    const idx = virtualizer.findItemIndex(offset);
-    const relativeOffset = Math.max(0, offset - historyLoaderHeight);
-    for (let i = Math.max(0, idx); i < items.length; i++) {
-      const it = items[i];
-      if (it.kind !== "group") continue;
-      const itemTop = virtualizer.getItemOffset(i);
-      const anchorMessageID = it.group.messages[0]?.id;
-      if (!anchorMessageID) continue;
-      return {
-        atBottom: false,
-        anchorMessageID,
-        anchorPixelOffset: Math.max(0, relativeOffset - itemTop),
-      };
+    if (!virtualizer || !scrollEl) return null;
+    capturedScrollState = { atBottom: checkAtBottom() };
+    capturedScrollGeneration = scrollCommandGeneration;
+    if (!capturedScrollState.atBottom) {
+      const top = scrollEl.getBoundingClientRect().top;
+      for (const row of scrollEl.querySelectorAll<HTMLElement>("[data-message-id]")) {
+        const bounds = row.getBoundingClientRect();
+        if (bounds.bottom <= top) continue;
+        capturedScrollState.anchorMessageID = row.dataset.messageId;
+        capturedScrollState.anchorPixelOffset = bounds.top - top;
+        break;
+      }
     }
-    return { atBottom: false };
+    return capturedScrollState;
   }
 
   $effect(() => {
@@ -893,7 +829,7 @@
       scrollToMessage,
       scrollToDivider,
       captureState,
-      isAtBottom: () => checkAtBottom(),
+      isFollowing: () => shouldStickToBottom,
       isNearBottom: (tolerancePx?: number) => checkNearBottom(tolerancePx),
     });
     return () => onListRef(null);
@@ -906,12 +842,17 @@
     const key = viewKey;
     const count = items.length;
     const layoutRevision = preambleLayoutRevision;
+    // Ordinary messages can grow an existing group without adding a virtual item.
+    const newestMessageID = messages.at(-1)?.id || "";
+    const newestMessageChanged = newestMessageID !== lastMessageID;
+    lastMessageID = newestMessageID;
 
     if (key !== lastViewKey) {
       lastViewKey = key;
       lastItemCount = count;
       lastPreambleLayoutRevision = layoutRevision;
       lastRestoreState = restoreState;
+      capturedScrollState = undefined;
       shouldStickToBottom = true;
       atBottom = true;
       revealed = false;
@@ -921,24 +862,25 @@
     }
 
     const target = restoreState;
-    if (target && target !== lastRestoreState) {
+    const restoreChanged = target && target !== lastRestoreState;
+    if (restoreChanged) {
+      // Only the first admission of a capture yields to intervening input.
+      const interrupted = target === capturedScrollState && capturedScrollGeneration !== scrollCommandGeneration;
+      capturedScrollState = undefined;
       lastRestoreState = target;
-      if (target.atBottom) {
+      if (!interrupted && (target.atBottom || target.anchorMessageID)) {
         lastItemCount = count;
         lastPreambleLayoutRevision = layoutRevision;
-        startRestore(key, target, true);
+        startRestore(key, target, target.atBottom);
         return;
       }
-      if (target.anchorMessageID) {
-        lastItemCount = count;
-        lastPreambleLayoutRevision = layoutRevision;
-        startRestore(key, target, false);
-        return;
+      if (interrupted && !shouldStickToBottom && virtualizer) {
+        handleScroll(virtualizer.getScrollOffset());
       }
     }
 
     const dataChanged =
-      count !== lastItemCount || layoutRevision !== lastPreambleLayoutRevision;
+      restoreChanged || count !== lastItemCount || newestMessageChanged || layoutRevision !== lastPreambleLayoutRevision;
     if (dataChanged && shouldStickToBottom && !hasNewer && !pendingRestore) {
       void scrollLastItemIntoView();
     } else if (dataChanged && !pendingRestore) {
@@ -966,7 +908,7 @@
     }, RESTORE_FAIL_OPEN_MS);
     void restore
       .catch((error) => {
-        if (!isCurrentView(key)) return;
+        if (!isCurrentScrollCommand(key, generation)) return;
         console.error("message history restore failed", error);
         beginScrollCommand();
         emitHistorySettled();
@@ -976,17 +918,19 @@
 
   async function runRestore(key: string, target: MessageListState | undefined, fallbackToBottom: boolean) {
     const generation = beginScrollCommand(false);
+    const anchorID = target && !target.atBottom ? target.anchorMessageID : undefined;
+    const settleAnchor = anchorID
+      ? () => settleVirtualTarget(
+          key, generation, () => findMessageIndex(anchorID),
+          `[data-message-id="${CSS.escape(anchorID)}"]`, target?.anchorPixelOffset ?? 0,
+        )
+      : undefined;
     let restoredToUnreadDivider = false;
     await tick();
     await nextFrame();
     if (!isCurrentScrollCommand(key, generation)) return;
-    if (target && !target.atBottom && target.anchorMessageID) {
-      const restored = await restoreToAnchor(
-        key,
-        generation,
-        target.anchorMessageID,
-        target.anchorPixelOffset ?? 0,
-      );
+    if (settleAnchor) {
+      const restored = await settleAnchor();
       if (!isCurrentScrollCommand(key, generation)) return;
       if (!restored && fallbackToBottom) await scrollLastItemIntoView(generation);
       else shouldStickToBottom = false;
@@ -999,7 +943,6 @@
           generation,
           () => findDividerIndex(),
           "[data-unread-divider='true']",
-          firstUnreadMessageID(),
         );
         shouldStickToBottom = false;
       } else {
@@ -1017,29 +960,11 @@
       if (virtualizer) handleScroll(virtualizer.getScrollOffset());
     }
     emitHistorySettled();
-  }
-
-  async function restoreToAnchor(
-    key: string,
-    generation: number,
-    messageID: string,
-    pixelOffset: number,
-  ): Promise<boolean> {
-    if (!virtualizer) return false;
-    const idx = findMessageIndex(messageID);
-    if (idx < 0) return false;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      if (!virtualizer || !scrollEl || !isCurrentScrollCommand(key, generation)) return false;
-      const desired = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
-      suppressProgrammaticPagination();
-      scrollEl.scrollTop = desired;
-      await nextFrame();
-      if (!isCurrentScrollCommand(key, generation)) return false;
-      const recheck = historyLoaderHeight + virtualizer.getItemOffset(idx) + pixelOffset;
-      const current = virtualizer.getScrollOffset();
-      if (Math.abs(recheck - desired) < 1 && Math.abs(current - desired) < 1) break;
+    if (settleAnchor) {
+      // Removing the history loader changes the row's viewport position.
+      await tick();
+      if (isCurrentScrollCommand(key, generation)) await settleAnchor();
     }
-    return true;
   }
 
   function handleScroll(offset: number) {
@@ -1100,10 +1025,12 @@
           <HistoryLoader direction="older" rows={skeletonRows} />
         </div>
       {/if}
+      <!-- Keep revealed controls clickable while virtua debounces scroll-end. -->
       <Virtualizer
         bind:this={virtualizer}
         data={items}
         getKey={(item: Item) => item.id}
+        itemProps={() => loading || !revealed ? undefined : { style: { "pointer-events": "auto" } }}
         scrollRef={scrollEl}
         shift={prepending}
         startMargin={historyLoaderHeight}

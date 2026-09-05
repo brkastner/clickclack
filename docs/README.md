@@ -61,6 +61,7 @@ it for anything that isn't a local clone.
 | Human and bot identities | [Bots](features/bots.md) |
 | Creating and installing bot tokens | [Bot installs](bot-installs.md) |
 | Profile settings, handles, avatars | [Profiles](features/profiles.md) |
+| Reuse OpenClaw profile names and avatars | [Identity mapping](features/identity-sync.md) |
 | Magic-link auth, GitHub OAuth, dev fallback | [Auth](features/auth.md) |
 | Native macOS, Windows, and Linux clients | [Desktop apps](desktop.md) |
 | Local OpenClaw voice through Kassette | [Voice assistant](features/voice.md) |

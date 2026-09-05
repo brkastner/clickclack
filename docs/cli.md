@@ -116,6 +116,31 @@ clickclack admin user create --name "Ari" --email ari@example.com [--workspace w
 Creates a user. With `--workspace`, also adds them to that workspace as a
 `member`. Prints the new user ID.
 
+### `admin user set-password`
+
+```sh
+clickclack admin user set-password (--email EMAIL | --user usr_...) [--clear]
+```
+
+Enables, replaces, or clears local password sign-in for one account. Setting a
+password on an account that has none enables password login for it; `--clear`
+disables it again. `--email` also accepts a handle.
+
+The secret is read from an echo-free prompt, or from stdin when the command is
+not attached to a terminal:
+
+```sh
+printf '%s' "$PASSWORD" | clickclack admin user set-password --email ari@example.com
+```
+
+The password is never accepted as a flag, because process arguments are visible
+to other processes on the host. Password sign-in also has to be enabled on the
+server with `--password-auth`; see [Auth](features/auth.md).
+
+Use this to hand out a temporary password. The account owner replaces it from
+the app's account settings, which never routes the new secret through an
+operator.
+
 ### `admin member add`
 
 ```sh
@@ -277,8 +302,26 @@ clickclack --server http://localhost:8080 --token sst_... messages list --channe
 clickclack --server http://localhost:8080 --token sst_... threads open msg_... --json
 ```
 
+`threads open` preserves the API's complete thread page in `--json` output,
+including `oldest_seq`, `newest_seq`, `has_older`, and `has_newer`. Its default
+is the earliest 100 replies. Use `--limit 1..200` and either `--latest`,
+`--before-seq S`, `--after-seq S`, or `--around-seq S` to select another window:
+
+```sh
+clickclack threads open msg_... --latest --limit 50 --json
+clickclack threads open msg_... --before-seq 151 --limit 50 --json
+```
+
+Cursors use thread sequences, including zero, and cannot be combined with one
+another or with `--latest`. See [thread pagination](features/threads.md#ordering-and-pagination).
+
 `workspaces list` prints `id slug name` in human mode. `channels list` prints
 `id name kind`. `messages list` prints `seq id author body`.
+
+`status` reports the workspace that contains the selected channel, including
+channel IDs resolved across workspaces. Successful empty workspace or channel
+lists produce an empty selection when no channel is requested; discovery
+failures (including HTTP and malformed-response errors) fail the command.
 
 ## Client writes
 

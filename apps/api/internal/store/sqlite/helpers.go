@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -293,9 +292,19 @@ func insertEventWithRecipientsAndMentions(ctx context.Context, tx *sql.Tx, works
 	if err != nil {
 		return store.Event{}, err
 	}
+	q := storedb.New(tx)
+	// The immediate write transaction serializes this frontier read through commit.
+	frontier, err := q.LatestWorkspaceEventCursor(ctx, workspaceID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return store.Event{}, err
+	}
+	cursor, err := store.EventCursorAfter(newID("cur"), frontier)
+	if err != nil {
+		return store.Event{}, err
+	}
 	event := store.Event{
 		ID:               newID("evt"),
-		Cursor:           newID("cur"),
+		Cursor:           cursor,
 		Type:             eventType,
 		WorkspaceID:      workspaceID,
 		ChannelID:        channelID,
@@ -309,7 +318,6 @@ func insertEventWithRecipientsAndMentions(ctx context.Context, tx *sql.Tx, works
 	if len(recipients) > 0 {
 		isPrivate = 1
 	}
-	q := storedb.New(tx)
 	if err := q.InsertEvent(ctx, storedb.InsertEventParams{
 		ID:               event.ID,
 		Cursor:           event.Cursor,
@@ -358,39 +366,6 @@ func newID(prefix string) string {
 	id := ulid.MustNew(ulid.Timestamp(time.Now()), idEntropy)
 	idMu.Unlock()
 	return prefix + "_" + strings.ToLower(id.String())
-}
-
-const routeIDAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-
-func newRouteID(prefix byte) (string, error) {
-	const routeIDRandomBytes = 10
-	var raw [routeIDRandomBytes]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-	var out [17]byte
-	out[0] = prefix
-	bitBuffer := 0
-	bits := 0
-	pos := 1
-	for _, b := range raw {
-		bitBuffer = (bitBuffer << 8) | int(b)
-		bits += 8
-		for bits >= 5 {
-			bits -= 5
-			out[pos] = routeIDAlphabet[(bitBuffer>>bits)&31]
-			pos++
-			if bits > 0 {
-				bitBuffer &= (1 << bits) - 1
-			} else {
-				bitBuffer = 0
-			}
-		}
-	}
-	if pos != len(out) {
-		return "", fmt.Errorf("route id encoder produced %d characters", pos)
-	}
-	return string(out[:]), nil
 }
 
 func now() string {

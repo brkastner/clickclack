@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -13,6 +13,8 @@ import {
 } from "../../apps/web/src/lib/bots";
 import { productAppURLForHost } from "../../apps/web/src/productLinks";
 import { waitForAppReady } from "./app-ready";
+import { createGeneralChannel } from "./channel-fixture";
+import { pauseMessageFrames, settleScrollFrames } from "./message-frames";
 
 const serverURL = "http://127.0.0.1:18082";
 const execFileAsync = promisify(execFile);
@@ -61,51 +63,6 @@ async function clickclackAsync(args: string[], env: NodeJS.ProcessEnv = {}): Pro
   return stdout.trim();
 }
 
-async function createGeneralChannelRoute(
-  page: Page,
-  label: string,
-  isolatedUser = false,
-): Promise<string> {
-  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
-  const workspaceResponse = await page.request.post("/api/workspaces", {
-    data: { name: `${label} ${suffix}` },
-  });
-  expect(workspaceResponse.ok()).toBe(true);
-  const { workspace } = (await workspaceResponse.json()) as {
-    workspace: { id: string; route_id: string };
-  };
-  if (isolatedUser) {
-    const userID = execFileSync(
-      "go",
-      [
-        "run",
-        "./apps/api/cmd/clickclack",
-        "admin",
-        "user",
-        "create",
-        "--data",
-        "./data/e2e",
-        "--workspace",
-        workspace.id,
-        "--name",
-        `${label} Tester`,
-        "--email",
-        `${label.toLowerCase().replaceAll(" ", "-")}-${suffix}@example.com`,
-      ],
-      { cwd: process.cwd(), encoding: "utf8" },
-    ).trim();
-    await page.setExtraHTTPHeaders({ "X-ClickClack-User": userID });
-  }
-  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
-    data: { name: "general", kind: "public" },
-  });
-  expect(channelResponse.ok()).toBe(true);
-  const { channel } = (await channelResponse.json()) as {
-    channel: { route_id: string };
-  };
-  return `/app/${workspace.route_id}/${channel.route_id}`;
-}
-
 function isolatedHome(): NodeJS.ProcessEnv {
   const root = mkdtempSync(join(tmpdir(), "clickclack-e2e-"));
   return {
@@ -113,24 +70,6 @@ function isolatedHome(): NodeJS.ProcessEnv {
     HOME: root,
     XDG_CONFIG_HOME: join(root, ".config"),
   };
-}
-
-async function settleScrollFrames(page: Page) {
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        let frames = 12;
-        const step = () => {
-          frames--;
-          if (frames <= 0) {
-            resolve();
-            return;
-          }
-          requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      }),
-  );
 }
 
 async function expectMessageNearScrollBottom(page: Page, text: string) {
@@ -819,6 +758,8 @@ test("coalesces durable agent activity and applies activity preferences", async 
   const otherPage = await page.context().newPage();
   await otherPage.goto("about:blank");
   await otherPage.bringToFront();
+  // Hidden tabs may suspend frames while network and DOM work continue.
+  await pauseMessageFrames(page);
   for (const data of [
     {
       body: "**bash inspect**\n\nchecked the virtualized timeline measurement",
@@ -842,10 +783,18 @@ test("coalesces durable agent activity and applies activity preferences", async 
     });
     expect(response.ok()).toBe(true);
   }
-  await expect(
-    page.getByText("Third live activity row grows the preamble during the realtime burst."),
-  ).toBeVisible();
-  await expect(preambles).toHaveCount(2);
+  try {
+    await expect(
+      page.getByText("Third live activity row grows the preamble during the realtime burst."),
+    ).toBeVisible();
+    await expect(preambles).toHaveCount(2);
+  } finally {
+    const capture = await page.context().newCDPSession(page);
+    const { data } = await capture.send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(test.info().outputPath("agent-activity.png"), Buffer.from(data, "base64"));
+    await capture.detach();
+    await page.evaluate(() => Reflect.get(window, "resumeMessageFrames")());
+  }
   const firstLiveToolBlock = preambles.nth(0);
   const finalLiveToolBlock = preambles.nth(1);
   await firstLiveToolBlock.getByRole("button", { name: "Show preamble" }).click();
@@ -858,6 +807,7 @@ test("coalesces durable agent activity and applies activity preferences", async 
   await expectScrollAtMessageEnd(page);
   await page.bringToFront();
   await otherPage.close();
+  await page.screenshot({ path: test.info().outputPath("agent-activity-resumed.png") });
 
   // Ignore any replayed events from the initial realtime subscription; this
   // assertion begins with the background activity posted below.
@@ -1215,10 +1165,8 @@ test("aligns self and other messages independently", async ({ page }) => {
   await expect.poll(() => messageSide(agentMessage)).toBe("right");
 });
 
-test("keeps Markdown lists and blockquotes left-aligned in right-side messages", async ({
-  page,
-}) => {
-  const route = await createGeneralChannelRoute(page, "Right side Markdown", true);
+test("keeps Markdown lists and blockquotes inside right-aligned messages", async ({ page }) => {
+  const { route } = await createGeneralChannel(page, "Right aligned Markdown", true);
   const markdownBody = [
     "Right-side Markdown:",
     "",
@@ -1327,7 +1275,7 @@ test("keeps Markdown lists and blockquotes left-aligned in right-side messages",
 });
 
 test("leaves detached code decorators under the rendering owner's control", async ({ page }) => {
-  const route = await createGeneralChannelRoute(page, "Detached code decorator", true);
+  const { route } = await createGeneralChannel(page, "Detached code decorator", true);
   const body = [
     "Detached code decorator",
     "",
@@ -1442,7 +1390,7 @@ test("realtime cursor storage failures do not block app startup", async ({ page 
 });
 
 test("browser notification storage failures do not block app startup", async ({ page }) => {
-  const generalRoute = await createGeneralChannelRoute(page, "Notification storage");
+  const { route: generalRoute } = await createGeneralChannel(page, "Notification storage");
   await page.addInitScript(() => {
     const blockedKeyPrefix = "clickclack:browser-notifications-enabled:v1:";
     const getItem = Storage.prototype.getItem;
@@ -1468,7 +1416,7 @@ test("browser notification storage failures do not block app startup", async ({ 
 });
 
 test("mobile navigation behaves like a drawer", async ({ page }) => {
-  const generalRoute = await createGeneralChannelRoute(page, "Mobile navigation");
+  const { route: generalRoute } = await createGeneralChannel(page, "Mobile navigation");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(generalRoute);
   await waitForAppReady(page);
@@ -1526,7 +1474,7 @@ test("workspace switching lives in the sidebar header", async ({ page }) => {
 });
 
 test("desktop shell moves sidebar and search controls into the title bar", async ({ page }) => {
-  const generalRoute = await createGeneralChannelRoute(page, "Desktop titlebar");
+  const { route: generalRoute } = await createGeneralChannel(page, "Desktop titlebar");
   await page.addInitScript(() => {
     Object.assign(window, {
       clickclackDesktop: {
@@ -1719,7 +1667,7 @@ test("desktop bridge keeps native frame layout when renderer chrome is disabled"
 });
 
 test("mobile navigation geometry clears the timeline at narrow widths", async ({ page }) => {
-  const generalRoute = await createGeneralChannelRoute(page, "Mobile geometry");
+  const { route: generalRoute } = await createGeneralChannel(page, "Mobile geometry");
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(generalRoute);
@@ -1768,13 +1716,8 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   const consoleMessages: string[] = [];
   page.on("console", (message) => consoleMessages.push(`${message.type()}: ${message.text()}`));
   page.on("pageerror", (error) => consoleMessages.push(`pageerror: ${error.message}`));
-  const workspacesResponse = await page.request.get("/api/workspaces");
-  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
-  const workspaceId = workspaces.workspaces[0].id;
-  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
-    data: { name: `main-${Date.now()}`, kind: "public" },
-  });
-  const { channel } = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  const { workspace, channel, route } = await createGeneralChannel(page, "Chat Smoke", true);
+  const handle = `@smoke-${channel.route_id.toLowerCase()}`;
   const secondUserId = execFileSync(
     "go",
     [
@@ -1786,30 +1729,30 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
       "--data",
       "./data/e2e",
       "--workspace",
-      workspaceId,
+      workspace.id,
       "--name",
       "Second User",
       "--email",
-      "second@example.com",
+      `${channel.id}@example.com`,
     ],
     { cwd: process.cwd(), encoding: "utf8" },
   ).trim();
 
-  await page.goto("/app");
+  await page.goto(route);
   await waitForAppReady(page);
   await expect(page).toHaveURL(/\/app\/[^/]+\/[^/]+$/);
 
   await page
-    .getByRole("button", { name: /Account settings for Local Captain/ })
+    .getByRole("button", { name: /Account settings for Chat Smoke Tester/ })
     .click({ button: "right" });
   await expect(page.getByRole("heading", { name: "Profile settings" })).toBeVisible();
   await page.getByLabel("Display name").fill("Peter Steinberger");
-  await page.getByLabel("Handle").fill("@steipete");
+  await page.getByLabel("Handle").fill(handle);
   await page
     .getByLabel("Default or dark avatar URL")
     .fill("https://avatars.githubusercontent.com/u/280?v=4");
   await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(page.getByRole("button", { name: /@steipete/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: new RegExp(handle) })).toBeVisible();
 
   await page.getByRole("link", { name: `# ${channel.name}` }).click();
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
@@ -1826,7 +1769,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(
     page.getByLabel("Profile pane").getByRole("heading", { name: "Peter Steinberger" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Profile pane").getByText("@steipete").first()).toBeVisible();
+  await expect(page.getByLabel("Profile pane").getByText(handle).first()).toBeVisible();
   const infoIconOffset = await page
     .getByLabel("Profile pane")
     .locator(".info-icon")
@@ -2052,7 +1995,12 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
     page.getByLabel("Recent people").getByRole("link", { name: "Second User" }),
   ).toBeVisible();
   await page.getByLabel("Message body").fill("private playwright");
+  const sentDM = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && /\/api\/dms\/[^/]+\/messages$/.test(response.url()),
+  );
   await page.getByRole("button", { name: "Send" }).click();
+  expect((await sentDM).ok()).toBe(true);
   await expect(page.locator(".markdown").filter({ hasText: "private playwright" })).toBeVisible();
 
   // Direct-message search stays scoped to the open conversation.
@@ -2076,6 +2024,13 @@ test("confirms message deletion in the app modal", async ({ page }) => {
   });
   const { channel } = (await channelResponse.json()) as {
     channel: { id: string; name: string };
+  };
+  const alternateResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: `after-delete-${Date.now()}`, kind: "public" },
+  });
+  expect(alternateResponse.ok()).toBe(true);
+  const { channel: alternate } = (await alternateResponse.json()) as {
+    channel: { name: string; route_id: string };
   };
   const body = `delete modal message ${Date.now()}`;
 
@@ -2113,6 +2068,11 @@ test("confirms message deletion in the app modal", async ({ page }) => {
   await expect(dialog).toBeHidden();
   await expect(page.getByText("This message was deleted.", { exact: true })).toBeVisible();
   await expect(page.getByText(body, { exact: true })).toBeHidden();
+  await page.getByRole("link", { name: `# ${alternate.name}`, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/${alternate.route_id}$`));
+  await expect(
+    page.getByRole("heading", { name: `#${alternate.name}`, exact: true }),
+  ).toBeVisible();
 });
 
 test("closes direct messages without deleting history", async ({ page }) => {
@@ -2287,10 +2247,12 @@ test("unread bar jumps to the new-message divider across repeated unread cycles"
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
   await expect(page.getByRole("separator", { name: "New messages" })).toHaveCount(0);
 
+  await settleScrollFrames(page);
   await scrollport.evaluate((el) => {
     el.scrollTop = 0;
     el.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
+  await expect(page.locator(".markdown").filter({ hasText: "read history 0" })).toBeVisible();
 
   const secondUnreadResponse = await page.request.post(
     `/api/channels/${channel.channel.id}/messages`,
@@ -2382,6 +2344,44 @@ test("remote messages keep a live channel pinned without unread UI", async ({ pa
     .poll(async () => (await currentChannelState()).last_read_seq || 0)
     .toBeGreaterThanOrEqual(33);
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
+
+  // A later message from this sender grows the same virtual group.
+  await settleScrollFrames(page);
+  const followup = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+    headers: { "X-ClickClack-User": senderID },
+    data: { body: "second live remote while bottom\n\n" + "More live content.\n\n".repeat(16) },
+  });
+  expect(followup.ok()).toBe(true);
+  await expect(page.getByText("second live remote while bottom", { exact: true })).toBeVisible();
+  await expectMessageNearComposer(page, "second live remote while bottom");
+  await expectScrollAtMessageEnd(page);
+  await expect.poll(async () => (await currentChannelState()).last_read_seq || 0).toBe(34);
+  await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
+
+  await pauseMessageFrames(page);
+  try {
+    for (const index of [3, 4]) {
+      const body = `paused live message ${index}`;
+      const posted = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+        headers: { "X-ClickClack-User": senderID },
+        data: { body: `${body}\n\n${"Growing the existing group.\n\n".repeat(16)}` },
+      });
+      expect(posted.ok()).toBe(true);
+      // Do not let one fetch containing both messages mask blocked ingestion.
+      await expect(page.getByText(body, { exact: true })).toBeVisible();
+    }
+    // A list refresh can arrive after the final append, before following settles.
+    const displayTitle = `${channel.channel.name} refreshed`;
+    const refreshed = await page.request.patch(`/api/channels/${channel.channel.id}`, {
+      data: { display_title: displayTitle },
+    });
+    expect(refreshed.ok()).toBe(true);
+    await expect(page.getByRole("heading", { name: `#${displayTitle}` })).toBeVisible();
+  } finally {
+    await page.evaluate(() => Reflect.get(window, "resumeMessageFrames")());
+  }
+  await expectScrollAtMessageEnd(page);
+  await expect.poll(async () => (await currentChannelState()).last_read_seq || 0).toBe(36);
 });
 
 test("channel preferences filter browser notifications outside the active conversation", async ({
@@ -2684,8 +2684,9 @@ test("channel preferences filter browser notifications outside the active conver
   );
   expect(failureChannelResponse.ok()).toBe(true);
   const failureChannel = (await failureChannelResponse.json()) as {
-    channel: { id: string };
+    channel: { id: string; name: string };
   };
+  await expect(page.getByRole("link", { name: `# ${failureChannel.channel.name}` })).toBeVisible();
   await page.route(`**/api/channels/${failureChannel.channel.id}/notification-settings`, (route) =>
     route.fulfill({
       status: 503,
@@ -3019,13 +3020,34 @@ test("automatic read receipts do not clear unseen paged history", async ({ page 
     return current;
   }
 
+  // Hold the canonical route's startup after the sidebar becomes usable.
+  // An early channel click must survive the older route finishing its boot.
+  let dmLoads = 0;
+  let releaseBoot!: () => void;
+  let bootHeld!: () => void;
+  const held = new Promise<void>((resolve) => (bootHeld = resolve));
+  const release = new Promise<void>((resolve) => (releaseBoot = resolve));
+  await page.route("**/api/dms?**", async (route) => {
+    if (++dmLoads === 2) {
+      bootHeld();
+      await release;
+    }
+    await route.continue();
+  });
   await page.goto("/app");
+  await held;
   await page.getByRole("link", { name: `# ${channel.channel.name}` }).click();
+  releaseBoot();
+  try {
+    await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
+  } finally {
+    await page.screenshot({ path: test.info().outputPath("startup-navigation.png") });
+  }
   await settleScrollFrames(page);
   const unreadJump = page.getByRole("button", { name: /Jump to \d+ new messages/ });
   await expect(unreadJump).toBeVisible();
   await page.getByLabel("Search messages").fill("latesttargetword");
-  await page.getByRole("button", { name: "Search" }).click();
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(
     page.getByLabel("Search results").locator(".search-result", { hasText: "latesttargetword" }),
   ).toBeVisible();
@@ -3346,14 +3368,7 @@ test("search paginates, and handles empty, failed, and stale responses", async (
 });
 
 test("message history pages older, newer, and search target windows", async ({ page }) => {
-  const workspacesResponse = await page.request.get("/api/workspaces");
-  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
-  const workspaceId = workspaces.workspaces[0].id;
-  const channelName = `history-paging-${Date.now()}`;
-  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
-    data: { name: channelName, kind: "public" },
-  });
-  const channel = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  const { workspace, channel, route } = await createGeneralChannel(page, "History Paging");
   const senderID = clickclack([
     "admin",
     "user",
@@ -3361,29 +3376,28 @@ test("message history pages older, newer, and search target windows", async ({ p
     "--data",
     "./data/e2e",
     "--workspace",
-    workspaceId,
+    workspace.id,
     "--name",
     "History Sender",
     "--email",
-    `${channelName}@example.com`,
+    `${channel.id}@example.com`,
   ]);
 
   for (let i = 0; i < 260; i++) {
-    const response = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+    const response = await page.request.post(`/api/channels/${channel.id}/messages`, {
       data: {
         body: `history-msg-${String(i).padStart(3, "0")} ${i === 10 ? "targetten " : ""}${"paged history row ".repeat(4)}`,
       },
     });
     expect(response.ok()).toBe(true);
   }
-  const readResponse = await page.request.post(`/api/channels/${channel.channel.id}/read`, {
+  const readResponse = await page.request.post(`/api/channels/${channel.id}/read`, {
     data: { seq: 260 },
   });
   expect(readResponse.ok()).toBe(true);
 
-  await page.goto("/app");
-  await page.getByRole("link", { name: `# ${channel.channel.name}` }).click();
-  await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
+  await page.goto(route);
+  await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
   await expect(page.locator(".markdown").filter({ hasText: "history-msg-259" })).toBeVisible();
   await expect(page.locator(".markdown").filter({ hasText: "history-msg-000" })).toHaveCount(0);
 
@@ -3395,10 +3409,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   let olderPageRequests = 0;
   await page.route("**/api/channels/**/messages**", async (route) => {
     const url = route.request().url();
-    if (
-      !url.includes(`/api/channels/${channel.channel.id}/messages`) ||
-      !url.includes("before_seq=")
-    ) {
+    if (!url.includes(`/api/channels/${channel.id}/messages`) || !url.includes("before_seq=")) {
       await route.continue();
       return;
     }
@@ -3408,7 +3419,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   });
   const olderPage = page.waitForResponse(
     (response) =>
-      response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
+      response.url().includes(`/api/channels/${channel.id}/messages`) &&
       response.url().includes("before_seq=") &&
       response.ok(),
   );
@@ -3450,7 +3461,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   ).toBeVisible();
   const aroundPage = page.waitForResponse(
     (response) =>
-      response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
+      response.url().includes(`/api/channels/${channel.id}/messages`) &&
       response.url().includes("around_seq=") &&
       response.ok(),
   );
@@ -3465,7 +3476,7 @@ test("message history pages older, newer, and search target windows", async ({ p
   const newerResponses: string[] = [];
   page.on("response", (response) => {
     if (
-      response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
+      response.url().includes(`/api/channels/${channel.id}/messages`) &&
       response.url().includes("after_seq=") &&
       response.ok()
     ) {
@@ -3473,13 +3484,10 @@ test("message history pages older, newer, and search target windows", async ({ p
     }
   });
 
-  const liveMessageResponse = await page.request.post(
-    `/api/channels/${channel.channel.id}/messages`,
-    {
-      headers: { "X-ClickClack-User": senderID },
-      data: { body: "live while reading old history" },
-    },
-  );
+  const liveMessageResponse = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    headers: { "X-ClickClack-User": senderID },
+    data: { body: "live while reading old history" },
+  });
   expect(liveMessageResponse.ok()).toBe(true);
   await page.waitForTimeout(300);
   expect(newerResponses).toHaveLength(0);
@@ -3490,7 +3498,7 @@ test("message history pages older, newer, and search target windows", async ({ p
 
   const newerPage = page.waitForResponse(
     (response) =>
-      response.url().includes(`/api/channels/${channel.channel.id}/messages`) &&
+      response.url().includes(`/api/channels/${channel.id}/messages`) &&
       response.url().includes("after_seq=") &&
       response.ok(),
   );

@@ -10,6 +10,11 @@ ClickClack ships as one Go binary that embeds the Svelte SPA and the SQL
 migrations. The deployment story is "drop a binary on a box, point it at a
 data directory, run it behind a reverse proxy."
 
+On interrupt or `SIGTERM`, the server stops accepting new HTTP connections and
+keeps its database open while active requests finish. Requests have up to five
+seconds to drain before their connections close and the process exits. A drain
+timeout is reported as an error.
+
 Public surfaces:
 
 - `clickclack.chat` — product website.
@@ -79,9 +84,9 @@ docker run --rm -p 8080:8080 -v clickclack-data:/app/data clickclack
 
 Stages:
 
-1. `node:24-alpine` — installs pnpm dependencies and runs `pnpm build`.
-2. `golang:1.26.6-alpine` — builds the Go binary, importing the SPA dist.
-3. `alpine:3.23` — runtime image, runs as the `clickclack` user, exposes
+1. `node:26-alpine` — installs pnpm dependencies and runs `pnpm build`.
+2. `golang:1.27.1-alpine` — builds the Go binary, importing the SPA dist.
+3. `alpine:3.24` — runtime image, runs as the `clickclack` user, exposes
    `8080`, mounts `/app/data` as a volume.
 
 Override the entrypoint command to run admin tasks:

@@ -14,7 +14,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   NODE_VERSION: "26"
-  PNPM_VERSION: "11.20.0"
+  PNPM_VERSION: "11.25.0"
 
 jobs:
   release:
@@ -41,7 +41,7 @@ jobs:
           cache: true
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: ${{ env.PNPM_VERSION }}
 
@@ -60,12 +60,26 @@ jobs:
       - name: Set web asset version
         run: echo "CLICKCLACK_WEB_VERSION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
 
+      - name: Prepare release notes
+        env:
+          RELEASE_TAG: ${{ inputs.tag_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const version = process.env.RELEASE_TAG.replace(/^v/, "");
+          const section = readFileSync("CHANGELOG.md", "utf8").split(/^## /m)
+            .find((section) => section.startsWith(`v${version} - `) || section.startsWith(`${version} - `));
+          const notes = section?.slice(section.indexOf("\n") + 1).trim();
+          if (!notes) throw new Error(`Missing changelog for ${process.env.RELEASE_TAG}`);
+          writeFileSync(`${process.env.RUNNER_TEMP}/clickclack-release-notes.md`, `${notes}\n`);
+          NODE
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
-          version: "v2.17.0"
-          args: release --clean
+          version: "v2.18.0"
+          args: release --clean --release-notes=${{ runner.temp }}/clickclack-release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -117,7 +131,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: ${{ env.PNPM_VERSION }}
 

@@ -55,7 +55,8 @@ test("marks channels and direct conversations read when they are opened", () => 
 
 test("marks the channel read after successfully navigating to a topic", () => {
   const setTopicFilter =
-    chatApp.match(/async function setTopicFilter[\s\S]*?\n  function pageToWindow/u)?.[0] ?? "";
+    chatApp.match(/async function setTopicFilter[\s\S]*?\n  function commitMessageWindow/u)?.[0] ??
+    "";
   const markActiveViewRead =
     chatApp.match(/function markActiveViewRead[\s\S]*?\n  function clearUnreadLocally/u)?.[0] ?? "";
 

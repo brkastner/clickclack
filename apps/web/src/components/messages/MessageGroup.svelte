@@ -4,7 +4,7 @@
   import { time } from "../../lib/format";
   import type { Message, Topic, Upload, User } from "../../lib/types";
   import type { MessageGroup as MessageGroupType } from "../../lib/chat/messages";
-  import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import type { MessageEdit, MessageEditController } from "../../lib/messageEditing.svelte";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import MessageRow from "./MessageRow.svelte";
 
@@ -40,7 +40,7 @@
     onDecisionPrefill?: (reply: string) => void;
     editController?: MessageEditController;
     editScope?: string;
-    onMessageEdited?: (message: Message) => void;
+    onMessageEdited?: (message: MessageEdit) => void;
     topics?: Topic[];
     onSelectTopic?: (topicID: string) => void;
   };

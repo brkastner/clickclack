@@ -31,6 +31,7 @@ const client = new ClickClackClient({
 
 const me = await client.me();
 await client.updateMe({ display_name: "Peter Steinberger", handle: "@steipete" });
+await client.updateMe({ appearance_preferences: { board_theme: "iris" } });
 const workspaces = await client.workspaces.list();
 const channels = await client.channels.list(workspaces[0].id);
 const message = await client.channels.sendMessage(channels[0].id, {
@@ -82,6 +83,29 @@ See [features/auth.md](features/auth.md).
 | `dms`         | `list`, `create`, `get`, `close`, `open`, `messages`, `sendMessage`, `markRead` |
 | `events`      | `list`, `publishEphemeral`, `subscribe` |
 
+## Thread history
+
+`Message` uses the generated API schema across channel history, DM history,
+and thread replies. Root messages expose optional `thread_state`; messages
+retain optional `attachments` typed as `Upload[]`.
+
+`threads.get` preserves the earliest-first default and supports bounded latest,
+before, after, and around windows. Sequences are local to the thread:
+
+```ts
+const latest = await client.threads.get(rootId, { latest: true, limit: 100 });
+if (latest.has_older) {
+  const older = await client.threads.get(rootId, { before_seq: latest.oldest_seq, limit: 50 });
+}
+const target = await client.threads.get(rootId, { around_seq: reply.thread_seq, limit: 100 });
+```
+
+Each response is a `ThreadPage`: the existing `Thread` shape (root, hydrated
+replies, and the full thread summary) plus required reply sequence bounds and
+`has_older` / `has_newer`. Existing values typed as `Thread` need no paging fields. See
+[threads](features/threads.md#ordering-and-pagination) for cursor validation and
+empty-page semantics.
+
 ## Realtime subscription
 
 Capture the current tail or drain a bounded backlog through the same client:
@@ -114,6 +138,12 @@ const socket = client.events.subscribe({
 `subscribe` returns a raw `WebSocket`. Call `.close()` to disconnect. See
 [features/realtime.md](features/realtime.md) for cursor recovery rules.
 
+Realtime payload keys are `unknown`: ephemeral publishers can supply arbitrary
+metadata, including a non-string `correlation_id`. Check a value's type before
+using it, for example `typeof event.payload.correlation_id === "string"`.
+Emitted events have object payloads; successful no-op mutation receipts can
+instead contain an empty event with a `null` payload.
+
 Bot tokens can publish typed, target-scoped agent progress:
 
 ```ts
@@ -143,9 +173,11 @@ targets to publish workspace-wide.
 export type { components, paths } from "./generated/openapi";
 ```
 
-Use the friendly hand-written types (`User`, `Workspace`, `Message`, etc.)
-for app code; reach into `components["schemas"]` only when you need the
-exact OpenAPI shape.
+Use the friendly exported types (`User`, `Workspace`, `Message`, etc.)
+for app code. Resource types reuse the generated OpenAPI schemas, so the
+protocol owns their fields and optionality. Client input helpers retain richer
+constraints, such as mutually exclusive message and event targets. Reach into
+`components["schemas"]` for other wire shapes.
 
 ## Bot accounts
 
@@ -239,6 +271,10 @@ const bot = new ClickClackBot({
 
 bot.start();
 ```
+
+`start()` reuses a connecting or open socket. `stop()` disconnects without
+calling `onClose`. Other closes of the active socket still call `onClose`;
+delayed closes from stopped connections do not notify a replacement.
 
 Persist `event.cursor` after each handled event and reconnect with
 `afterCursor` for exactly-once-ish processing. Ignore events whose

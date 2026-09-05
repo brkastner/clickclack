@@ -11,6 +11,8 @@ export type User = {
   created_at: string;
   notification_settings?: NotificationSettings;
   appearance_preferences?: AppearancePreferences;
+  // Reported only for the signed-in account, on /api/me.
+  password_enrolled?: boolean;
 };
 
 export type NotificationSettings = {
@@ -287,6 +289,16 @@ export type WorkspaceBotCommand = {
   bot: BotCommandBot;
   created_at: string;
   updated_at: string;
+};
+
+export type ThreadPage = {
+  root: Message;
+  replies: Message[];
+  thread_state: ThreadState;
+  oldest_seq: number;
+  newest_seq: number;
+  has_older: boolean;
+  has_newer: boolean;
 };
 
 export type ThreadState = {

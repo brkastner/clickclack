@@ -167,10 +167,6 @@
     activeFetchID++;
   });
 
-  function avatarVariant(member: WorkspaceMember): "" | "bot" {
-    return member.user.kind === "bot" ? "bot" : "";
-  }
-
   function formatHandle(handle: string): string {
     if (!handle) return "";
     return handle.startsWith("@") ? handle : `@${handle}`;
@@ -295,14 +291,16 @@
         >
           {#snippet children(member: WorkspaceMember, _index: number)}
             <div class="ws-members__row" style="height: {ROW_HEIGHT}px">
-              <Avatar
-                class="ws-members__avatar ws-members__avatar--{avatarVariant(member) || 'human'}"
-                id={member.user.id}
-                name={member.user.display_name || member.user.handle || "?"}
-                src={member.user.avatar_url}
-                lightSrc={member.user.avatar_url_light}
-                size={36}
-              />
+              <span aria-hidden="true">
+                <Avatar
+                  id={member.user.id}
+                  name={member.user.display_name?.trim() || member.user.handle?.trim() || member.user.id}
+                  src={member.user.avatar_url}
+                  lightSrc={member.user.avatar_url_light}
+                  size={36}
+                  class="ws-members__avatar ws-members__avatar--{member.user.kind === 'bot' ? 'bot' : 'human'}"
+                />
+              </span>
               <div class="ws-members__main">
                 <div class="ws-members__name">{member.user.display_name || "Unknown"}</div>
                 <div class="ws-members__meta">

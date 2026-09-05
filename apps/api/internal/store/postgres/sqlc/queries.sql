@@ -121,12 +121,29 @@ WHERE lower(i.email) = lower(sqlc.arg(email))
 ORDER BY u.created_at, u.id
 LIMIT 2;
 
+-- name: LockIdentityProviderSubject :exec
+SELECT pg_advisory_xact_lock(hashtext('clickclack.identity.' || sqlc.arg(provider)::text), hashtext(sqlc.arg(provider_subject)::text));
+
 -- name: GetUserByIdentityProviderSubject :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at
 FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.provider = sqlc.arg(provider)
-  AND i.provider_subject = sqlc.arg(provider_subject);
+  AND i.provider_subject = sqlc.arg(provider_subject)
+FOR UPDATE OF u;
+
+-- name: ListIdentitySyncUsers :many
+SELECT u.id, u.kind, u.display_name, u.handle, u.avatar_url,
+       i.provider, i.provider_subject, i.email
+FROM users u
+JOIN identities i ON i.user_id = u.id
+WHERE u.id IN (
+  SELECT candidate.user_id FROM identities candidate
+  WHERE candidate.provider = sqlc.arg(source)
+     OR lower(candidate.email) IN (SELECT jsonb_array_elements_text(CAST(sqlc.arg(emails) AS jsonb)))
+)
+ORDER BY u.id, i.id
+FOR UPDATE OF u, i;
 
 -- name: InsertHumanUser :exec
 INSERT INTO users (id, display_name, avatar_url, created_at)
@@ -162,7 +179,7 @@ WHERE id = sqlc.arg(id)
   AND avatar_url = '';
 
 -- Avatar URLs equal to the generated fallback remain fallback-equivalent.
--- name: SetProviderAvatarUnlessExplicit :execrows
+-- name: SetProviderAvatarUnlessExplicit :exec
 UPDATE users
 SET avatar_url = sqlc.arg(avatar_url),
     avatar_url_light = CASE WHEN sqlc.arg(avatar_url) = '' THEN '' ELSE avatar_url_light END
@@ -1044,6 +1061,11 @@ SELECT id, workspace_id, owner_id, client_nonce, filename, content_type, byte_si
 FROM uploads
 WHERE id = sqlc.arg(id);
 
+-- name: GetMessageIDByAuthorNonce :one
+SELECT id
+FROM messages
+WHERE author_id = sqlc.arg(author_id) AND client_nonce = sqlc.arg(client_nonce);
+
 -- name: GetUploadByOwnerNonce :one
 SELECT id, workspace_id, owner_id, client_nonce, filename, content_type, byte_size, width, height, duration_ms, storage_path, created_at
 FROM uploads
@@ -1482,7 +1504,7 @@ INSERT INTO pinned_messages (id, workspace_id, channel_id, message_id, pinned_by
 VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(message_id), sqlc.arg(pinned_by), sqlc.arg(created_at))
 ON CONFLICT(channel_id, message_id) DO NOTHING;
 
--- name: LockChannelForPinning :one
+-- name: LockChannelForUpdate :one
 SELECT id FROM channels WHERE id = sqlc.arg(channel_id) FOR UPDATE;
 
 -- name: LockMessageForPinning :one
@@ -1842,3 +1864,122 @@ LIMIT 1;
 SELECT workspace_id, COALESCE(channel_id, '') AS channel_id
 FROM topics
 WHERE id = sqlc.arg(topic_id) AND archived_at IS NULL;
+
+-- name: LatestWorkspaceEventCursor :one
+SELECT cursor FROM events WHERE workspace_id = sqlc.arg(workspace_id) ORDER BY cursor DESC LIMIT 1;
+
+-- name: LockEventWorkspace :one
+SELECT id FROM workspaces WHERE id = sqlc.arg(workspace_id) FOR KEY SHARE;
+
+-- name: LockEventRecipient :one
+SELECT id FROM users WHERE id = sqlc.arg(user_id) FOR KEY SHARE;
+
+-- name: LockWorkspaceEventLog :exec
+SELECT pg_advisory_xact_lock(hashtext('clickclack.events'), hashtext(sqlc.arg(workspace_id)::text));
+
+-- name: ListThreadReplyPage :many
+WITH descending_page AS (
+ SELECT candidate.* FROM messages candidate
+ WHERE candidate.thread_root_id = sqlc.arg(root_id) AND candidate.parent_message_id = sqlc.arg(root_id)
+   AND candidate.thread_seq > sqlc.arg(lower_seq) AND candidate.thread_seq <= sqlc.arg(upper_seq)
+   AND CAST(sqlc.arg(descending_order) AS INTEGER) = 1
+ ORDER BY candidate.thread_seq DESC LIMIT sqlc.arg(page_limit)
+), ascending_page AS (
+ SELECT candidate.* FROM messages candidate
+ WHERE candidate.thread_root_id = sqlc.arg(root_id) AND candidate.parent_message_id = sqlc.arg(root_id)
+   AND candidate.thread_seq > sqlc.arg(lower_seq) AND candidate.thread_seq <= sqlc.arg(upper_seq)
+   AND CAST(sqlc.arg(descending_order) AS INTEGER) = 0
+ ORDER BY candidate.thread_seq ASC LIMIT sqlc.arg(page_limit)
+), page AS (
+ SELECT * FROM descending_page UNION ALL SELECT * FROM ascending_page
+)
+SELECT m.*,
+ u.kind AS author_kind, u.owner_user_id AS author_owner_id, u.display_name AS author_name,
+ u.handle AS author_handle, u.avatar_url AS author_avatar, u.created_at AS author_created,
+ at.former_handle AS author_former_handle, at.deleted_at AS author_deleted,
+ qu.kind AS quote_kind, qu.owner_user_id AS quote_owner_id, qu.display_name AS quote_name,
+ qu.handle AS quote_handle, qu.avatar_url AS quote_avatar, qu.created_at AS quote_created,
+ qt.former_handle AS quote_former_handle, qt.deleted_at AS quote_deleted
+FROM page m
+JOIN users u ON u.id = m.author_id
+LEFT JOIN bot_tombstones at ON at.bot_user_id = u.id
+LEFT JOIN users qu ON qu.id = m.quoted_author_id
+LEFT JOIN bot_tombstones qt ON qt.bot_user_id = qu.id
+ORDER BY m.thread_seq ASC;
+
+-- name: ThreadReplyEdges :one
+SELECT EXISTS(SELECT 1 FROM messages older WHERE older.thread_root_id = sqlc.arg(root_id) AND older.parent_message_id = sqlc.arg(root_id) AND older.thread_seq < sqlc.arg(oldest_seq)) AS has_older,
+       EXISTS(SELECT 1 FROM messages newer WHERE newer.thread_root_id = sqlc.arg(root_id) AND newer.parent_message_id = sqlc.arg(root_id) AND newer.thread_seq > sqlc.arg(newest_seq)) AS has_newer;
+
+-- Password login accepts either an identity email or a handle. Both sides are
+-- folded because identity rows keep the casing they were created with, and two
+-- rows are read so an ambiguous identifier can be rejected rather than guessed.
+-- name: ListPasswordLoginsByIdentifier :many
+SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
+       COALESCE(p.password_hash, '') AS password_hash
+FROM users u
+LEFT JOIN user_passwords p ON p.user_id = u.id
+WHERE u.kind = 'human'
+  AND (
+    (u.handle <> '' AND lower(u.handle) = lower(sqlc.arg(identifier)))
+    OR EXISTS (
+      SELECT 1 FROM identities i
+      WHERE i.user_id = u.id AND lower(i.email) = lower(sqlc.arg(identifier))
+    )
+  )
+ORDER BY u.created_at, u.id
+LIMIT 2;
+
+-- name: UpsertUserPassword :exec
+INSERT INTO user_passwords (user_id, password_hash, updated_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(password_hash), sqlc.arg(updated_at))
+ON CONFLICT(user_id) DO UPDATE SET
+  password_hash = excluded.password_hash,
+  updated_at = excluded.updated_at;
+
+-- name: DeleteUserPassword :execrows
+DELETE FROM user_passwords
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: RevokeSessionByTokenHash :execrows
+UPDATE sessions
+SET revoked_at = sqlc.arg(revoked_at)
+WHERE token_hash = sqlc.arg(token_hash)
+  AND revoked_at IS NULL;
+
+-- name: GetUserPasswordHash :one
+SELECT password_hash
+FROM user_passwords
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: RevokeUserSessionsExceptTokenHash :execrows
+UPDATE sessions
+SET revoked_at = sqlc.arg(revoked_at)
+WHERE user_id = sqlc.arg(user_id)
+  AND revoked_at IS NULL
+  AND token_hash <> sqlc.arg(keep_token_hash);
+
+-- Hold the credential against rotation until the session commits.
+-- name: InsertSessionForVerifiedPassword :execrows
+INSERT INTO sessions (id, token, token_hash, user_id, created_at, expires_at)
+SELECT sqlc.arg(id), sqlc.arg(token), sqlc.arg(token_hash), p.user_id, sqlc.arg(created_at), sqlc.arg(expires_at)
+FROM user_passwords p
+WHERE p.user_id = sqlc.arg(user_id)
+  AND p.password_hash = sqlc.arg(verified_hash)
+FOR SHARE OF p;
+
+-- name: ReplaceVerifiedUserPassword :execrows
+UPDATE user_passwords
+SET password_hash = sqlc.arg(password_hash),
+    updated_at = sqlc.arg(updated_at)
+WHERE user_id = sqlc.arg(user_id)
+  AND password_hash = sqlc.arg(verified_hash);
+
+-- Keep logout from invalidating the caller before rotation commits.
+-- name: GetLiveUserSessionExpiry :one
+SELECT expires_at
+FROM sessions
+WHERE user_id = sqlc.arg(user_id)
+  AND token_hash = sqlc.arg(token_hash)
+  AND revoked_at IS NULL
+FOR UPDATE;

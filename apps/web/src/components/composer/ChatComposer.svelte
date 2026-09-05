@@ -20,7 +20,7 @@
     searchEmoji,
     type EmojiEntry,
   } from "../../lib/emoji";
-  import type { GifItem } from "../../lib/gifs";
+  import { gifLibrary } from "../../lib/gifs";
   import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
   import type { VoiceInputStatus, VoiceStatus } from "../../lib/voice";
   import VoiceVisualizer from "../VoiceVisualizer.svelte";
@@ -122,9 +122,6 @@
     voiceOutputMuted?: boolean;
     voiceAutoSend?: boolean;
     voiceStream?: MediaStream | null;
-    showGifPicker?: boolean;
-    gifQuery?: string;
-    filteredGifs?: GifItem[];
     slashCommands?: SlashCommand[];
     botCommands?: WorkspaceBotCommand[];
     mentionPeople?: User[];
@@ -142,14 +139,11 @@
     onClearReply?: () => void;
     onApplyMarkdownWrap?: (before: string, after?: string) => void;
     onAppendToComposer?: (snippet: string) => void;
-    onToggleGif?: () => void;
     onToggleVoice?: () => void;
     onToggleVoiceOutput?: () => void;
     onToggleVoiceAutoSend?: () => void;
     onEndVoice?: () => void;
     onSendVoice?: () => void;
-    onGifQuery?: (value: string) => void;
-    onPickGif?: (url: string, title: string) => void;
   };
 
   let {
@@ -173,9 +167,6 @@
     voiceOutputMuted = false,
     voiceAutoSend = true,
     voiceStream = null,
-    showGifPicker = false,
-    gifQuery = "",
-    filteredGifs = [],
     slashCommands = [],
     botCommands = [],
     mentionPeople = [],
@@ -193,14 +184,11 @@
     onClearReply = () => {},
     onApplyMarkdownWrap = () => {},
     onAppendToComposer = () => {},
-    onToggleGif = () => {},
     onToggleVoice = () => {},
     onToggleVoiceOutput = () => {},
     onToggleVoiceAutoSend = () => {},
     onEndVoice = () => {},
     onSendVoice = () => {},
-    onGifQuery = () => {},
-    onPickGif = () => {},
   }: Props = $props();
 
   let editorInstance: Editor | null = $state(null);
@@ -228,6 +216,15 @@
         ? "Emoji suggestions"
         : "Mention suggestions",
   );
+  let showGifPicker = $state(false);
+  let gifQuery = $state("");
+
+  const filteredGifs = $derived.by(() => {
+    const query = gifQuery.trim().toLowerCase();
+    return gifLibrary.filter((gif) =>
+      !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query)),
+    );
+  });
 
   const activeSuggestions = $derived.by(() => {
     if (!activeToken || tokenKey(activeToken) === dismissedToken) return [];
@@ -309,7 +306,7 @@
     return {
       update(next: EditorActionOptions) {
         const editable = !next.disabled;
-        if (mountedEditor.isEditable !== editable) mountedEditor.setEditable(editable);
+        if (mountedEditor.isEditable !== editable) mountedEditor.setEditable(editable, false);
         if (mountedEditor.getMarkdown() !== next.value) {
           mountedEditor.commands.setContent(next.value, {
             contentType: "markdown",
@@ -339,7 +336,7 @@
 
   $effect(() => {
     const removeFiles = desktop?.onPasteFiles("composer", (payload) => {
-      if (editorInstance?.isFocused && onPasteFiles) {
+      if (!disabled && !voiceMode && editorInstance?.isFocused && onPasteFiles) {
         onPasteFiles(browserFilesFromDesktop(payload));
       }
     });
@@ -530,6 +527,7 @@
   }
 
   function insertEmoji(entry: EmojiEntry) {
+    if (disabled || voiceMode) return;
     const editor = editorInstance;
     if (editor) editor.chain().focus().insertContent(entry.char).run();
     else onAppendToComposer(entry.char);
@@ -537,6 +535,7 @@
   }
 
   function pickSuggestion(suggestion: ComposerSuggestion) {
+    if (disabled || voiceMode) return;
     const editor = editorInstance;
     if (!editor || !activeToken) return;
     if (suggestion.emojiName) rememberRecentEmoji(suggestion.emojiName);
@@ -555,6 +554,7 @@
   }
 
   function insertPastedText(text: string, forcePlainText = false): boolean {
+    if (disabled || voiceMode) return false;
     const editor = editorInstance;
     if (!editor || !text) return false;
     const containsBlockMarkdown = /(^|\n)(#{1,6}\s|>\s|[-*+]\s|\d+\.\s|```[\w.+-]*\s*$)/m.test(text);
@@ -568,6 +568,7 @@
   }
 
   function handlePaste(event: ClipboardEvent): boolean {
+    if (disabled || voiceMode) return false;
     const files = event.clipboardData
       ? clipboardImageFiles(event.clipboardData.items)
       : [];
@@ -591,7 +592,7 @@
   }
 
   function handleFileDragOver(event: DragEvent) {
-    if (!onPasteFiles || !dragContainsFiles(event)) return;
+    if (disabled || voiceMode || !onPasteFiles || !dragContainsFiles(event)) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     fileDragActive = true;
@@ -605,7 +606,7 @@
 
   function handleFileDrop(event: DragEvent) {
     fileDragActive = false;
-    if (!onPasteFiles || !event.dataTransfer || event.dataTransfer.files.length === 0) return;
+    if (disabled || voiceMode || !onPasteFiles || !event.dataTransfer || event.dataTransfer.files.length === 0) return;
     event.preventDefault();
     onPasteFiles(Array.from(event.dataTransfer.files));
   }
@@ -643,8 +644,20 @@
     return true;
   }
 
+  function handleSuggestionEscape(event: KeyboardEvent): boolean {
+    if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return false;
+    if (event.key !== "Escape" || activeSuggestions.length === 0 || !activeToken) return false;
+    event.preventDefault();
+    dismissedToken = tokenKey(activeToken);
+    editorInstance?.commands.focus();
+    return true;
+  }
+
   function handleKeydown(event: KeyboardEvent): boolean {
-    if (activeSuggestions.length > 0) {
+    if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return false;
+    if (disabled || voiceMode) return false;
+    if (handleSuggestionEscape(event)) return true;
+    if (activeSuggestions.length > 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
         selectedSuggestionIndex = (selectedSuggestionIndex + 1) % activeSuggestions.length;
@@ -661,11 +674,6 @@
         pickSuggestion(activeSuggestions[selectedSuggestionIndex]);
         return true;
       }
-      if (event.key === "Escape" && activeToken) {
-        event.preventDefault();
-        dismissedToken = tokenKey(activeToken);
-        return true;
-      }
     }
     if (convertOpeningCodeFence(event)) return true;
     const clearAfterSend =
@@ -680,13 +688,15 @@
   }
 
   function submitFromComposer() {
-    if (disabled || submitDisabled) return;
+    if (disabled || voiceMode || submitDisabled) return;
     showEmojiPicker = false;
+    closeGifPicker();
     onSubmit();
     editorInstance?.commands.clearContent();
   }
 
   function applyFormat(action: ComposerFormatAction) {
+    if (disabled || voiceMode) return;
     const editor = editorInstance;
     if (!editor) {
       if (action === "bold") onApplyMarkdownWrap("**");
@@ -754,14 +764,31 @@
     }
   }
 
+  function closeGifPicker() {
+    if (!showGifPicker) return;
+    showGifPicker = false;
+    gifQuery = "";
+    editorInstance?.commands.focus();
+  }
+
+  function toggleGifPicker() {
+    if (disabled || voiceMode) return;
+    showEmojiPicker = false;
+    if (showGifPicker) closeGifPicker();
+    else showGifPicker = true;
+  }
+
   function pickGif(url: string, title: string) {
-    onPickGif(url, title);
+    if (disabled || voiceMode) return;
+    editorInstance?.chain().focus().setImage({ src: url, alt: title }).run();
+    closeGifPicker();
   }
 
   function toggleEmojiPicker() {
+    if (disabled || voiceMode) return;
     const next = !showEmojiPicker;
     /* The two pickers share the slot above the composer card. */
-    if (next && showGifPicker) onToggleGif();
+    if (next && showGifPicker) closeGifPicker();
     showEmojiPicker = next;
   }
 
@@ -772,14 +799,9 @@
   }
 </script>
 
-<form
-  class={formClass}
-  onsubmit={(event) => {
-    event.preventDefault();
-    submitFromComposer();
-  }}
->
-  {#if showEmojiPicker}
+<!-- svelte-ignore a11y_no_static_element_interactions (Owns Escape from suggestion controls.) -->
+<div class={formClass} data-handles-escape={activeSuggestions.length > 0 ? "" : undefined} onkeydown={handleSuggestionEscape}>
+  {#if showEmojiPicker && !disabled}
     <EmojiPickerPanel
       onPick={insertEmoji}
       onClose={() => {
@@ -788,12 +810,13 @@
       }}
     />
   {/if}
-  {#if showGifPicker}
+  {#if showToolbar && showGifPicker && !disabled}
     <GifPicker
       gifs={filteredGifs}
       query={gifQuery}
-      onQuery={onGifQuery}
+      onQuery={(query) => (gifQuery = query)}
       onPick={pickGif}
+      onClose={closeGifPicker}
     />
   {/if}
   {#if activeSuggestions.length > 0}
@@ -825,7 +848,8 @@
       {/each}
     </div>
   {/if}
-  <div
+  <form
+    onsubmit={(event) => { event.preventDefault(); submitFromComposer(); }}
     class="composer-card"
     class:is-dragging={fileDragActive}
     role="group"
@@ -963,9 +987,12 @@
             class:is-active={showGifPicker}
             title="GIF"
             aria-label="Add GIF"
+            aria-expanded={showGifPicker}
+            aria-haspopup="dialog"
+            {disabled}
             onclick={() => {
               showEmojiPicker = false;
-              onToggleGif();
+              toggleGifPicker();
             }}
           >GIF</button>
         {/if}
@@ -1001,7 +1028,7 @@
           {disabled}
           state={formatState}
           onFormat={applyFormat}
-          onToggleGif={onToggleGif}
+          onToggleGif={toggleGifPicker}
         />
       </div>
     {/if}
@@ -1163,5 +1190,5 @@
         </div>
       </section>
     {/if}
-  </div>
-</form>
+  </form>
+</div>

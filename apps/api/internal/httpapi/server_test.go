@@ -26,6 +26,7 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	postgresstore "github.com/openclaw/clickclack/apps/api/internal/store/postgres"
 	sqlitestore "github.com/openclaw/clickclack/apps/api/internal/store/sqlite"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 	"github.com/openclaw/clickclack/apps/api/internal/uploadstore"
 )
 
@@ -765,7 +766,7 @@ func TestCleanupPendingUploadObjectsDrainsBeyondDefaultBatch(t *testing.T) {
 			t.Fatal(err)
 		}
 		storagePaths = append(storagePaths, saved.Path)
-		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 			WorkspaceID: workspace.ID,
 			OwnerID:     ownerID,
 			Filename:    fmt.Sprintf("batch-%03d.txt", i),
@@ -937,7 +938,7 @@ func TestJSONBodiesAreSizeLimited(t *testing.T) {
 func TestHTTPDeadlinesSkipWebSocketUpgrades(t *testing.T) {
 	t.Parallel()
 	var normal deadlineRecorder
-	withHTTPDeadlines(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(&normal, httptest.NewRequest(http.MethodPost, "/api/me", nil))
+	withHTTPDeadlines(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(&normal, httptest.NewRequest(http.MethodPost, "/api/me", strings.NewReader("body")))
 	if len(normal.readDeadlines) != 2 || normal.readDeadlines[0].IsZero() || !normal.readDeadlines[1].IsZero() {
 		t.Fatalf("unexpected read deadlines: %#v", normal.readDeadlines)
 	}
@@ -1370,10 +1371,12 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 	if auth.User.DisplayName != "Auth User" || auth.Session.Token == "" {
 		t.Fatalf("unexpected auth payload: %#v", auth)
 	}
-	if _, err := st.UpdateNotificationSettings(ctx, store.UpdateNotificationSettingsInput{
-		UserID:          auth.User.ID,
-		PushoverEnabled: true,
-		PushoverUserKey: "abcdefghijklmnopqrstuvwxyz1234",
+	if _, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
+		UserID: auth.User.ID,
+		NotificationSettings: &store.NotificationSettings{
+			PushoverEnabled: true,
+			PushoverUserKey: "abcdefghijklmnopqrstuvwxyz1234",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1645,7 +1648,7 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		EventSubscription store.EventSubscription `json:"event_subscription"`
 	}](t, owner.ID, server.URL+"/api/workspaces/"+workspace.ID+"/event-subscriptions", map[string]any{
 		"app_installation_id": createdInstall.AppInstallation.ID,
-		"event_types":         []string{"message.created"},
+		"event_types":         []string{"message.created", "message.updated"},
 		"callback_url":        eventCallbackServer.URL,
 	})
 	eventSigningSecret = eventSubscription.EventSubscription.SigningSecret
@@ -1718,6 +1721,32 @@ func TestHTTPErrorPathsAndSPA(t *testing.T) {
 		nil,
 		http.StatusBadRequest,
 	)
+	// Attachments use the same signed callback owner as other message updates.
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "callback.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: filepath.Join(dataDir, "callback.txt")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	postJSONAsUser[map[string]any](t, owner.ID, server.URL+"/api/messages/"+topicMessage.Message.ID+"/attachments", map[string]string{"upload_id": upload.ID})
+	if eventPayload["event"].(map[string]any)["type"] != "message.updated" {
+		t.Fatalf("missing attachment callback: %#v", eventPayload)
+	}
+	// An idempotent attachment retry and a private DM attachment must not send callbacks.
+	postJSONAsUser[map[string]any](t, owner.ID, server.URL+"/api/messages/"+topicMessage.Message.ID+"/attachments", map[string]string{"upload_id": upload.ID})
+	privateDM, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{WorkspaceID: workspace.ID, UserID: owner.ID, MemberIDs: []string{createdBot.Bot.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateMessage, _, err := st.CreateDirectMessage(ctx, store.CreateDirectMessageInput{ConversationID: privateDM.ID, AuthorID: owner.ID, Body: "private attachment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	postJSONAsUser[map[string]any](t, owner.ID, server.URL+"/api/messages/"+privateMessage.ID+"/attachments", map[string]string{"upload_id": upload.ID})
+	attachmentDeliveries := getJSONAsUser[struct {
+		Deliveries []store.EventDeliveryAttempt `json:"deliveries"`
+	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/deliveries")
+	if len(attachmentDeliveries.Deliveries) != 4 || attachmentDeliveries.Deliveries[0].EventType != "message.updated" {
+		t.Fatalf("attachment callback count/privacy changed: %#v", attachmentDeliveries)
+	}
 	revokedSubscription := postJSONAsUser[struct {
 		EventSubscription store.EventSubscription `json:"event_subscription"`
 	}](t, owner.ID, server.URL+"/api/event-subscriptions/"+eventSubscription.EventSubscription.ID+"/revoke", map[string]any{})
@@ -2893,6 +2922,7 @@ func TestSessionCookiesDefaultSecureOutsideLocalDev(t *testing.T) {
 		options    Options
 		url        string
 		remoteAddr string
+		headers    http.Header
 		wantSecure bool
 	}{
 		{
@@ -2910,6 +2940,26 @@ func TestSessionCookiesDefaultSecureOutsideLocalDev(t *testing.T) {
 			wantSecure: false,
 		},
 		{
+			name:       "local_dev_ignores_untrusted_forwarded_https",
+			options:    Options{},
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			headers:    http.Header{"X-Forwarded-Proto": []string{"https"}},
+			wantSecure: false,
+		},
+		{
+			name:       "trusted_loopback_proxy_https",
+			options:    Options{},
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			headers: http.Header{
+				"X-Forwarded-Proto": []string{"https"},
+				"X-Forwarded-For":   []string{"127.0.0.2"},
+				"X-Real-IP":         []string{"127.0.0.2"},
+			},
+			wantSecure: true,
+		},
+		{
 			name:       "local_dev_http_public_host",
 			options:    Options{},
 			url:        "http://app.example.test/",
@@ -2923,16 +2973,38 @@ func TestSessionCookiesDefaultSecureOutsideLocalDev(t *testing.T) {
 			remoteAddr: "127.0.0.1:45678",
 			wantSecure: true,
 		},
+		{
+			name:       "openclaw_id_public_https",
+			options:    Options{OpenClawID: OpenClawIDConfig{PublicURL: "https://app.example.test"}},
+			url:        "http://127.0.0.1:8080/",
+			remoteAddr: "127.0.0.1:45678",
+			wantSecure: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
 			req.RemoteAddr = tc.remoteAddr
-			recorder := httptest.NewRecorder()
-			New(nil, nil, tc.options).setSessionCookie(recorder, req, session)
-			cookie := findCookie(recorder.Result().Cookies(), "cc_session")
-			if cookie == nil || cookie.Secure != tc.wantSecure {
-				t.Fatalf("expected secure=%v session cookie, got %#v", tc.wantSecure, cookie)
+			for name, values := range tc.headers {
+				for _, value := range values {
+					req.Header.Add(name, value)
+				}
+			}
+			server := New(nil, nil, tc.options)
+
+			sessionResponse := httptest.NewRecorder()
+			server.setSessionCookie(sessionResponse, req, session)
+			sessionCookie := findCookie(sessionResponse.Result().Cookies(), server.cookies.Session)
+
+			bindingResponse := httptest.NewRecorder()
+			if _, err := server.oauthBrowserBinding(bindingResponse, req); err != nil {
+				t.Fatal(err)
+			}
+			bindingCookie := findCookie(bindingResponse.Result().Cookies(), server.cookies.OAuthBinding)
+
+			if sessionCookie == nil || sessionCookie.Secure != tc.wantSecure ||
+				bindingCookie == nil || bindingCookie.Secure != tc.wantSecure {
+				t.Fatalf("expected secure=%v authentication cookies, got session=%#v binding=%#v", tc.wantSecure, sessionCookie, bindingCookie)
 			}
 		})
 	}
@@ -3161,7 +3233,7 @@ func TestUploadNonceReplaysWithoutConsumingStorageOrQuota(t *testing.T) {
 		t.Fatalf("unexpected missing nonce response: status=%s headers=%v", missingResponse.Status, missingResponse.Header)
 	}
 	for i := int64(1); i < store.UploadQuotaCountPerUserWorkspace; i++ {
-		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 			WorkspaceID: workspace.ID,
 			OwnerID:     owner.ID,
 			Filename:    fmt.Sprintf("quota-%d.txt", i),
@@ -3233,7 +3305,7 @@ func TestConcurrentUploadNonceReplayClaimsNonceBeforeQuota(t *testing.T) {
 	}
 	workspace := workspaces[0]
 	for i := int64(1); i < store.UploadQuotaCountPerUserWorkspace; i++ {
-		if _, err := st.CreateUpload(ctx, store.CreateUploadInput{
+		if _, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 			WorkspaceID: workspace.ID,
 			OwnerID:     owner.ID,
 			Filename:    fmt.Sprintf("quota-%d.txt", i),
@@ -3384,7 +3456,7 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     bot.ID,
 		Filename:    "dm.txt",
@@ -3464,7 +3536,7 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	writeUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     writeBot.ID,
 		Filename:    "retry.txt",
@@ -3487,7 +3559,7 @@ func TestBotGenericRoutesRequireDMScopeForDirectMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherDMUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{
+	otherDMUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{
 		WorkspaceID: workspace.ID,
 		OwnerID:     writeBot.ID,
 		Filename:    "other-dm.txt",
@@ -3727,9 +3799,28 @@ func TestUploadRejectsInvalidMultipartShapes(t *testing.T) {
 
 func TestQueryHelpersParseValues(t *testing.T) {
 	t.Parallel()
-	req := httptest.NewRequest(http.MethodGet, "/?limit=42", nil)
-	if got := queryInt(req, "limit", 10); got != 42 {
-		t.Fatalf("unexpected int query value %d", got)
+	for _, test := range []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{name: "missing", want: 10},
+		{name: "invalid", value: "bad", want: 10},
+		{name: "minimum database integer", value: "-2147483648", want: -2147483648},
+		{name: "negative", value: "-1", want: -1},
+		{name: "zero", value: "0", want: 0},
+		{name: "positive", value: "42", want: 42},
+		{name: "maximum database integer", value: "2147483647", want: 2147483647},
+		{name: "above database integer", value: "2147483648", want: 10},
+		{name: "below database integer", value: "-2147483649", want: 10},
+		{name: "maximum 64-bit integer", value: "9223372036854775807", want: 10},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/?limit="+test.value, nil)
+			if got := queryInt(req, "limit", 10); got != test.want {
+				t.Fatalf("queryInt() = %d, want %d", got, test.want)
+			}
+		})
 	}
 	server := New(nil, nil, Options{GitHubOAuth: GitHubOAuthConfig{PublicURL: "https://app.clickclack.test/path"}})
 	patterns := server.websocketOriginPatterns(httptest.NewRequest(http.MethodGet, "/", nil))
@@ -3738,6 +3829,44 @@ func TestQueryHelpersParseValues(t *testing.T) {
 	}
 	if patterns := New(nil, nil, Options{GitHubOAuth: GitHubOAuthConfig{PublicURL: "%"}}).websocketOriginPatterns(httptest.NewRequest(http.MethodGet, "/", nil)); patterns != nil {
 		t.Fatalf("unexpected invalid websocket origin patterns: %#v", patterns)
+	}
+}
+
+func TestPaginationLimitParsersUseDatabaseWidth(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{name: "missing"},
+		{name: "negative", value: "-1", wantErr: true},
+		{name: "zero", value: "0", wantErr: true},
+		{name: "positive", value: "1", want: 1},
+		{name: "maximum database integer", value: "2147483647", want: 2147483647},
+		{name: "above database integer", value: "2147483648", wantErr: true},
+		{name: "maximum 64-bit integer", value: "9223372036854775807", wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/?limit="+test.value, nil)
+
+			search, searchErr := parseSearchPageRequest(req, "usr_test")
+			if got := searchErr != nil; got != test.wantErr {
+				t.Fatalf("parseSearchPageRequest() error = %v, want error %v", searchErr, test.wantErr)
+			}
+			if searchErr == nil && search.Limit != test.want {
+				t.Fatalf("search limit = %d, want %d", search.Limit, test.want)
+			}
+
+			members, memberErr := parseWorkspaceMemberPageRequest(req)
+			if got := memberErr != nil; got != test.wantErr {
+				t.Fatalf("parseWorkspaceMemberPageRequest() error = %v, want error %v", memberErr, test.wantErr)
+			}
+			if memberErr == nil && members.Limit != test.want {
+				t.Fatalf("member limit = %d, want %d", members.Limit, test.want)
+			}
+		})
 	}
 }
 
@@ -3893,5 +4022,44 @@ func expectHTTPExactSeqs(t *testing.T, messages []store.Message, want ...int64) 
 		if message.ChannelSeq == nil || *message.ChannelSeq != want[i] {
 			t.Fatalf("message[%d] seq = %v, want %d: %#v", i, message.ChannelSeq, want[i], messages)
 		}
+	}
+}
+
+func TestHomeLinkEndpoint(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		options   Options
+		wantURL   string
+		wantLabel string
+	}{
+		{name: "defaults to the landing page", wantURL: "/", wantLabel: "cc"},
+		{name: "configured product link", options: Options{HomeLink: HomeLinkConfig{URL: "https://mfs.example.com/", Label: "MFS"}}, wantURL: "https://mfs.example.com/", wantLabel: "MFS"},
+		{name: "URL only", options: Options{HomeLink: HomeLinkConfig{URL: "/portal"}}, wantURL: "/portal", wantLabel: "cc"},
+		{name: "label only", options: Options{HomeLink: HomeLinkConfig{Label: "Portal"}}, wantURL: "/", wantLabel: "Portal"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.options.DisableDevAuth = true
+			server := httptest.NewServer(New(nil, nil, tc.options).Handler())
+			t.Cleanup(server.Close)
+			// Public: no cookie, no bearer token.
+			response, err := http.Get(server.URL + "/api/home-link")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", response.StatusCode)
+			}
+			var payload struct {
+				URL   string `json:"url"`
+				Label string `json:"label"`
+			}
+			if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.URL != tc.wantURL || payload.Label != tc.wantLabel {
+				t.Fatalf("got %+v, want url=%q label=%q", payload, tc.wantURL, tc.wantLabel)
+			}
+		})
 	}
 }

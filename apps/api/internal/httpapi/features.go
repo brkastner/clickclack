@@ -127,14 +127,14 @@ func parseSearchPageRequest(r *http.Request, userID string) (store.SearchPageReq
 	values := r.URL.Query()
 	limit := 0
 	if rawLimit := strings.TrimSpace(values.Get("limit")); rawLimit != "" {
-		parsed, err := strconv.Atoi(rawLimit)
+		parsed, err := strconv.ParseInt(rawLimit, 10, 32)
 		if err != nil {
 			return store.SearchPageRequest{}, fmt.Errorf("%w: limit must be an integer", store.ErrInvalidSearch)
 		}
 		if parsed <= 0 {
 			return store.SearchPageRequest{}, fmt.Errorf("%w: limit must be positive", store.ErrInvalidSearch)
 		}
-		limit = parsed
+		limit = int(parsed)
 	}
 	return store.SearchPageRequest{
 		WorkspaceID:          values.Get("workspace_id"),
@@ -599,7 +599,7 @@ func (s *Server) attachUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	event, err := s.store.AttachUpload(r.Context(), store.AttachUploadInput{MessageID: chi.URLParam(r, "message_id"), UploadID: body.UploadID, UserID: act.user.ID})
 	if err == nil && event.ID != "" {
-		s.hub.Publish(event)
+		s.publishEvent(r.Context(), event)
 	}
 	writeResult(w, map[string]any{"ok": true}, err)
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 )
@@ -21,9 +22,12 @@ type Config struct {
 	MetricsEnabled         bool     `json:"metrics_enabled"`
 	PublicURL              string   `json:"public_url"`
 	PublicAPIURL           string   `json:"public_api_url"`
+	HomeURL                string   `json:"home_url"`
+	HomeLabel              string   `json:"home_label"`
 	EmbedFrameAncestors    []string `json:"embed_frame_ancestors"`
 	CookieNamespace        string   `json:"cookie_namespace"`
 	DevBootstrap           bool     `json:"dev_bootstrap"`
+	PasswordAuthEnabled    bool     `json:"password_auth_enabled"`
 	GitHubClientID         string   `json:"github_client_id"`
 	GitHubClientSecret     string   `json:"github_client_secret"`
 	GitHubAllowedOrg       string   `json:"github_allowed_org"`
@@ -89,6 +93,12 @@ func Load(path string) (Config, error) {
 	if env := os.Getenv("CLICKCLACK_PUBLIC_API_URL"); env != "" {
 		cfg.PublicAPIURL = env
 	}
+	if env := os.Getenv("CLICKCLACK_HOME_URL"); env != "" {
+		cfg.HomeURL = env
+	}
+	if env := os.Getenv("CLICKCLACK_HOME_LABEL"); env != "" {
+		cfg.HomeLabel = env
+	}
 	if env := os.Getenv("CLICKCLACK_EMBED_FRAME_ANCESTORS"); env != "" {
 		cfg.EmbedFrameAncestors = ParseEmbedFrameAncestors(env)
 	}
@@ -101,6 +111,13 @@ func Load(path string) (Config, error) {
 			return Config{}, err
 		}
 		cfg.DevBootstrap = value
+	}
+	if env := os.Getenv("CLICKCLACK_PASSWORD_AUTH_ENABLED"); env != "" {
+		value, err := strconv.ParseBool(env)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.PasswordAuthEnabled = value
 	}
 	if env := os.Getenv("CLICKCLACK_GITHUB_CLIENT_ID"); env != "" {
 		cfg.GitHubClientID = env
@@ -205,6 +222,12 @@ func (c *Config) ValidateServe() error {
 	if _, err := authpolicy.NewCookieNames(namespace, publicURL, publicAPIURL); err != nil {
 		return fmt.Errorf("cookie policy: %w", err)
 	}
+	homeURL, homeLabel, err := normalizeHomeLink(c.HomeURL, c.HomeLabel)
+	if err != nil {
+		return err
+	}
+	c.HomeURL = homeURL
+	c.HomeLabel = homeLabel
 	c.PublicAPIURL = publicAPIURL
 	c.EmbedFrameAncestors = embedFrameAncestors
 	c.CookieNamespace = namespace
@@ -272,4 +295,37 @@ func validatePublicURLPair(publicURL, publicAPIURL string) error {
 		}
 	}
 	return nil
+}
+
+// MaxHomeLabelLength bounds the label rendered on the workspace rail's home
+// button; it is a short badge, not a title.
+const MaxHomeLabelLength = 32
+
+func normalizeHomeLink(rawURL, rawLabel string) (string, string, error) {
+	homeURL := strings.TrimSpace(rawURL)
+	// Browsers treat backslashes as slashes and strip tabs/newlines before
+	// parsing URLs. Reject them before trimming or parsing with net/url.
+	if strings.ContainsFunc(rawURL, func(r rune) bool { return r <= 0x1f || r == 0x7f || r == '\\' }) {
+		return "", "", errors.New("CLICKCLACK_HOME_URL must not contain control characters or backslashes")
+	}
+	if homeURL != "" {
+		parsed, err := url.Parse(homeURL)
+		if err != nil || parsed.User != nil {
+			return "", "", errors.New("CLICKCLACK_HOME_URL must be an absolute http(s) URL without credentials or a path starting with /")
+		}
+		if strings.HasPrefix(homeURL, "/") {
+			base := &url.URL{Scheme: "https", Host: "clickclack.invalid"}
+			resolved := base.ResolveReference(parsed)
+			if strings.HasPrefix(homeURL, "//") || resolved.Scheme != base.Scheme || resolved.Host != base.Host {
+				return "", "", errors.New("CLICKCLACK_HOME_URL path must stay on the deployment origin")
+			}
+		} else if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" {
+			return "", "", errors.New("CLICKCLACK_HOME_URL must be an absolute http(s) URL or a path starting with /")
+		}
+	}
+	homeLabel := strings.TrimSpace(rawLabel)
+	if utf8.RuneCountInString(homeLabel) > MaxHomeLabelLength {
+		return "", "", fmt.Errorf("CLICKCLACK_HOME_LABEL must be at most %d characters", MaxHomeLabelLength)
+	}
+	return homeURL, homeLabel, nil
 }

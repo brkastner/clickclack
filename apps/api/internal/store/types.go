@@ -152,6 +152,26 @@ var ErrWorkspaceOwnerRequired = errors.New("workspace owner permission required"
 // ID rather than guessing which account should receive access.
 var ErrAmbiguousUserEmail = errors.New("multiple users have this identity email")
 
+// ErrAmbiguousUserIdentifier is returned when a password login identifier
+// matches more than one account. Signing in would have to guess which account
+// the caller meant, so the lookup fails instead.
+var ErrAmbiguousUserIdentifier = errors.New("multiple users match this identifier")
+
+// ErrPasswordVerificationStale is returned when a password operation reaches
+// its commit and finds the stored hash is no longer the one it verified. The
+// expensive key derivation runs outside the transaction, so another change can
+// land in between; the write is refused rather than applied to a credential the
+// caller never proved.
+var ErrPasswordVerificationStale = errors.New("stored password changed while this request was verifying it")
+
+// ErrSessionRevoked is returned when a request that authenticated with a
+// session reaches its commit and finds that session is no longer live. A
+// password change that revoked it must not be overwritten by the request it
+// signed out.
+var ErrSessionRevoked = errors.New("this session is no longer valid")
+
+var ErrSessionExpired = errors.New("session expired")
+
 // ErrBotOwnerRequired is returned when a user-owned bot operation is attempted
 // by someone other than the bot owner.
 var ErrBotOwnerRequired = errors.New("only the bot owner can manage this bot")
@@ -246,11 +266,6 @@ type AppearancePreferencesPatch struct {
 	BotShelfOrder        *[]string                       `json:"bot_shelf_order,omitempty"`
 	BotShelfLimit        *int                            `json:"bot_shelf_limit,omitempty"`
 	PersonaHeroPositions *map[string]PersonaHeroPosition `json:"persona_hero_positions,omitempty"`
-}
-
-type UpdateAppearancePreferencesInput struct {
-	UserID string
-	Patch  AppearancePreferencesPatch
 }
 
 type ChannelNotificationInput struct {
@@ -365,6 +380,21 @@ type MessagePage struct {
 	NewestSeq int64     `json:"newest_seq"`
 	HasOlder  bool      `json:"has_older"`
 	HasNewer  bool      `json:"has_newer"`
+}
+
+type ThreadPageRequest struct {
+	MessagePageRequest
+	Latest bool
+}
+
+type ThreadPage struct {
+	Root        Message     `json:"root"`
+	Replies     []Message   `json:"replies"`
+	ThreadState ThreadState `json:"thread_state"`
+	OldestSeq   int64       `json:"oldest_seq"`
+	NewestSeq   int64       `json:"newest_seq"`
+	HasOlder    bool        `json:"has_older"`
+	HasNewer    bool        `json:"has_newer"`
 }
 
 type ThreadState struct {
@@ -856,15 +886,6 @@ type UpdateBotProfileInput struct {
 	AvatarURLLight *string
 }
 
-type UpdateUserProfileAndNotificationSettingsInput struct {
-	UserID               string
-	DisplayName          string
-	Handle               string
-	AvatarURL            string
-	AvatarURLLight       string
-	NotificationSettings *NotificationSettings
-}
-
 type UpdateCurrentUserInput struct {
 	UserID                string
 	DisplayName           *string
@@ -1164,6 +1185,29 @@ type Session struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
+// PasswordLogin carries the account a password identifier resolved to together
+// with its stored hash. PasswordHash is empty when the account exists but has
+// no password set, which callers must reject the same way they reject a wrong
+// password so the response does not disclose which accounts are enrolled.
+type PasswordLogin struct {
+	User         User
+	PasswordHash string
+}
+
+// ChangeUserPasswordInput describes one password rotation. VerifiedHash is the
+// stored hash the caller checked the current password against, and the store
+// commits nothing unless that is still the hash on file. KeepSessionToken is
+// the caller's own session token: the account's other sessions are revoked, and
+// the write is refused if that session has itself been revoked in the meantime.
+// An empty KeepSessionToken belongs to a caller the server cannot place in a
+// session, such as a trusted-proxy assertion, and revokes every session.
+type ChangeUserPasswordInput struct {
+	UserID           string
+	VerifiedHash     string
+	NewHash          string
+	KeepSessionToken string
+}
+
 const (
 	OAuthModeBrowser = "browser"
 	OAuthModeDesktop = "desktop"
@@ -1278,11 +1322,8 @@ type Store interface {
 	UpdateUserProfile(ctx context.Context, input UpdateUserProfileInput) (User, error)
 	UpdateBotProfile(ctx context.Context, input UpdateBotProfileInput) (User, error)
 	UpdateBotProfileWithEvents(ctx context.Context, input UpdateBotProfileInput) (User, []Event, error)
-	UpdateUserProfileAndNotificationSettings(ctx context.Context, input UpdateUserProfileAndNotificationSettingsInput) (User, error)
 	UpdateCurrentUser(ctx context.Context, input UpdateCurrentUserInput) (CurrentUserState, error)
-	UpdateNotificationSettings(ctx context.Context, input UpdateNotificationSettingsInput) (NotificationSettings, error)
 	GetAppearancePreferences(ctx context.Context, userID string) (*AppearancePreferences, error)
-	UpdateAppearancePreferences(ctx context.Context, input UpdateAppearancePreferencesInput) (*AppearancePreferences, error)
 	ListPushNotificationRecipients(ctx context.Context, messageID string, mentionedUserIDs []string) ([]PushNotificationRecipient, error)
 	UpsertChannelNotificationSettings(ctx context.Context, input ChannelNotificationInput) error
 	GetChannelNotificationPreference(ctx context.Context, channelID, userID string) (string, error)
@@ -1295,7 +1336,6 @@ type Store interface {
 	UpdateMemberModeration(ctx context.Context, input UpdateMemberModerationInput) (MemberModeration, Event, error)
 	UserHasNonGuestMembership(ctx context.Context, userID string) (bool, error)
 	UploadQuota(ctx context.Context, workspaceID, userID string) (UploadQuota, error)
-	CanCreateUpload(ctx context.Context, workspaceID, userID string, byteSize int64) error
 	ReserveUploadQuota(ctx context.Context, workspaceID, userID, nonce string, byteSize int64) (UploadQuotaReservation, error)
 	CreateReservedUpload(ctx context.Context, reservationID string, input CreateUploadInput) (Upload, error)
 	ReleaseUploadQuotaReservation(ctx context.Context, reservationID, userID string) error
@@ -1330,8 +1370,7 @@ type Store interface {
 	CreateMessage(ctx context.Context, input CreateMessageInput) (Message, Event, error)
 	UpdateMessage(ctx context.Context, input UpdateMessageInput) (Message, Event, error)
 	DeleteMessage(ctx context.Context, input DeleteMessageInput) (Message, []Event, error)
-	GetThread(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
-	GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (Message, []Message, ThreadState, error)
+	GetThreadPage(ctx context.Context, rootMessageID, userID string, req ThreadPageRequest) (ThreadPage, error)
 	CreateThreadReply(ctx context.Context, input CreateThreadReplyInput) (Message, ThreadState, []Event, error)
 	AddReaction(ctx context.Context, input CreateReactionInput) (Event, error)
 	RemoveReaction(ctx context.Context, input CreateReactionInput) (Event, error)
@@ -1341,7 +1380,6 @@ type Store interface {
 	LatestEventCursor(ctx context.Context, workspaceID, userID string) (string, error)
 	EventCursorExists(ctx context.Context, workspaceID, userID, cursor string) (bool, error)
 	ListEventsAfter(ctx context.Context, workspaceID, userID, cursor string, limit int) ([]Event, error)
-	CreateUpload(ctx context.Context, input CreateUploadInput) (Upload, error)
 	GetUpload(ctx context.Context, uploadID, userID string) (Upload, error)
 	GetUploadByNonce(ctx context.Context, ownerID, nonce string) (Upload, error)
 	UploadHasDirectMessageAttachment(ctx context.Context, uploadID string) (bool, error)
@@ -1363,9 +1401,17 @@ type Store interface {
 	GetOrCreateUserByEmail(ctx context.Context, provider, email, displayName string) (User, error)
 	CreateSession(ctx context.Context, userID string) (Session, error)
 	GetSessionUser(ctx context.Context, token string) (User, error)
+	RevokeSession(ctx context.Context, token string) error
+	GetPasswordLogin(ctx context.Context, identifier string) (PasswordLogin, error)
+	CreateSessionForVerifiedPassword(ctx context.Context, userID, verifiedHash string) (Session, error)
+	GetUserPasswordHash(ctx context.Context, userID string) (string, error)
+	SetUserPassword(ctx context.Context, userID, passwordHash string) error
+	ChangeUserPassword(ctx context.Context, input ChangeUserPasswordInput) (int64, error)
+	ClearUserPassword(ctx context.Context, userID string) error
 	CreateOAuthTransaction(ctx context.Context, transaction OAuthTransaction) error
 	ConsumeOAuthTransaction(ctx context.Context, stateHash, browserBindingHash string, now time.Time) (OAuthTransaction, error)
 	CreateDesktopOAuthGrant(ctx context.Context, grant DesktopOAuthGrant) error
 	ConsumeDesktopOAuthGrant(ctx context.Context, grantHash, desktopChallenge string, now time.Time) (Session, error)
 	GetBotTokenAuth(ctx context.Context, token string) (BotTokenAuth, error)
+	RecordBotTokenUse(ctx context.Context, tokenID string) error
 }

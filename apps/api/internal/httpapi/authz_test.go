@@ -426,7 +426,8 @@ func TestHTTPBotDeletionReleasesHandle(t *testing.T) {
 	}
 
 	hub := realtime.NewHub()
-	events, unsubscribe := hub.Subscribe(workspace.ID)
+	subscription, unsubscribe := hub.Subscribe(workspace.ID)
+	events := subscription.Events
 	t.Cleanup(unsubscribe)
 	server := httptest.NewServer(New(st, hub, Options{UploadDir: filepath.Join(t.TempDir(), "uploads")}).Handler())
 	t.Cleanup(server.Close)
@@ -1249,27 +1250,6 @@ func TestHTTPNotFoundPreservesAPIAndAssetBoundaries(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestListenAndServeStopsWithContext(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() {
-		done <- ListenAndServe(ctx, "127.0.0.1:0", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusNoContent)
-		}))
-	}()
-	time.Sleep(20 * time.Millisecond)
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("server did not stop")
 	}
 }
 

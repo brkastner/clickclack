@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/openclaw/clickclack/apps/api/internal/store"
+	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
 )
 
 func TestMessagePrivacyScalingPrivacyAndDMThreads(t *testing.T) {
@@ -184,14 +185,14 @@ func TestMessagePrivacyScalingPrivacyAndDMThreads(t *testing.T) {
 	if _, err := st.AddReaction(ctx, store.CreateReactionInput{MessageID: dmMessage.ID, UserID: workspaceOnly.ID, Emoji: "nope"}); err == nil {
 		t.Fatal("expected non-DM member to be blocked from reacting to a DM message")
 	}
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "dm.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/dm.txt"})
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "dm.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/dm.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.AttachUpload(ctx, store.AttachUploadInput{MessageID: dmMessage.ID, UploadID: upload.ID, UserID: workspaceOnly.ID}); err == nil {
 		t.Fatal("expected non-DM member to be blocked from attaching to a DM message")
 	}
-	privateUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "private.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/private.txt"})
+	privateUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "private.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/private.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +223,7 @@ func TestMessagePrivacyScalingPrivacyAndDMThreads(t *testing.T) {
 	if reply.DirectConversationID != dm.ID || reply.ChannelID != "" || state.ReplyCount != 1 || len(events) != 2 {
 		t.Fatalf("unexpected DM thread reply result: %#v %#v %#v", reply, state, events)
 	}
-	if _, _, _, err := st.GetThread(ctx, reply.ID, owner.ID, 10); err == nil {
+	if _, err := st.GetThreadPage(ctx, reply.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 		t.Fatal("expected nested thread root read to be blocked")
 	}
 	if _, _, _, err := st.CreateThreadReply(ctx, store.CreateThreadReplyInput{
@@ -265,14 +266,15 @@ func TestMessagePrivacyScalingPrivacyAndDMThreads(t *testing.T) {
 	if receipt.LastReadSeq != *quotedDM.ChannelSeq || len(readEvent.RecipientUserIDs) != 1 || readEvent.RecipientUserIDs[0] != owner.ID {
 		t.Fatalf("expected DM read to cap to root sequence and target the reader, got %#v %#v", receipt, readEvent)
 	}
-	_, replies, _, err := st.GetThread(ctx, dmMessage.ID, owner.ID, 10)
+	threadResult1, err := st.GetThreadPage(ctx, dmMessage.ID, owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}})
+	replies := threadResult1.Replies
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(replies) != 1 || replies[0].ID != reply.ID || replies[0].DirectConversationID != dm.ID {
 		t.Fatalf("unexpected DM thread replies: %#v", replies)
 	}
-	if _, _, _, err := st.GetThread(ctx, dmMessage.ID, workspaceOnly.ID, 10); err == nil {
+	if _, err := st.GetThreadPage(ctx, dmMessage.ID, workspaceOnly.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 		t.Fatal("expected non-DM member to be blocked from DM thread")
 	}
 
@@ -331,7 +333,7 @@ func TestDeletedMessageAttachmentsAreHidden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	channelUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "channel.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/channel.txt"})
+	channelUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "channel.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/channel.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +371,7 @@ func TestDeletedMessageAttachmentsAreHidden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dmUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "dm.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/dm.txt"})
+	dmUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "dm.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/dm.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,14 +478,14 @@ func TestMessagePrivacyScalingChannelAndUploadVisibilityCoverage(t *testing.T) {
 	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: owner.ID, Body: "bad nonce", Nonce: strings.Repeat("x", 129)}); err == nil {
 		t.Fatal("expected overlong message nonce to be blocked")
 	}
-	if _, _, _, err := st.GetThread(ctx, "msg_missing", owner.ID, 10); err == nil {
+	if _, err := st.GetThreadPage(ctx, "msg_missing", owner.ID, store.ThreadPageRequest{MessagePageRequest: store.MessagePageRequest{Limit: 10}}); err == nil {
 		t.Fatal("expected missing thread read to fail")
 	}
 	memberMessage, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channel.ID, AuthorID: member.ID, Body: "member upload message"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	upload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "shared.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/shared.txt"})
+	upload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: owner.ID, Filename: "shared.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/shared.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,7 +515,7 @@ func TestMessagePrivacyScalingChannelAndUploadVisibilityCoverage(t *testing.T) {
 	if _, err := st.AttachUpload(ctx, store.AttachUploadInput{MessageID: memberMessage.ID, UploadID: upload.ID, UserID: member.ID}); err != nil {
 		t.Fatal(err)
 	}
-	demotedUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: member.ID, Filename: "demoted.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/demoted.txt"})
+	demotedUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace.ID, OwnerID: member.ID, Filename: "demoted.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/demoted.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +533,7 @@ func TestMessagePrivacyScalingChannelAndUploadVisibilityCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherUpload, err := st.CreateUpload(ctx, store.CreateUploadInput{WorkspaceID: otherWorkspace.ID, OwnerID: owner.ID, Filename: "other.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/other.txt"})
+	otherUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: otherWorkspace.ID, OwnerID: owner.ID, Filename: "other.txt", ContentType: "text/plain", ByteSize: 1, StoragePath: "/tmp/other.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}

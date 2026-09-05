@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { ThreadController } from "../../lib/thread.svelte";
   import { onDestroy, onMount, tick } from "svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
+  import KeystrokeMark from "../KeystrokeMark.svelte";
   import ThreadPanel from "../thread/ThreadPanel.svelte";
   import {
     markdownImageViewerItems,
@@ -12,20 +14,20 @@
   import { channelDisplayTitle } from "../../lib/chat/channels";
   import { dmTitle } from "../../lib/chat/people";
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
-  import { listWorkspaceMembersPage } from "../../lib/workspace-members";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "../../lib/workspace-members";
   import {
     MessageEditController,
+    type MessageEdit,
     type MessageEditSession,
   } from "../../lib/messageEditing.svelte";
   import { ReactionController } from "../../lib/reactions.svelte";
-  import { connectRealtime, type RealtimeConnection } from "../../lib/realtime.svelte";
+  import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
     Channel,
     DirectConversation,
     Message,
     RealtimeEvent,
     RouteTarget,
-    ThreadState,
     Upload,
     User,
   } from "../../lib/types";
@@ -33,12 +35,6 @@
   type Props = {
     workspaceRouteID: string;
     messageRouteID: string;
-  };
-
-  type ReplySubmission = {
-    body: string;
-    nonce: string;
-    quotedMessageID?: string;
   };
 
   type ViewState = "loading" | "ready" | "auth" | "forbidden" | "not-found" | "error";
@@ -51,25 +47,30 @@
   const reactionController = new ReactionController(() => user?.id || "");
   const editController = new MessageEditController(revealEditSession);
   let route = $state<RouteTarget | null>(null);
-  let root = $state<Message | null>(null);
-  let replies = $state<Message[]>([]);
-  let threadState = $state<ThreadState | null>(null);
+  const thread = new ThreadController(
+    () => `${workspaceRouteID}:${messageRouteID}`,
+    reconcileThread,
+  );
+  const root = $derived(thread.root);
+  const replies = $derived(thread.replies);
+  const threadState = $derived(thread.state);
   let directConversation = $state<DirectConversation | null>(null);
   let parentChannel = $state<Channel | null>(null);
   let parentLabel = $state("Thread");
-  let replyBody = $state("");
-  let replyTarget = $state<Message | null>(null);
+  const replyBody = $derived(thread.draft?.body ?? "");
+  const replyTarget = $derived(thread.draft?.quote ?? null);
   let replyInput = $state<ComposerInputElement | null>(null);
-  let replyError = $state("");
+  const replyError = $derived(thread.draft?.error || thread.error || realtimeError);
   let realtimeError = $state("");
-  let replySending = $state(false);
+  const replySending = $derived(thread.draft?.sending ?? false);
   let selectedImage = $state<{ items: ImageViewerItem[]; initialIndex: number } | null>(null);
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
-  let failedSubmission: ReplySubmission | null = null;
   let workspaceMemberUsers = $state<User[]>([]);
   let memberLoadSerial = 0;
+  let memberLoadAbort: AbortController | null = null;
+  let memberLoadError = $state("");
 
   const replyDisabled = $derived(
     replySending || Boolean(directConversation && !directConversation.can_send),
@@ -93,65 +94,66 @@
 
   async function loadWorkspaceMembers(workspaceID: string) {
     const serial = ++memberLoadSerial;
+    memberLoadAbort?.abort();
+    const controller = new AbortController();
+    memberLoadAbort = controller;
+    memberLoadError = "";
     workspaceMemberUsers = [];
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({ workspaceID, cursor, limit: 100 });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
-      if (serial === memberLoadSerial) workspaceMemberUsers = members;
-    } catch {
-      if (serial === memberLoadSerial) workspaceMemberUsers = [];
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
+      if (serial === memberLoadSerial) workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === memberLoadSerial) {
+        workspaceMemberUsers = [];
+        memberLoadError = memberLoadErrorMessage(error);
+      }
     }
   }
 
-  function newNonce(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID().replace(/-/g, "");
-    }
-    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  }
 
   async function revealEditSession(scope: string, session: MessageEditSession) {
-    if (scope !== route?.target_id) return;
+    const selection = thread.selection;
+    const current = () => scope === route?.target_id && thread.isCurrent(selection) &&
+      editController.session(scope)?.generation === session.generation;
+    if (!current()) return;
+    if (!await thread.target({ messageID: session.messageID, threadSeq: session.threadSeq }, current)) return;
     for (let attempt = 0; attempt < 4; attempt += 1) {
       await tick();
+      if (!current()) return;
       const editor = document
         .querySelector('[aria-label="Embedded thread"]')
         ?.querySelector(`[data-message-id="${CSS.escape(session.messageID)}"]`)
         ?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit message"]');
       if (!editor) continue;
-      editor.focus();
+      editor.focus({ preventScroll: true });
       return;
     }
   }
 
-  function applyEditedMessage(updated: Message) {
-    if (root?.id === updated.id) root = { ...root, ...updated };
-    replies = replies.map((reply) =>
-      reply.id === updated.id ? { ...reply, ...updated } : reply,
-    );
+  function applyEditedMessage(updated: MessageEdit) {
+    thread.updateMessage(updated);
   }
 
   function clearThread() {
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     socket = null;
     route = null;
-    root = null;
+    thread.close();
     reactionController.clear();
     editController.clear();
-    replies = [];
-    threadState = null;
     directConversation = null;
     parentChannel = null;
-    replyTarget = null;
+    selectedImage = null;
   }
 
   function handleLoadError(error: unknown) {
     clearThread();
+    if (error instanceof WorkspaceUnavailableError) {
+      viewState = "forbidden";
+      return;
+    }
     if (error instanceof APIError) {
       if (error.status === 401) {
         viewState = "auth";
@@ -211,21 +213,16 @@
       if (resolved.route.target_type !== "thread") {
         throw new APIError(404, "Thread route not found");
       }
-      const [thread] = await Promise.all([
-        api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(
-          `/api/messages/${encodeURIComponent(resolved.route.target_id)}/thread`,
-        ),
+      if (serial !== loadSerial) return;
+      thread.select(resolved.route.target_id);
+      const [loaded] = await Promise.all([
+        thread.open(() => serial === loadSerial),
         loadParent(resolved.route, me.user),
       ]);
-      if (serial !== loadSerial) return;
+      if (!loaded || serial !== loadSerial || !thread.root) return;
       user = me.user;
       route = resolved.route;
       void loadWorkspaceMembers(resolved.route.workspace_id);
-      root = { ...thread.root, thread_state: thread.thread_state };
-      replies = thread.replies;
-      reactionController.seedMessages([root, ...replies]);
-      editController.reconcile(resolved.route.target_id, [root, ...replies]);
-      threadState = thread.thread_state;
       viewState = "ready";
       connectSocket(resolved.route.workspace_id);
     } catch (error) {
@@ -235,34 +232,11 @@
     }
   }
 
-  async function refreshThread(isCurrent: () => boolean = () => true) {
-    if (!root || viewState !== "ready") return;
-    const rootID = root.id;
-    try {
-      const thread = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(
-        `/api/messages/${encodeURIComponent(rootID)}/thread`,
-      );
-      if (!isCurrent() || !root || root.id !== rootID || viewState !== "ready") return;
-      root = { ...thread.root, thread_state: thread.thread_state };
-      replies = thread.replies;
-      reactionController.seedMessages([root, ...replies]);
-      editController.reconcile(route?.target_id || root.id, [root, ...replies]);
-      threadState = thread.thread_state;
-      if (
-        replyTarget &&
-        replyTarget.id !== root.id &&
-        !replies.some((reply) => reply.id === replyTarget?.id)
-      ) {
-        replyTarget = null;
-      }
-    } catch (error) {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      throw error;
-    }
+  function reconcileThread(freshMessages: Message[] = []) {
+    if (!root) return;
+    reactionController.seedMessages(freshMessages);
+    editController.reconcile(route?.target_id || root.id, [root, ...replies]);
   }
-
   function eventBelongsToThread(event: RealtimeEvent): boolean {
     if (!root) return false;
     if (event.payload.root_message_id) return event.payload.root_message_id === root.id;
@@ -278,27 +252,16 @@
       reactionController.applyEvent(event);
       return;
     }
-    if (
-      eventBelongsToThread(event) &&
-      (event.type === "thread.reply_created" ||
-        event.type === "message.updated" ||
-        event.type === "message.deleted")
-    ) {
-      if (
-        event.type === "thread.reply_created" &&
-        event.payload.message_id &&
-        replies.some((reply) => reply.id === event.payload.message_id)
-      ) {
-        return;
-      }
-      await refreshThread(isCurrent);
-    }
+    await thread.handleEvent(event, isCurrent);
   }
 
   function reportRealtimeError(error: unknown) {
     if (viewState === "ready") {
+      if (error instanceof WorkspaceUnavailableError || (error instanceof APIError && [401, 403, 404].includes(error.status))) {
+        handleLoadError(error);
+        return;
+      }
       realtimeError = readableAPIError(error, "Could not process a realtime update.");
-      replyError = realtimeError;
     }
   }
 
@@ -308,9 +271,11 @@
       workspaceID,
       onEvent: handleRealtimeEvent,
       onOpen: async (isCurrent, authoritativeResync) => {
-        if (authoritativeResync) await refreshThread(isCurrent);
+        if (authoritativeResync) {
+          reactionController.clear();
+          await thread.refresh(isCurrent);
+        }
         if (!isCurrent()) return;
-        if (replyError === realtimeError) replyError = "";
         realtimeError = "";
       },
       onError: reportRealtimeError,
@@ -318,51 +283,19 @@
   }
 
   async function sendReply() {
-    const body = replyBody.trim();
-    if (!body || !root || replyDisabled) return;
-    const threadRootID = root.id;
-    const quote = replyTarget;
-    const quotedMessageID = quote?.id;
-    const submission =
-      failedSubmission?.body === body && failedSubmission.quotedMessageID === quotedMessageID
-        ? failedSubmission
-        : { body, nonce: newNonce(), quotedMessageID };
-    failedSubmission = null;
-    replyError = "";
-    replySending = true;
-    const payload: Record<string, string> = { body, nonce: submission.nonce };
-    if (quotedMessageID) payload.quoted_message_id = quotedMessageID;
-    try {
-      const data = await api<{ message: Message; thread_state: ThreadState }>(
-        `/api/messages/${encodeURIComponent(threadRootID)}/thread/replies`,
-        { method: "POST", body: JSON.stringify(payload) },
-      );
-      if (!root || root.id !== threadRootID) return;
-      if (!replies.some((reply) => reply.id === data.message.id)) {
-        replies = [...replies, data.message];
-      }
-      threadState = data.thread_state;
-      if (replyBody.trim() === body) replyBody = "";
-      if (quotedMessageID && replyTarget?.id === quotedMessageID) replyTarget = null;
-    } catch (error) {
-      if (error instanceof APIError && error.status === 401) {
-        handleLoadError(error);
-        return;
-      }
-      failedSubmission = submission;
-      replyError = readableAPIError(error, "Could not post the reply.");
-    } finally {
-      replySending = false;
-    }
+    if (replyDisabled) return;
+    await thread.send((error) => {
+      if (error instanceof APIError && error.status === 401) handleLoadError(error);
+    });
   }
 
   function handleReplyKeydown(event: KeyboardEvent) {
     if (event.key === "Escape" && replyTarget) {
       event.preventDefault();
-      replyTarget = null;
+      thread.setQuote(null);
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendReply();
     }
@@ -370,20 +303,16 @@
 
   function setReplyTarget(message: Message) {
     if (replySending) return;
-    replyTarget = message;
+    thread.setQuote(message);
     void tick().then(() => replyInput?.focus());
   }
 
   function clearReplyTarget() {
-    if (!replySending) replyTarget = null;
+    if (!replySending) thread.setQuote(null);
   }
 
   function jumpToQuote(message: Message) {
-    if (!message.quoted_message_id) return;
-    const target = document.querySelector<HTMLElement>(
-      `[data-message-id="${CSS.escape(message.quoted_message_id)}"]`,
-    );
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (message.quoted_message_id) void thread.target({ messageID: message.quoted_message_id });
   }
 
   function openImageViewer(url: string, title: string, attachments: Upload[] = []) {
@@ -396,7 +325,8 @@
 
   function handleInlineImagePointerUp(event: PointerEvent) {
     const target = event.target;
-    if (!(target instanceof HTMLImageElement)) return;
+    if (!(target instanceof HTMLImageElement) || !target.closest(".markdown")) return;
+    event.preventDefault();
     const url = markdownImageViewerURL(target);
     const items = markdownImageViewerItems(target);
     selectedImage = {
@@ -422,6 +352,8 @@
 
   onDestroy(() => {
     loadSerial += 1;
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     window.removeEventListener("focus", retryAuthOnFocus);
     document.removeEventListener("visibilitychange", retryAuthOnFocus);
@@ -437,6 +369,7 @@
   <main class="embed-shell">
     <section class="thread open" aria-label="Embedded thread">
       <ThreadPanel
+        history={thread}
         {root}
         {replies}
         channel={parentChannel || undefined}
@@ -454,10 +387,10 @@
         editScope={route.target_id}
         onMessageEdited={applyEditedMessage}
         reactionsDisabled={Boolean(directConversation && !directConversation.can_send)}
-        onReplyBody={(value) => (replyBody = value)}
+        onReplyBody={(value) => thread.updateDraft(value)}
         onSubmitReply={() => void sendReply()}
         onReplyKeydown={handleReplyKeydown}
-        onReplyFocus={() => (replyError = "")}
+        onReplyFocus={() => {}}
         onReplyInputRef={(node) => (replyInput = node)}
         onSetReplyTarget={(message) => setReplyTarget(message)}
         onClearReply={clearReplyTarget}
@@ -468,12 +401,13 @@
         onOpenArtifact={openArtifact}
       />
     </section>
+    {#if memberLoadError}<p class="embed-notice" role="status">Mentions unavailable: {memberLoadError}</p>{/if}
     {#if replyError}<p class="embed-notice" role="status">{replyError}</p>{/if}
   </main>
 {:else if viewState === "auth"}
   <main class="embed-state-shell">
     <section class="embed-state-card" aria-label="Sign in">
-      <div class="embed-mark" aria-hidden="true">cc</div>
+      <KeystrokeMark class="embed-mark" size={42} />
       <h1>Sign in to ClickClack</h1>
       <p>Open ClickClack in a new tab, sign in, then return here. This panel will reconnect automatically.</p>
       <a class="embed-action" href="/app" target="_blank" rel="noopener">Open ClickClack</a>
@@ -518,6 +452,8 @@
 <style>
   .embed-shell {
     position: relative;
+    display: flex;
+    flex-direction: column;
     height: 100vh;
     height: 100dvh;
     min-width: 0;
@@ -529,7 +465,8 @@
     position: relative;
     inset: auto;
     z-index: auto;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     width: 100%;
     max-width: none;
     border-left: 0;
@@ -550,12 +487,8 @@
   }
 
   .embed-notice {
-    position: absolute;
-    right: 14px;
-    bottom: 78px;
-    left: 14px;
-    z-index: 2;
-    margin: 0;
+    flex: none;
+    margin: 0 14px 6px;
     padding: 9px 11px;
     border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line));
     border-radius: var(--radius);
@@ -605,16 +538,12 @@
     line-height: 1.5;
   }
 
-  .embed-mark {
-    display: grid;
-    width: 42px;
-    height: 42px;
+  /* :global reaches the mark component's root, which Svelte does not scope. */
+  .embed-state-card :global(.embed-mark) {
     margin: 0 auto 2px;
-    place-items: center;
-    border-radius: 11px;
-    background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-    color: var(--brand-contrast);
-    font-weight: 800;
+    box-shadow:
+      inset 0 0 0 1px rgba(190, 210, 255, 0.13),
+      var(--key-edge);
   }
 
   .embed-action {

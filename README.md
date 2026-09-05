@@ -64,7 +64,7 @@ The complete documentation is at **[docs.clickclack.chat](https://docs.clickclac
 
 ## Development
 
-Source builds require Go 1.26.6, Node.js 24 or newer, and pnpm 11.20.0.
+Source builds use Go 1.27.1, Node.js 24 or newer, and pnpm 11.25.0. The module minimum remains Go 1.26.6 so managed CodeQL can build with its preinstalled compiler; the `toolchain` directive selects Go 1.27.1 for normal builds.
 
 ```sh
 pnpm install --frozen-lockfile

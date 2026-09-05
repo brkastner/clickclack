@@ -1,10 +1,16 @@
 <script lang="ts">
+  import { DEFAULT_HOME_LINK, homeLinkTitle, isDefaultHomeLabel, type HomeLink } from "../../lib/home-link";
+  import { desktop } from "../../lib/desktop";
+  import KeystrokeMark from "../KeystrokeMark.svelte";
   import { tick } from "svelte";
   import { apiResourceURL } from "../../lib/api";
   import { workspaceInitial } from "../../lib/chat/people";
   import type { Workspace } from "../../lib/types";
 
   type Props = {
+    homeLink?: HomeLink;
+    workspaceCreatePending?: boolean;
+    workspaceCreateError?: string;
     workspaces: Workspace[];
     selectedWorkspaceID: string;
     createWorkspaceName: string;
@@ -20,6 +26,9 @@
   };
 
   let {
+    homeLink = DEFAULT_HOME_LINK,
+    workspaceCreatePending = false,
+    workspaceCreateError = "",
     workspaces,
     selectedWorkspaceID,
     createWorkspaceName,
@@ -127,6 +136,11 @@
       </div>
 
       <div class="workspace-switcher-actions">
+        <a class="workspace-switcher-item workspace-home" role="menuitem" aria-label={homeLinkTitle(homeLink)}
+          href={desktop?.integratedTitleBar && homeLink.url === "/" ? "/app" : homeLink.url}
+          title={homeLinkTitle(homeLink)} onclick={() => (open = false)}>
+          {#if isDefaultHomeLabel(homeLink.label)}<KeystrokeMark size={24} />{:else}<span>{homeLink.label}</span>{/if}
+        </a>
         <button
           type="button"
           role="menuitem"
@@ -148,12 +162,14 @@
         >
           <input
             bind:this={createInput}
+            disabled={workspaceCreatePending}
             value={createWorkspaceName}
             placeholder="Workspace name"
             aria-label="Workspace name"
             oninput={(event) => onWorkspaceName(event.currentTarget.value)}
           />
-          <button type="submit">Create</button>
+          <button type="submit" disabled={workspaceCreatePending || !createWorkspaceName.trim()}>{workspaceCreatePending ? "Creating…" : "Create"}</button>
+          {#if workspaceCreateError}<p class="profile-status" role="alert">{workspaceCreateError}</p>{/if}
         </form>
       {/if}
     </div>

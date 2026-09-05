@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -237,21 +236,6 @@ func (s *Store) UpdateUserProfile(ctx context.Context, input store.UpdateUserPro
 		Handle:         &input.Handle,
 		AvatarURL:      &input.AvatarURL,
 		AvatarURLLight: &input.AvatarURLLight,
-	})
-	if err != nil {
-		return store.User{}, err
-	}
-	return result.User, nil
-}
-
-func (s *Store) UpdateUserProfileAndNotificationSettings(ctx context.Context, input store.UpdateUserProfileAndNotificationSettingsInput) (store.User, error) {
-	result, err := s.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
-		UserID:               input.UserID,
-		DisplayName:          &input.DisplayName,
-		Handle:               &input.Handle,
-		AvatarURL:            &input.AvatarURL,
-		AvatarURLLight:       &input.AvatarURLLight,
-		NotificationSettings: input.NotificationSettings,
 	})
 	if err != nil {
 		return store.User{}, err
@@ -517,7 +501,7 @@ func (s *Store) CreateWorkspace(ctx context.Context, input store.CreateWorkspace
 	qtx := s.q.WithTx(tx)
 	inserted := false
 	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
-		routeID, err := newRouteID('T')
+		routeID, err := store.NewRouteID('T')
 		if err != nil {
 			return store.Workspace{}, err
 		}
@@ -628,7 +612,7 @@ func (s *Store) CreateChannel(ctx context.Context, input store.CreateChannelInpu
 	}
 	inserted := false
 	for attempt := 0; attempt < routeIDInsertAttempts; attempt++ {
-		routeID, err := newRouteID('C')
+		routeID, err := store.NewRouteID('C')
 		if err != nil {
 			return store.Channel{}, store.Event{}, err
 		}
@@ -718,19 +702,14 @@ func (s *Store) GetMessageByNonce(ctx context.Context, authorID, nonce string) (
 	if normalized == "" {
 		return store.Message{}, sql.ErrNoRows
 	}
-	message, err := scanMessage(s.db.QueryRowContext(ctx, messageSelect()+` WHERE m.author_id = ? AND m.client_nonce = ?`, authorID, normalized))
+	messageID, err := storedb.New(s.db).GetMessageIDByAuthorNonce(ctx, storedb.GetMessageIDByAuthorNonceParams{
+		AuthorID:    authorID,
+		ClientNonce: normalized,
+	})
 	if err != nil {
 		return store.Message{}, err
 	}
-	messages, err := s.hydrateAttachments(ctx, []store.Message{message})
-	if err != nil {
-		return store.Message{}, err
-	}
-	messages, err = s.hydrateReactions(ctx, authorID, messages)
-	if err != nil {
-		return store.Message{}, err
-	}
-	return messages[0], nil
+	return s.GetMessage(ctx, messageID, authorID)
 }
 
 func (s *Store) requireMessageAccess(ctx context.Context, message store.Message, userID string) error {
@@ -873,70 +852,6 @@ func (s *Store) CreateMessage(ctx context.Context, input store.CreateMessageInpu
 		return store.Message{}, store.Event{}, err
 	}
 	return msg, event, tx.Commit()
-}
-
-func (s *Store) GetThread(ctx context.Context, rootMessageID, userID string, limit int) (store.Message, []store.Message, store.ThreadState, error) {
-	return s.getThread(ctx, rootMessageID, userID, limit, false)
-}
-
-func (s *Store) GetThreadLatest(ctx context.Context, rootMessageID, userID string, limit int) (store.Message, []store.Message, store.ThreadState, error) {
-	return s.getThread(ctx, rootMessageID, userID, limit, true)
-}
-
-func (s *Store) getThread(ctx context.Context, rootMessageID, userID string, limit int, latest bool) (store.Message, []store.Message, store.ThreadState, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 100
-	}
-	root, err := getMessage(ctx, s.db, rootMessageID)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	if root.ParentMessageID != nil {
-		return store.Message{}, nil, store.ThreadState{}, errors.New("thread root must be a root message")
-	}
-	if err := s.requireMessageAccess(ctx, root, userID); err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	root, err = s.EnsureThreadRouteID(ctx, userID, root.ID)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	roots, err := s.hydrateAttachments(ctx, []store.Message{root})
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	root = roots[0]
-	order := "ASC"
-	if latest {
-		order = "DESC"
-	}
-	rows, err := s.db.QueryContext(ctx, messageSelect()+`
-		WHERE m.thread_root_id = ? AND m.parent_message_id = ?
-		ORDER BY m.thread_seq `+order+`
-		LIMIT ?`, rootMessageID, rootMessageID, limit)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	defer rows.Close()
-	replies, err := scanMessages(rows)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	if latest {
-		slices.Reverse(replies)
-	}
-	replies, err = s.hydrateAttachments(ctx, replies)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	threadMessages := append([]store.Message{root}, replies...)
-	threadMessages, err = s.hydrateReactions(ctx, userID, threadMessages)
-	if err != nil {
-		return store.Message{}, nil, store.ThreadState{}, err
-	}
-	root, replies = threadMessages[0], threadMessages[1:]
-	state, err := getThreadState(ctx, s.db, rootMessageID)
-	return root, replies, state, err
 }
 
 func (s *Store) CreateThreadReply(ctx context.Context, input store.CreateThreadReplyInput) (store.Message, store.ThreadState, []store.Event, error) {
@@ -1282,7 +1197,8 @@ func normalizeWorkspaceSettings(current store.Workspace, input store.UpdateWorks
 		if workspaceSlug == "" {
 			return "", "", "", errors.New("workspace slug is required")
 		}
-		if isReservedWorkspaceSlug(workspaceSlug) {
+		// Profile updates include the current slug, even for a provisioned workspace.
+		if workspaceSlug != current.Slug && isReservedWorkspaceSlug(workspaceSlug) {
 			return "", "", "", errors.New("workspace slug is reserved")
 		}
 	}

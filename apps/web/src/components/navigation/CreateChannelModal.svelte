@@ -1,23 +1,15 @@
 <script lang="ts">
   type Props = {
     channelName: string;
-    status: string;
     profileName?: string;
-    creating?: boolean;
+    pending: boolean;
+    error: string;
     onChannelName: (value: string) => void;
     onClose: () => void;
     onCreate: () => void;
   };
 
-  let {
-    channelName,
-    status,
-    profileName,
-    creating = false,
-    onChannelName,
-    onClose,
-    onCreate,
-  }: Props = $props();
+  let { channelName, profileName, pending, error, onChannelName, onClose, onCreate }: Props = $props();
 </script>
 
 <div class="modal-scrim" role="presentation">
@@ -41,17 +33,18 @@
         <span>Channel name</span>
         <input
           value={channelName}
+          disabled={pending}
           aria-label="Channel name"
           placeholder="product-launch"
           autocomplete="off"
           oninput={(event) => onChannelName(event.currentTarget.value)}
         />
       </label>
-      {#if status}<p class="profile-status">{status}</p>{/if}
+      {#if error}<p class="profile-status error" role="alert">{error}</p>{/if}
       <div class="profile-actions">
-        <button type="button" class="ghost-action" disabled={creating} onclick={onClose}>Cancel</button>
-        <button type="submit" class="primary-action" disabled={creating}>
-          {creating ? "Creating…" : profileName ? `Create for ${profileName}` : "Create channel"}
+        <button type="button" class="ghost-action" onclick={onClose}>Cancel</button>
+        <button type="submit" class="primary-action" disabled={pending || !channelName.trim()}>
+          {pending ? "Creating…" : profileName ? `Create for ${profileName}` : "Create channel"}
         </button>
       </div>
     </form>

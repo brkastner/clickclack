@@ -41,3 +41,30 @@ test("the workspace create form opens and is not clipped by the switcher", async
     page.getByRole("button", { name: "Switch workspace" }).getByText(name),
   ).toBeVisible();
 });
+
+test("workspace creation shows failures and retains the name for retry", async ({ page }) => {
+  await page.goto("/app");
+  await waitForAppReady(page);
+  let attempts = 0;
+  await page.route("**/api/workspaces", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    attempts += 1;
+    if (attempts === 1) {
+      await route.fulfill({ status: 503, json: { error: "Workspace creation unavailable" } });
+    } else {
+      await route.continue();
+    }
+  });
+  const name = `Retry workspace ${randomUUID().slice(0, 8)}`;
+  await page.getByRole("button", { name: "Switch workspace" }).click();
+  await page.getByRole("menuitem", { name: "New workspace" }).click();
+  const input = page.getByLabel("Workspace name");
+  await input.fill(name);
+  await input.press("Enter");
+  await expect(page.getByRole("alert")).toHaveText("Workspace creation unavailable");
+  await expect(input).toHaveValue(name);
+  await input.press("Enter");
+  await expect(input).toBeHidden();
+  await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+  expect(attempts).toBe(2);
+});

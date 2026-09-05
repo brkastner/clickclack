@@ -12,14 +12,16 @@
     currentUserRole?: Workspace["role"] | "";
     moderation?: MemberModeration;
     onClose: () => void;
-    onEdit: () => void;
-    onMessage: (memberID: string) => void;
-    onApprove: (memberID: string) => void;
-    onTimeout: (memberID: string) => void;
-    onBlock: (memberID: string) => void;
-    onUnblock: (memberID: string) => void;
-    onSetStatus: () => void;
-    onSaveBotProfile: (
+    onEdit?: () => void;
+    onMessage?: (memberID: string) => void;
+    messagePending?: boolean;
+    messageError?: string;
+    onApprove?: (memberID: string) => void;
+    onTimeout?: (memberID: string) => void;
+    onBlock?: (memberID: string) => void;
+    onUnblock?: (memberID: string) => void;
+    onSetStatus?: () => void;
+    onSaveBotProfile?: (
       botUserID: string,
       patch: {
         display_name?: string;
@@ -39,6 +41,8 @@
     onClose,
     onEdit,
     onMessage,
+    messagePending = false,
+    messageError = "",
     onApprove,
     onTimeout,
     onBlock,
@@ -80,7 +84,7 @@
     // The current user's own profile still owns preferences, so it keeps
     // routing to account settings rather than the in-pane editor.
     if (scope.isSelf) {
-      onEdit();
+      onEdit?.();
       return;
     }
     editing = true;
@@ -94,7 +98,7 @@
   </div>
   <button class="close" aria-label="Close profile" onclick={onClose}>×</button>
 </header>
-{#if editing}
+{#if editing && onSaveBotProfile}
   <ProfileEditor
     {profile}
     canEditIdentity={scope.canEditIdentity}
@@ -124,7 +128,7 @@
           {#if botLabel}<span class="bot-badge">{botLabel}</span>{/if}
         </div>
       </div>
-      {#if currentUser?.id === profile.id}
+      {#if currentUser?.id === profile.id && onEdit}
         <button type="button" class="text-action" onclick={onEdit}>Edit</button>
       {/if}
     </div>
@@ -133,25 +137,26 @@
       <span>Active</span>
     </div>
     <div class="profile-actions-row">
-      {#if currentUser?.id !== profile.id}
-        <button type="button" class="primary-action" onclick={() => onMessage(profile.id)}>
-          Message
+      {#if currentUser?.id !== profile.id && onMessage}
+        <button type="button" class="primary-action" disabled={messagePending} onclick={() => onMessage?.(profile.id)}>
+          {messagePending ? "Starting…" : "Message"}
         </button>
       {/if}
-      {#if scope.canEdit && !scope.isSelf}
+      {#if scope.canEdit && !scope.isSelf && onSaveBotProfile}
         <button type="button" class="ghost-action" onclick={startEditing}>
           Edit profile
         </button>
-      {:else}
+      {:else if onSetStatus}
         <button type="button" class="ghost-action" onclick={onSetStatus}>
           Set a status
         </button>
       {/if}
     </div>
+    {#if messageError}<p class="profile-status error" role="alert">{messageError}</p>{/if}
     <section class="profile-info">
       <header>
         <strong>contact information</strong>
-        {#if currentUser?.id === profile.id}
+        {#if currentUser?.id === profile.id && onEdit}
           <button type="button" class="text-action" onclick={onEdit}>Edit</button>
         {/if}
       </header>
@@ -223,14 +228,14 @@
           <p class="profile-note">Blocked.</p>
         {/if}
         <div class="moderation-actions">
-          {#if moderation.role === "guest"}
-            <button type="button" class="primary-action" onclick={() => onApprove(profile.id)}>Approve</button>
+          {#if moderation.role === "guest" && onApprove}
+            <button type="button" class="primary-action" onclick={() => onApprove?.(profile.id)}>Approve</button>
           {/if}
-          <button type="button" class="ghost-action" onclick={() => onTimeout(profile.id)}>Timeout 1h</button>
-          {#if isBlocked}
-            <button type="button" class="ghost-action" onclick={() => onUnblock(profile.id)}>Unblock</button>
-          {:else}
-            <button type="button" class="danger-action" onclick={() => onBlock(profile.id)}>Block</button>
+          {#if onTimeout}<button type="button" class="ghost-action" onclick={() => onTimeout?.(profile.id)}>Timeout 1h</button>{/if}
+          {#if isBlocked && onUnblock}
+            <button type="button" class="ghost-action" onclick={() => onUnblock?.(profile.id)}>Unblock</button>
+          {:else if !isBlocked && onBlock}
+            <button type="button" class="danger-action" onclick={() => onBlock?.(profile.id)}>Block</button>
           {/if}
         </div>
       </section>

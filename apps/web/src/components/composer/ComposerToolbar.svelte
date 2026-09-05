@@ -91,7 +91,7 @@
     <button type="button" title="Add or edit link" aria-label="Link" aria-pressed={state.link} class:active={state.link} {disabled} onclick={() => onFormat("link")}>
       <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L11 4.93M14 11a5 5 0 0 0-7.07 0L4.81 13.12a5 5 0 0 0 7.07 7.07L13 19.07"/></svg>
     </button>
-    <button type="button" title="GIF picker" aria-label="GIF picker" aria-pressed={showGifPicker} class:active={showGifPicker} {disabled} onclick={onToggleGif}>
+    <button type="button" title="GIF picker" aria-label="GIF picker" aria-expanded={showGifPicker} aria-haspopup="dialog" class:active={showGifPicker} {disabled} onclick={onToggleGif}>
       GIF
     </button>
     <button type="button" title="Clear formatting" aria-label="Clear formatting" {disabled} onclick={() => onFormat("clear")}>

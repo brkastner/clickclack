@@ -1,6 +1,6 @@
 import type { Upload } from "./types";
-import { api, apiURL } from "./api";
-import { probeMediaDimensions } from "./media";
+import { api, apiURL } from "./api.ts";
+import { probeMediaDimensions } from "./media.ts";
 
 export function uploadResourcePath(upload: Upload): string {
   return `/api/uploads/${encodeURIComponent(upload.id)}`;
@@ -26,8 +26,10 @@ export async function uploadWorkspaceFile(
   workspaceID: string,
   file: File,
   nonce = newUploadNonce(),
+  signal = new AbortController().signal,
 ): Promise<Upload> {
-  const probe = await probeMediaDimensions(file);
+  const probe = await probeMediaDimensions(file, signal);
+  signal.throwIfAborted();
   const form = new FormData();
   form.set("workspace_id", workspaceID);
   form.set("file", file);
@@ -35,7 +37,7 @@ export async function uploadWorkspaceFile(
   if (probe.height > 0) form.set("height", String(probe.height));
   if (probe.durationMS > 0) form.set("duration_ms", String(probe.durationMS));
   const path = `/api/uploads?workspace_id=${encodeURIComponent(workspaceID)}&nonce=${encodeURIComponent(nonce)}`;
-  const data = await api<{ upload: Upload }>(path, { method: "POST", body: form });
+  const data = await api<{ upload: Upload }>(path, { method: "POST", body: form, signal });
   return data.upload;
 }
 

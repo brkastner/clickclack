@@ -46,6 +46,13 @@ adds operating-system behavior around the existing web app and API.
 The desktop shell does not run ClickClack server code, read agent transcripts,
 or grant web content filesystem or Node.js access.
 
+Servers can [configure the workspace home button](configuration.md#workspace-home-link).
+With integrated chrome, a default `/` destination uses `/app` regardless of
+the label. Configured non-app HTTP(S) destinations, including same-origin
+paths such as `/portal`, open in the system browser through the existing
+navigation guard. Desktop clients using native window chrome retain their
+ordinary same-origin navigation behavior.
+
 ## Connect a server
 
 Open **ClickClack → Settings** on macOS or **File → Settings** on Windows/Linux.
@@ -61,6 +68,13 @@ Remote servers must use HTTPS. Plain HTTP is accepted only for `localhost`,
 `127.0.0.1`, and `::1`. Authentication returns to Electron's persistent browser
 session and remains scoped to the selected origin.
 
+Saving a server takes effect after the settings file is written successfully.
+Until then, the current server, window, and desktop controls stay active. A
+failed save leaves that selection intact and can be retried. Concurrent saves
+are applied in order, including window-state updates made while saving.
+A successful save dismisses its original Settings window; reopening Settings
+during a save leaves the new window open.
+
 GitHub sign-in opens in the system browser, where existing GitHub sessions,
 passkeys, password managers, and two-factor authentication already work. After
 GitHub approves the login, `chat.clickclack.desktop:/auth/callback` returns a
@@ -68,6 +82,11 @@ one-time grant to the running app. The app redeems it against the exact server
 that initiated the flow, verifies the resulting session through `/api/me`, and
 then reloads itself as the signed-in workspace. The app also accepts the legacy
 `clickclack://auth/callback` format when connecting to an older server.
+
+Each sign-in belongs to its initiating server and window. Selecting another
+server, replacing that window, or starting another sign-in prevents the old
+in-flight attempt from navigating, showing a late error, or clearing the new
+attempt. Errors from the current attempt still appear normally.
 
 Servers using namespaced cookies require desktop OAuth protocol 2. They return
 an update-required page before sending an older desktop client to GitHub.
@@ -274,7 +293,10 @@ before publishing them alongside the Windows and Linux installers.
 
 ## Icon system
 
-`apps/desktop/assets/icon-source.svg` is the source of truth: opposing claws for
-conversation, a central aqua realtime pulse, and ClickClack coral. Generated
-assets include multi-resolution macOS `.icns`, Windows `.ico`, Linux PNG, a
-monochrome macOS tray template, and a Windows unread overlay.
+`apps/desktop/assets/icon-source.svg` is the source of truth: the "Keystroke"
+mark — two keycaps mid-stroke, one raised in porcelain and one pressed in
+signal cyan, on the navy Switchboard board. Generated assets include
+multi-resolution macOS `.icns`, Windows `.ico`, Linux PNG, a monochrome macOS
+tray template, and a Windows unread overlay. Regenerate them from the SVG
+sources with `rsvg-convert` (PNGs), `iconutil` (`.icns`), and ImageMagick
+(`.ico`).

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { deflateSync } from "node:zlib";
+import { createGeneralChannel } from "./channel-fixture";
 import { waitForAppReady } from "./app-ready";
 
 // Builds a real PNG of the requested size. The viewer's containment behavior
@@ -46,7 +47,8 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   const filename = `lightbox-${suffix}.png`;
   const messageText = `image lightbox ${suffix}`;
 
-  await page.goto("/app");
+  const { route } = await createGeneralChannel(page, "Image Viewer");
+  await page.goto(route);
   await waitForAppReady(page);
   await page.getByLabel("Upload file").setInputFiles({
     name: filename,
@@ -65,7 +67,7 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   await expect(conversationTrigger).toBeVisible();
 
   await conversationTrigger.getByRole("img", { name: filename }).click({ button: "right" });
-  const inlineImageMenu = page.locator('.image-viewer__context-menu:popover-open');
+  const inlineImageMenu = page.locator(".image-viewer__context-menu:popover-open");
   await expect(inlineImageMenu).toBeVisible();
   await expect(inlineImageMenu.getByRole("menuitem", { name: "Copy image" })).toBeVisible();
   await expect(
@@ -190,7 +192,7 @@ test("opens an unopened image menu in place and adds it to the draft", async ({ 
     );
   }, clickPoint);
 
-  const menu = page.locator('.image-viewer__context-menu:popover-open');
+  const menu = page.locator(".image-viewer__context-menu:popover-open");
   await expect(menu).toBeVisible();
   await expect(deferredImage).toBeVisible();
   await expect

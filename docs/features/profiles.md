@@ -33,7 +33,8 @@ PATCH /api/me
 }
 ```
 
-`PATCH /api/me` returns `{ "user": ... }`. Handles must be unique when set and
+`PATCH /api/me` returns `{ "user": ... }`. Omitted fields are unchanged, so a
+client can update a profile field, notifications, or appearance independently. Handles must be unique when set and
 must be 2-32 characters using letters, numbers, `_`, or `-`. Avatar URLs can be
 blank or an `http`/`https` URL. `avatar_url_light` requires a non-empty
 `avatar_url`; clearing the primary URL clears the light-mode URL too. Changing a
@@ -55,6 +56,13 @@ Click or right-click it to open account settings and edit display name, handle,
 primary and light-mode avatar URLs, conversation display preferences, and
 notification settings.
 
+Profile and notification saves update only their respective sections. Saving
+one section preserves changes to another section made in another tab or device.
+Fields stay disabled while their save is pending. Leaving a section or closing
+account settings prevents its delayed response from replacing a newer draft,
+reverting appearance, or closing another dialog. Each section refreshes when
+opened, so saves already accepted by the server remain visible when returning.
+
 Conversation display preferences can hide agent commentary or tool calls and
 independently place the current user's messages and other human or agent
 messages on the left or right. These preferences are stored on the local
@@ -63,6 +71,9 @@ device, not in the user profile returned by `/api/me`.
 Clicking a message avatar or author name opens a Slack-style profile pane in
 the right rail. The pane shows the user's avatar, display name, handle,
 presence, user ID, and a Message action for starting or jumping to a DM.
+Opening or closing a profile keeps the URL on the visible conversation and
+supersedes an older navigation that is still loading. Opening a profile from
+a thread returns to that thread's parent conversation.
 
 Viewers who can edit a bot profile get an Edit profile action that replaces the
 pane with an identity editor. The editor updates the bot's own `display_name`,
@@ -76,3 +87,5 @@ Message lists, search results, threads, DMs, and profile controls all hydrate
 both avatar variants from the user attached to each message or conversation
 member. The shared avatar component follows the resolved light/dark theme and
 falls back to `avatar_url` when the light variant is absent.
+The member directory uses the same avatar fallback: an unavailable image shows
+the user's initial while retaining the member or bot styling.

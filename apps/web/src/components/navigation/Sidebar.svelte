@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { DEFAULT_HOME_LINK, type HomeLink } from "../../lib/home-link";
   import Avatar from "../avatar/Avatar.svelte";
   import { directConversationForUser, handleLabel, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
   import { botShelfPreferences, DEFAULT_BOT_SHELF_LIMIT, setBotShelfLimit, setBotShelfOrder } from "../../lib/appearance";
@@ -11,6 +12,9 @@
 
   type Props = {
     workspaceID: string;
+    homeLink?: HomeLink;
+    workspaceCreatePending?: boolean;
+    workspaceCreateError?: string;
     workspaces: Workspace[];
     createWorkspaceName: string;
     showWorkspaceCreate: boolean;
@@ -51,6 +55,9 @@
 
   let {
     workspaceID,
+    homeLink = DEFAULT_HOME_LINK,
+    workspaceCreatePending = false,
+    workspaceCreateError = "",
     workspaces,
     createWorkspaceName,
     showWorkspaceCreate,
@@ -357,6 +364,9 @@
   {#if showHeader}
     <header class="workspace-header">
       <WorkspaceSwitcher
+        {homeLink}
+        {workspaceCreatePending}
+        {workspaceCreateError}
         {workspaces}
         selectedWorkspaceID={workspaceID}
         {createWorkspaceName}
@@ -392,7 +402,7 @@
 
     <section class="sidebar-people-row" aria-label="Recent people">
       {#each displayedRecentPeople as person (person.id)}
-          {@const conversation = directConversationForUser(directConversations, person.id)}
+          {@const conversation = directConversationForUser(directConversations, person.id, currentUser?.id)}
           {@const unread = conversation?.unread_count || 0}
           {@const pinnedChannel = pinnedPersonaChannel(personaChannelPins, person.id, channels)}
           <a

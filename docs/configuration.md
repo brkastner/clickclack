@@ -34,8 +34,11 @@ hook in `cmd/clickclack/main.go`.
 | `--metrics-enabled`   | `CLICKCLACK_METRICS_ENABLED`     | `false`     | Expose metadata-only Prometheus metrics at `/metrics`; keep private. |
 | `--config`            | —                                | unset       | JSON config file. |
 | `--dev-bootstrap`     | `CLICKCLACK_DEV_BOOTSTRAP`       | `false`     | `serve` only. Creates a default user/workspace/channel and enables local dev auth fallbacks when explicitly set to `true`. |
+| `--password-auth`     | `CLICKCLACK_PASSWORD_AUTH_ENABLED` | `false`   | `serve` only. Enables local email/handle and password sign-in; passwords are set with `clickclack admin user set-password`. See [Auth](features/auth.md). |
 | —                     | `CLICKCLACK_PUBLIC_URL`          | unset       | Canonical external origin. Required for GitHub OAuth and namespaced cookies. |
 | —                     | `CLICKCLACK_PUBLIC_API_URL`      | public URL  | Canonical external API base. May use a different origin and a normalized base path. |
+| —                     | `CLICKCLACK_HOME_URL`            | `/`         | Destination of the workspace rail's home button (`home_url` in the config file). An absolute `http(s)` URL or a path starting with `/`; use it when ClickClack lives inside a larger product. |
+| —                     | `CLICKCLACK_HOME_LABEL`          | `cc`        | Short label (max 32 characters) on that button, e.g. the product name (`home_label` in the config file). The default renders the ClickClack logo mark instead of text. |
 | `--embed-frame-ancestors` | `CLICKCLACK_EMBED_FRAME_ANCESTORS` | unset | Comma- or whitespace-separated exact origins allowed to frame `/embed/*`; see [Embedded threads](features/embedding.md). |
 | `--access-team-domain` | `CLICKCLACK_ACCESS_TEAM_DOMAIN` | unset | Cloudflare Access team HTTPS origin. Must be configured together with the Access audience. |
 | `--access-aud`        | `CLICKCLACK_ACCESS_AUD`         | unset       | Expected Cloudflare Access application audience tag. Must be non-empty when the team domain is set. |
@@ -61,8 +64,11 @@ hook in `cmd/clickclack/main.go`.
   "environment": "staging",
   "metrics_enabled": false,
   "dev_bootstrap": false,
+  "password_auth_enabled": false,
   "public_url": "https://chat.example.com",
   "public_api_url": "https://api.example.com/services/clickclack",
+  "home_url": "/portal",
+  "home_label": "Portal",
   "embed_frame_ancestors": ["https://control.example.com"],
   "access_team_domain": "https://openclaw.cloudflareaccess.com",
   "access_aud": "<application-audience-tag>",
@@ -136,6 +142,35 @@ value before the app modules run:
 That value is browser routing only. The server remains authoritative for setup
 claim URLs and returns only URLs derived from validated administrator
 configuration.
+
+## Workspace home link
+
+Set `CLICKCLACK_HOME_URL` and `CLICKCLACK_HOME_LABEL` (or `home_url` and
+`home_label` in the JSON file) when the workspace rail's home button should
+return to a surrounding product. They are independent: an unset or empty URL
+defaults to `/`, and an unset or empty label defaults to `cc`, which the app
+renders as the ClickClack Keystroke logo mark; any other label renders as text
+on the button. Ordinary spaces around values are trimmed. Environment values
+override the file as usual.
+
+The destination must be an absolute HTTP(S) URL without credentials or a path
+starting with a single `/`, such as `/portal?from=chat#latest`. Paths resolve
+on the frontend origin, even when the API is hosted separately. Protocol-relative
+URLs (`//host`), backslashes, and control characters are rejected at startup;
+explicit HTTP(S) destinations may point to another origin.
+
+Labels may contain up to 32 Unicode code points. Long labels are truncated in
+the 48-pixel badge, while the tooltip and accessible name retain the full label.
+The public `GET /api/home-link` endpoint returns only `{ "url": "/", "label": "cc" }`
+by default, with either value replaced when configured. Do not put private
+information in these deployment settings.
+
+The shell reads the endpoint once at startup. Changing settings requires a
+server restart and a page reload. A newer web shell connected to an older server
+without the endpoint retains the built-in defaults. With integrated desktop
+chrome, the default `/` destination stays inside the app as `/app`, even when
+only the label changes. Other non-app destinations use the desktop shell's
+existing system-browser navigation behavior.
 
 ## Cookie namespace
 

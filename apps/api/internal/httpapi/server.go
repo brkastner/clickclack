@@ -36,16 +36,22 @@ type Server struct {
 	openclawID            OpenClawIDConfig
 	access                *accessVerifier
 	frontendURL           string
+	homeLinkConfig        HomeLinkConfig
 	publicAPIURL          string
 	embedFrameAncestors   []string
 	cookies               authpolicy.CookieNames
 	cookieSameSite        http.SameSite
 	disableDevAuth        bool
+	passwordAuthEnabled   bool
 	pushNotifier          PushNotifier
 	metrics               *metricsRegistry
 	build                 buildMetadata
 	setupCodeClaimLimiter *slidingWindowLimiter
+	passwordIPLimiter     *slidingWindowLimiter
+	passwordIDLimiter     *slidingWindowLimiter
+	passwordChangeLimiter *slidingWindowLimiter
 	realtimeReplayLimit   int
+	realtimeSessionCheck  time.Duration
 	callbackClient        *http.Client
 }
 
@@ -63,19 +69,42 @@ const (
 	realtimeOverflowCloseReason       = "realtime buffer overflow; reconnect with after_cursor to replay"
 	realtimeReplayCloseReason         = "realtime replay interrupted; reconnect with after_cursor"
 	realtimeResyncRequiredCloseReason = "realtime replay limit exceeded; resync required"
+	realtimeSessionRevokedCloseReason = "session revoked; sign in again"
+	// realtimeSessionRecheckInterval bounds how long a connection whose credential
+	// was revoked can sit open while its workspace is quiet. Delivery revalidates
+	// the credential regardless, so this only shortens the idle case.
+	realtimeSessionRecheckInterval = 30 * time.Second
 	// setupCodeClaimLimit/Window bound unauthenticated bot setup code
 	// claim attempts per client IP.
 	setupCodeClaimLimit  = 10
 	setupCodeClaimWindow = time.Minute
+	// passwordLoginIPLimit/Window bound password attempts from one client, and
+	// passwordLoginIDLimit/Window bound attempts against one account no matter
+	// how many addresses they come from. The account window is deliberately
+	// long: it is the lockout that makes online guessing impractical.
+	passwordLoginIPLimit  = 20
+	passwordLoginIPWindow = time.Minute
+	passwordLoginIDLimit  = 5
+	passwordLoginIDWindow = 15 * time.Minute
+	// passwordChangeLimit/Window bound wrong current-password guesses against
+	// one signed-in account, so a borrowed session cannot be used to search for
+	// the password it is already holding a session for.
+	passwordChangeLimit  = 5
+	passwordChangeWindow = 15 * time.Minute
 )
 
 var errAmbiguousCookie = errors.New("multiple cookies with the same name are not allowed")
 
 type actor struct {
-	user        store.User
-	botTokenID  string
-	workspaceID string
-	scopes      []string
+	user store.User
+	// sessionToken is the session this caller authenticated with, empty for
+	// every other way of resolving an actor: bot tokens, a trusted-proxy
+	// assertion, and the local development fallbacks. Handlers that revoke or
+	// revalidate the caller's own session key on it.
+	sessionToken string
+	botTokenID   string
+	workspaceID  string
+	scopes       []string
 }
 
 type Options struct {
@@ -86,9 +115,11 @@ type Options struct {
 	Access              AccessConfig
 	FrontendURL         string
 	PublicAPIURL        string
+	HomeLink            HomeLinkConfig
 	EmbedFrameAncestors []string
 	CookieNames         authpolicy.CookieNames
 	DisableDevAuth      bool
+	PasswordAuthEnabled bool
 	PushNotifier        PushNotifier
 	MetricsEnabled      bool
 	Environment         string
@@ -123,15 +154,21 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		openclawID:            options.OpenClawID.withDefaults(),
 		access:                newAccessVerifier(options.Access),
 		frontendURL:           strings.TrimSpace(options.FrontendURL),
+		homeLinkConfig:        options.HomeLink.withDefaults(),
 		publicAPIURL:          strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
 		embedFrameAncestors:   append([]string(nil), options.EmbedFrameAncestors...),
 		cookies:               cookieNames,
 		cookieSameSite:        configuredCookieSameSite(options.FrontendURL, options.PublicAPIURL),
 		disableDevAuth:        options.DisableDevAuth,
+		passwordAuthEnabled:   options.PasswordAuthEnabled,
 		pushNotifier:          options.PushNotifier,
 		metrics:               metrics,
 		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
+		passwordIPLimiter:     newSlidingWindowLimiter(passwordLoginIPLimit, passwordLoginIPWindow),
+		passwordIDLimiter:     newSlidingWindowLimiter(passwordLoginIDLimit, passwordLoginIDWindow),
+		passwordChangeLimiter: newSlidingWindowLimiter(passwordChangeLimit, passwordChangeWindow),
 		realtimeReplayLimit:   realtimeReplayMaxEvents,
+		realtimeSessionCheck:  realtimeSessionRecheckInterval,
 		callbackClient:        callbackClient,
 		build: buildMetadata{
 			Environment: options.Environment,
@@ -160,12 +197,16 @@ func (s *Server) Handler() http.Handler {
 		r.Use(bindAccessResponseWriter)
 		r.Post("/auth/magic/request", s.requestMagicLink)
 		r.Post("/auth/magic/consume", s.consumeMagicLink)
+		r.Post("/auth/password/login", s.passwordLogin)
+		r.Post("/auth/password/change", s.changePassword)
+		r.Post("/auth/logout", s.logout)
 		r.Get("/auth/github/start", s.githubStart)
 		r.Get("/auth/github/desktop/start", s.githubDesktopStart)
 		r.Post("/auth/github/desktop/consume", s.githubDesktopConsume)
 		r.Get("/auth/github/callback", s.githubCallback)
 		r.Get("/auth/openclaw/start", s.openclawIDStart)
 		r.Get("/auth/openclaw/callback", s.openclawIDCallback)
+		r.Get("/home-link", s.homeLink)
 		r.Get("/me", s.me)
 		r.Patch("/me", s.updateMe)
 		r.Get("/me/bots", s.listMyBots)
@@ -431,10 +472,11 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	preferences, err := s.store.GetAppearancePreferences(r.Context(), act.user.ID)
-	writeResult(w, map[string]any{"user": currentUserPayload{
-		User:                  act.user,
-		AppearancePreferences: preferences,
-	}}, err)
+	payload := currentUserPayload{User: act.user, AppearancePreferences: preferences}
+	if err == nil {
+		payload.PasswordEnrolled, err = s.passwordEnrolled(r.Context(), act.user.ID)
+	}
+	writeResult(w, map[string]any{"user": payload}, err)
 }
 
 func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
@@ -468,15 +510,26 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		NotificationSettings:  body.NotificationSettings,
 		AppearancePreferences: body.AppearancePreferences,
 	})
-	writeResult(w, map[string]any{"user": currentUserPayload{
-		User:                  updated.User,
-		AppearancePreferences: updated.AppearancePreferences,
-	}}, err)
+	payload := currentUserPayload{User: updated.User, AppearancePreferences: updated.AppearancePreferences}
+	if err == nil {
+		payload.PasswordEnrolled, err = s.passwordEnrolled(r.Context(), updated.User.ID)
+	}
+	writeResult(w, map[string]any{"user": payload}, err)
 }
 
 type currentUserPayload struct {
 	store.User
 	AppearancePreferences *store.AppearancePreferences `json:"appearance_preferences,omitempty"`
+	PasswordEnrolled      bool                         `json:"password_enrolled"`
+}
+
+// passwordEnrolled reports whether an account has a password on file. The SPA
+// pairs it with the advertised auth methods to decide whether to offer the
+// change-password form. It is reported only for the caller's own account, so it
+// discloses nothing about who else can sign in with a password.
+func (s *Server) passwordEnrolled(ctx context.Context, userID string) (bool, error) {
+	hash, err := s.store.GetUserPasswordHash(ctx, userID)
+	return hash != "", err
 }
 
 func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
@@ -768,11 +821,11 @@ func parseWorkspaceMemberPageRequest(r *http.Request) (store.WorkspaceMemberPage
 		Role:   values.Get("role"),
 	}
 	if rawLimit := strings.TrimSpace(values.Get("limit")); rawLimit != "" {
-		limit, err := strconv.Atoi(rawLimit)
+		limit, err := strconv.ParseInt(rawLimit, 10, 32)
 		if err != nil || limit < 1 {
 			return page, fmt.Errorf("%w: limit must be positive", store.ErrInvalidWorkspaceMemberPage)
 		}
-		page.Limit = limit
+		page.Limit = int(limit)
 	}
 	return page, nil
 }
@@ -1214,22 +1267,22 @@ func (s *Server) getThread(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireBotMessageResource(w, r, act, chi.URLParam(r, "message_id"), "dms:read"); !ok {
 		return
 	}
-	messageID := chi.URLParam(r, "message_id")
-	limit := queryInt(r, "limit", 100)
+	if r.URL.Query().Has("mode") {
+		writeError(w, http.StatusBadRequest, errors.New("use latest or a thread sequence cursor"))
+		return
+	}
+	req, err := parseMessagePageRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 	latest := strings.TrimSpace(r.URL.Query().Get("latest"))
 	if latest != "" && latest != "true" && latest != "false" {
 		writeError(w, http.StatusBadRequest, errors.New("latest must be true or false"))
 		return
 	}
-	var root store.Message
-	var replies []store.Message
-	var state store.ThreadState
-	if latest == "true" {
-		root, replies, state, err = s.store.GetThreadLatest(r.Context(), messageID, act.user.ID, limit)
-	} else {
-		root, replies, state, err = s.store.GetThread(r.Context(), messageID, act.user.ID, limit)
-	}
-	writeResult(w, map[string]any{"root": root, "replies": replies, "thread_state": state}, err)
+	page, err := s.store.GetThreadPage(r.Context(), chi.URLParam(r, "message_id"), act.user.ID, store.ThreadPageRequest{MessagePageRequest: req, Latest: latest == "true"})
+	writeResult(w, page, err)
 }
 
 func (s *Server) createThreadReply(w http.ResponseWriter, r *http.Request) {
@@ -1385,7 +1438,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	events, unsubscribe := s.hub.Subscribe(workspaceID)
+	subscription, unsubscribe := s.hub.Subscribe(workspaceID)
 	defer unsubscribe()
 	acceptOptions := &websocket.AcceptOptions{OriginPatterns: s.websocketOriginPatterns(r)}
 	if bearerProtocol != "" {
@@ -1396,96 +1449,152 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.CloseNow()
-	ctx := r.Context()
-	replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
-	if err != nil {
-		_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-		return
-	}
+	ctx := conn.CloseRead(r.Context())
 	replayCursor := r.URL.Query().Get("after_cursor")
-	if replayCursor != "" {
-		exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, replayCursor)
+	// Revalidate the exact credential in the shared store: setup replay can replace
+	// a bot secret without changing its token ID, including on another replica.
+	bearerToken := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	credentialAuthorityLive := func() bool {
+		var err error
+		revokedReason := realtimeSessionRevokedCloseReason
+		if act.botTokenID != "" {
+			_, err = s.store.GetBotTokenAuth(ctx, bearerToken)
+			revokedReason = "bot token revoked; reconnect with a valid token"
+		} else if act.sessionToken != "" {
+			_, err = s.sessionUser(ctx, act.sessionToken)
+		}
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrSessionExpired) {
+				_ = conn.Close(websocket.StatusPolicyViolation, revokedReason)
+			} else {
+				_ = conn.Close(websocket.StatusTryAgainLater, "credential verification unavailable; retry")
+			}
+			return false
+		}
+		return true
+	}
+	writeEvent := func(event store.Event) bool {
+		return credentialAuthorityLive() && writeWS(ctx, conn, event) == nil
+	}
+	sessionRecheck := time.NewTicker(s.realtimeSessionCheck)
+	defer sessionRecheck.Stop()
+	// Startup and live delivery share one ordered, authorized durable-log drain.
+	// Capture a finite tail each time; a wake received during this drain stays queued.
+	drain := func() bool {
+		if !credentialAuthorityLive() {
+			return false
+		}
+		replayTail, err := s.store.LatestEventCursor(ctx, workspaceID, act.user.ID)
 		if err != nil {
 			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-			return
+			return false
 		}
-		if !exists {
-			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-			return
-		}
-	}
-	if replayCursor != "" && (replayTail == "" || replayCursor > replayTail) {
-		_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-		return
-	}
-	replayedEvents := 0
-	for replayTail != "" && replayCursor < replayTail {
-		pageCursor := replayCursor
-		backlog, err := s.store.ListEventsAfter(ctx, workspaceID, act.user.ID, pageCursor, realtimeReplayPageSize)
-		if err != nil {
-			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-			return
-		}
-		if len(backlog) == 0 {
-			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-			return
-		}
-		if pageCursor != "" {
-			exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, pageCursor)
+		if replayCursor != "" {
+			exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, replayCursor)
 			if err != nil {
 				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-				return
+				return false
 			}
 			if !exists {
 				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-				return
+				return false
 			}
 		}
-		previousCursor := pageCursor
-		for _, event := range backlog {
-			if event.Cursor > replayTail {
-				break
-			}
-			if replayedEvents >= s.realtimeReplayLimit {
-				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
-				return
-			}
-			replayedEvents++
-			// ListEventsAfter prefilters visibility, while this live lookup closes
-			// the revocation window between fetching a page and writing its events.
-			deliver, err := s.shouldDeliverEventToActorResult(ctx, event, act.user.ID)
+		if replayCursor != "" && (replayTail == "" || replayCursor > replayTail) {
+			_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+			return false
+		}
+		replayedEvents := 0
+		for replayTail != "" && replayCursor < replayTail {
+			pageCursor := replayCursor
+			backlog, err := s.store.ListEventsAfter(ctx, workspaceID, act.user.ID, pageCursor, realtimeReplayPageSize)
 			if err != nil {
 				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-				return
+				return false
 			}
-			if !deliver {
+			if len(backlog) == 0 {
+				_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+				return false
+			}
+			if pageCursor != "" {
+				exists, err := s.store.EventCursorExists(ctx, workspaceID, act.user.ID, pageCursor)
+				if err != nil {
+					_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+					return false
+				}
+				if !exists {
+					_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+					return false
+				}
+			}
+			previousCursor := pageCursor
+			for _, event := range backlog {
+				if event.Cursor > replayTail {
+					break
+				}
+				if replayedEvents >= s.realtimeReplayLimit {
+					_ = conn.Close(realtimeResyncRequiredStatus, realtimeResyncRequiredCloseReason)
+					return false
+				}
+				replayedEvents++
+				// ListEventsAfter prefilters visibility, while this live lookup closes
+				// the revocation window between fetching a page and writing its events.
+				deliver, err := s.shouldDeliverEventToActorResult(ctx, event, act.user.ID)
+				if err != nil {
+					_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+					return false
+				}
+				if !deliver {
+					replayCursor = event.Cursor
+					continue
+				}
+				if !writeEvent(event) {
+					return false
+				}
 				replayCursor = event.Cursor
-				continue
 			}
-			if err := writeWS(ctx, conn, event); err != nil {
-				return
+			if replayCursor == previousCursor {
+				_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
+				return false
 			}
-			replayCursor = event.Cursor
 		}
-		if replayCursor == previousCursor {
-			_ = conn.Close(websocket.StatusTryAgainLater, realtimeReplayCloseReason)
-			return
-		}
+		return true
+	}
+	if !drain() {
+		return
 	}
 	for {
+		// Prefer overflow termination to starting another durable drain.
+		select {
+		case <-subscription.Done:
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
+			return
+		default:
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case event, ok := <-events:
-			if !ok {
-				_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
+		case <-subscription.Done:
+			_ = conn.Close(websocket.StatusTryAgainLater, realtimeOverflowCloseReason)
+			return
+		case <-sessionRecheck.C:
+			// An idle socket delivers nothing to revalidate against, so revocation
+			// reaches it here instead of waiting for the workspace's next event.
+			if !credentialAuthorityLive() {
 				return
 			}
-			if event.Cursor != "" && event.Cursor <= replayCursor {
+		case _, ok := <-subscription.Wake:
+			if !ok {
 				continue
 			}
-			// Bot deletion and membership-removal revocations are intentionally
-			// ephemeral, so they only arrive on the live hub path, never replay.
+			if !drain() {
+				return
+			}
+		case event, ok := <-subscription.Events:
+			if !ok {
+				continue
+			}
+			// Revocations and other cursorless events are intentionally ephemeral.
 			if eventRevokesWorkspaceAccess(event, act.user.ID) {
 				_ = conn.Close(websocket.StatusPolicyViolation, "workspace access revoked")
 				return
@@ -1493,7 +1602,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 			if !s.shouldDeliverEventToActor(ctx, event, act.user.ID) {
 				continue
 			}
-			if err := writeWS(ctx, conn, event); err != nil {
+			if !writeEvent(event) {
 				return
 			}
 		}
@@ -1610,10 +1719,24 @@ func directConversationIDFromEvent(event store.Event) string {
 	}
 }
 
+var errSessionLookupUnavailable = errors.New("session verification unavailable; retry later")
+
+// Only missing or expired sessions invalidate authentication. Backend failures
+// must remain retryable across HTTP and already-open realtime connections.
+func (s *Server) sessionUser(ctx context.Context, token string) (store.User, error) {
+	user, err := s.store.GetSessionUser(ctx, token)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, store.ErrSessionExpired) {
+		return store.User{}, fmt.Errorf("%w: %w", errSessionLookupUnavailable, err)
+	}
+	return user, err
+}
+
 func (s *Server) currentActor(r *http.Request) (actor, error) {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
 		if botAuth, err := s.store.GetBotTokenAuth(r.Context(), token); err == nil {
+			// Record ingress use once; realtime revalidation stays read-only.
+			_ = s.store.RecordBotTokenUse(r.Context(), botAuth.TokenID)
 			return actor{
 				user:        botAuth.User,
 				botTokenID:  botAuth.TokenID,
@@ -1621,19 +1744,22 @@ func (s *Server) currentActor(r *http.Request) (actor, error) {
 				scopes:      botAuth.Scopes,
 			}, nil
 		}
-		user, err := s.store.GetSessionUser(r.Context(), token)
-		return actor{user: user}, err
+		user, err := s.sessionUser(r.Context(), token)
+		if err != nil {
+			return actor{}, err
+		}
+		return actor{user: user, sessionToken: token}, nil
 	}
 	cookie, err := requestCookie(r, s.cookies.Session)
 	if errors.Is(err, errAmbiguousCookie) {
 		return actor{}, err
 	}
 	if err == nil && cookie.Value != "" {
-		user, err := s.store.GetSessionUser(r.Context(), cookie.Value)
+		user, err := s.sessionUser(r.Context(), cookie.Value)
 		if err == nil {
-			return actor{user: user}, nil
+			return actor{user: user, sessionToken: cookie.Value}, nil
 		}
-		if s.access == nil || r.Header.Get(accessAssertionHeader) == "" {
+		if errors.Is(err, errSessionLookupUnavailable) || s.access == nil || r.Header.Get(accessAssertionHeader) == "" {
 			return actor{}, err
 		}
 	}
@@ -1729,6 +1855,20 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(index)
 }
 
+// enabledAuthMethods tells the frontend which sign-in surfaces to render. It
+// is always a non-nil slice so the SPA can distinguish "no method configured"
+// from an older server that omitted the field.
+func (s *Server) enabledAuthMethods() []string {
+	methods := []string{}
+	if s.githubOAuth.ClientID != "" && s.githubOAuth.ClientSecret != "" {
+		methods = append(methods, "github")
+	}
+	if s.passwordAuthEnabled {
+		methods = append(methods, "password")
+	}
+	return methods
+}
+
 func isMissingBrowserAssetPath(urlPath string) bool {
 	if strings.HasPrefix(urlPath, "/_app/") || strings.HasPrefix(urlPath, "/assets/") {
 		return true
@@ -1744,9 +1884,14 @@ func isMissingBrowserAssetPath(urlPath string) bool {
 }
 
 func (s *Server) injectRuntimeConfig(index []byte) []byte {
-	config, err := json.Marshal(map[string]string{
-		"apiBaseUrl":      s.publicAPIURL,
-		"frontendBaseUrl": s.frontendURL,
+	config, err := json.Marshal(struct {
+		APIBaseURL      string   `json:"apiBaseUrl"`
+		FrontendBaseURL string   `json:"frontendBaseUrl"`
+		AuthMethods     []string `json:"authMethods"`
+	}{
+		APIBaseURL:      s.publicAPIURL,
+		FrontendBaseURL: s.frontendURL,
+		AuthMethods:     s.enabledAuthMethods(),
 	})
 	if err != nil {
 		return index
@@ -1848,6 +1993,10 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
+	if errors.Is(err, errSessionLookupUnavailable) {
+		status = http.StatusServiceUnavailable
+		err = errSessionLookupUnavailable
+	}
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {
 		status = http.StatusRequestEntityTooLarge
@@ -1903,11 +2052,11 @@ func optionalString(value string) *string {
 }
 
 func queryInt(r *http.Request, key string, fallback int) int {
-	value, err := strconv.Atoi(r.URL.Query().Get(key))
+	value, err := strconv.ParseInt(r.URL.Query().Get(key), 10, 32)
 	if err != nil {
 		return fallback
 	}
-	return value
+	return int(value)
 }
 
 func parseMessagePageRequest(r *http.Request) (store.MessagePageRequest, error) {
@@ -1962,22 +2111,28 @@ func writeMessagePage(w http.ResponseWriter, page store.MessagePage, err error) 
 
 func ListenAndServe(ctx context.Context, addr string, handler http.Handler) error {
 	server := newHTTPServer(addr, handler)
-	go func() {
-		<-ctx.Done()
+	defer server.Close()
+	shutdownDone := make(chan error, 1)
+	stopShutdown := context.AfterFunc(ctx, func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
-	}()
+		shutdownDone <- server.Shutdown(shutdownCtx)
+	})
+	defer stopShutdown()
 	err := server.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
-		return nil
+		// Closing the listener returns before active requests finish. Keep the
+		// caller and its store alive until draining completes or times out.
+		return <-shutdownDone
 	}
 	return fmt.Errorf("serve %s: %w", addr, err)
 }
 
 func withHTTPDeadlines(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		// Go uses the read side to detect disconnects on bodyless requests;
+		// a body deadline there would also cancel a progressing response.
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") || r.Body == nil || r.Body == http.NoBody {
 			handler.ServeHTTP(w, r)
 			return
 		}

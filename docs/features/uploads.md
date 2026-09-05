@@ -38,6 +38,18 @@ POST /api/messages/{message_id}/attachments        # { upload_id }
 
 ## Attaching to a message
 
+The web composer keeps a ready attachment when switching channels within the
+same workspace. Switching workspaces abandons it and cancels pending uploads,
+including metadata probing. Selecting another file supersedes the older
+request; sending the visible draft or removing its attachment also cancels a
+pending replacement. Upload failures appear in the composer and can be retried
+with the same file.
+
+If the text was sent but attachment linking fails, Retry attaches the existing
+upload to that saved message. Discard removes the failed attachment from the
+local view and keeps the sent text. Message and thread refreshes preserve these
+recovery actions until you retry or discard the attachment.
+
 `POST /api/messages/{message_id}/attachments` records a row in
 `message_attachments`. The store hydrates attachments on
 `ListMessages`/`GetThread`, so subsequent reads include the attachment list
@@ -141,8 +153,28 @@ CLICKCLACK_R2_SECRET_ACCESS_KEY=...
 ```
 
 R2 keys are stored in the database as `r2://bucket/prefix/upload-...`.
+URL-encode reserved characters in the configured prefix, such as
+`r2://bucket/team%23files` for `team#files`. Newly stored upload addresses also
+escape these characters so downloads and cleanup retain the complete key.
+Existing stored addresses and physical object keys are not migrated.
 Download requests are still authenticated by ClickClack before the object is
 fetched from R2.
+
+The default R2 client delegates to the configured `http.DefaultTransport` and
+adds a 30-second wait for complete response headers after the request finishes
+writing. It has no total request timeout, so progressing uploads can take longer.
+This timing relies on Go's HTTP trace and cancellation lifecycle, including
+wrappers that forward it; opaque transports cannot provide the same guarantee.
+Applications supplying `R2Config.HTTPClient` retain that client unchanged and
+own its transport and timeout policy. The server uses the default client.
+
+The same default client bounds each upstream response-body read to 30 seconds,
+including error diagnostics for uploads and deletions (still capped at 512 bytes).
+The timer pauses between reads, so downstream backpressure and progressing
+streams can exceed 30 seconds overall. A failed download after headers are sent
+aborts the HTTP stream instead of appending JSON or reporting successful EOF.
+Bodyless downloads do not inherit the inbound request-body deadline; actual
+request bodies retain their existing read protection.
 
 ## What is intentionally missing
 

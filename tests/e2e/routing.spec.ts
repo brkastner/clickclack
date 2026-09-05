@@ -1,11 +1,255 @@
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { waitForAppReady } from "./app-ready";
+import { deferred, openThread, threadFixture } from "./thread-fixture";
 
 function clickclack(args: string[]): string {
   return execFileSync("go", ["run", "./apps/api/cmd/clickclack", ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
   }).trim();
+}
+
+test("an obsolete route failure cannot poison a newer visit to the same channel", async ({
+  page,
+}) => {
+  const response = await page.request.post("/api/workspaces", {
+    data: { name: `Route failure ${Date.now()}` },
+  });
+  expect(response.ok()).toBe(true);
+  const { workspace } = (await response.json()) as {
+    workspace: { id: string; route_id: string };
+  };
+  const channels: { id: string; route_id: string; name: string }[] = [];
+  for (const name of ["route-a", "route-b", "route-c"]) {
+    const created = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+      data: { name, kind: "public" },
+    });
+    expect(created.ok()).toBe(true);
+    channels.push((await created.json()).channel);
+  }
+  const [a, b, c] = channels;
+  await page.goto(`/app/${workspace.route_id}/${b.route_id}`);
+  await waitForAppReady(page);
+
+  let releaseFailure!: () => void;
+  const pendingFailure = new Promise<void>((resolve) => (releaseFailure = resolve));
+  let firstRequest!: () => void;
+  const firstHeld = new Promise<void>((resolve) => (firstRequest = resolve));
+  let requests = 0;
+  const routePath = `/api/routes/${workspace.route_id}/${a.route_id}`;
+  await page.route(`**${routePath}`, async (route) => {
+    if (++requests !== 1) {
+      await route.continue();
+      return;
+    }
+    firstRequest();
+    await pendingFailure;
+    await route.fulfill({ status: 503, json: { error: "Obsolete route failed" } });
+  });
+
+  await page.getByRole("link", { name: `# ${a.name}`, exact: true }).click();
+  await firstHeld;
+  await page.getByRole("link", { name: `# ${b.name}`, exact: true }).click();
+  await page.getByRole("link", { name: `# ${a.name}`, exact: true }).click();
+  await expect(page.getByRole("heading", { name: `#${a.name}`, exact: true })).toBeVisible();
+  const failedResponse = page.waitForResponse(
+    (result) => result.url().endsWith(routePath) && result.status() === 503,
+  );
+  releaseFailure();
+  await failedResponse;
+  // Let the rejected fetch and its reactive error handler settle before clicking.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await waitForAppReady(page);
+  await page.getByRole("link", { name: `# ${c.name}`, exact: true }).click();
+  await expect(page.getByRole("heading", { name: `#${c.name}`, exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/app/${workspace.route_id}/${c.route_id}$`));
+});
+
+for (const action of ["thread guidance", "recoverable route error"] as const) {
+  test(`${action} leaves channel navigation available`, async ({ page }) => {
+    const { workspace, channel } = await threadFixture(page);
+    const created = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+      data: { name: "after-notice", kind: "public" },
+    });
+    expect(created.ok()).toBe(true);
+    const { channel: alternate } = (await created.json()) as {
+      channel: { name: string; route_id: string };
+    };
+    const alternateLink = page.getByRole("link", { name: `# ${alternate.name}`, exact: true });
+
+    if (action === "thread guidance") {
+      await page.getByRole("button", { name: "Open a message thread", exact: true }).click();
+      await expect(
+        page.getByText("Pick a message to open its thread.", { exact: true }),
+      ).toBeVisible();
+    } else {
+      await page.route(
+        `**/api/routes/${workspace.route_id}/${alternate.route_id}`,
+        (route) => route.fulfill({ status: 503, json: { error: "Temporary route failure" } }),
+        { times: 1 },
+      );
+      await alternateLink.click();
+      await expect(page.getByText("Temporary route failure", { exact: true })).toBeVisible();
+      await page.getByRole("link", { name: `# ${channel.name}`, exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`/${channel.route_id}$`));
+    }
+
+    await alternateLink.click();
+    await expect(page).toHaveURL(new RegExp(`/${alternate.route_id}$`));
+    await expect(
+      page.getByRole("heading", { name: `#${alternate.name}`, exact: true }),
+    ).toBeVisible();
+  });
+}
+
+for (const action of [
+  "search",
+  "open pins",
+  "close pins",
+  "dismiss pins",
+  "open profile",
+  "close profile",
+] as const) {
+  test(`${action} restores its channel after interrupting a pending route`, async ({ page }) => {
+    if (action === "open profile") {
+      await page.addInitScript(() => {
+        Object.assign(window, {
+          clickclackDesktop: {
+            integratedTitleBar: false,
+            platform: "darwin",
+            notify: async () => true,
+            onNavigate: () => () => {},
+            onQuickCompose: () => () => {},
+            openSettings: () => {},
+            setActiveRoute: (route: string) =>
+              (document.documentElement.dataset.desktopRoute = route),
+            setUnreadCount: () => {},
+            signInWithGitHub: async () => true,
+          },
+        });
+      });
+    }
+    const { workspace, channel, roots } = await threadFixture(page);
+    const created = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+      data: { name: "alternate-route", kind: "public" },
+    });
+    expect(created.ok()).toBe(true);
+    const { channel: alternate } = (await created.json()) as {
+      channel: { name: string; route_id: string };
+    };
+    const result = page.locator(`.search-result[data-result-id="${roots[0].id}"]`);
+    if (action === "search") {
+      await page.getByLabel("Search messages").fill(`"${roots[0].body}"`);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+      await expect(result).toBeVisible();
+    } else if (action === "close pins" || action === "dismiss pins") {
+      await page.getByRole("button", { name: "Pinned items", exact: true }).click();
+      await expect(page.getByLabel("Pinned messages pane", { exact: true })).toBeVisible();
+    } else if (action === "close profile") {
+      await page
+        .locator("main.timeline")
+        .getByRole("button", { name: /^View profile for/ })
+        .first()
+        .click();
+      await expect(page.getByRole("button", { name: "Close profile", exact: true })).toBeVisible();
+    }
+    const routePath = `/api/routes/${workspace.route_id}/${alternate.route_id}`;
+    const entered = deferred(),
+      release = deferred(),
+      delivered = deferred();
+    await page.route(
+      `**${routePath}`,
+      async (route) => {
+        const response = await route.fetch();
+        entered.resolve();
+        await release.promise;
+        await route.fulfill({ response });
+        delivered.resolve();
+      },
+      { times: 1 },
+    );
+    try {
+      await page.getByRole("link", { name: `# ${alternate.name}`, exact: true }).click();
+      await entered.promise;
+      await expect(page).toHaveURL(new RegExp(`/${alternate.route_id}$`));
+      await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+      if (action === "search") {
+        await result.click();
+        await expect(result).toHaveClass(/is-active/);
+      } else if (action === "open pins" || action === "close pins" || action === "dismiss pins") {
+        await page
+          .getByRole("button", {
+            name:
+              action === "open pins"
+                ? "Pinned items"
+                : action === "close pins"
+                  ? "Close pinned items"
+                  : "Close pinned panel",
+            exact: true,
+          })
+          .click();
+        await expect(page.getByLabel("Pinned messages pane", { exact: true })).toHaveCount(
+          action === "open pins" ? 1 : 0,
+        );
+      } else {
+        if (action === "open profile") {
+          await page
+            .locator("main.timeline")
+            .getByRole("button", { name: /^View profile for/ })
+            .first()
+            .click();
+        } else {
+          await page.getByRole("button", { name: "Close profile", exact: true }).click();
+        }
+        await expect(page.getByRole("button", { name: "Close profile", exact: true })).toHaveCount(
+          action === "open profile" ? 1 : 0,
+        );
+      }
+      await expect(page).toHaveURL(new RegExp(`/${channel.route_id}$`));
+    } finally {
+      release.resolve();
+      await delivered.promise;
+    }
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/${channel.route_id}$`));
+    if (action === "open profile") {
+      await expect(page.getByRole("button", { name: "Close profile", exact: true })).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-desktop-route",
+        `/app/${workspace.route_id}/${channel.route_id}`,
+      );
+      await page.getByRole("button", { name: "Close profile", exact: true }).click();
+      await openThread(page, roots[0].id);
+      await expect(page).toHaveURL(new RegExp(`/${roots[0].route_id}$`));
+      await page
+        .locator("main.timeline")
+        .getByRole("button", { name: /^View profile for/ })
+        .first()
+        .click();
+      await expect(page.getByLabel("Profile pane", { exact: true })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/${channel.route_id}$`));
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-desktop-route",
+        `/app/${workspace.route_id}/${channel.route_id}`,
+      );
+    }
+    await page.getByRole("link", { name: `# ${alternate.name}`, exact: true }).click();
+    await expect(page.getByRole("heading", { name: `#${alternate.name}` })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/${alternate.route_id}$`));
+    await expect(page.getByRole("button", { name: "Close profile", exact: true })).toHaveCount(0);
+  });
 }
 
 test("app routes restore channels, DMs, threads, fallbacks, and history navigation", async ({

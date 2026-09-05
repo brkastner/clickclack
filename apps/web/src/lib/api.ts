@@ -25,8 +25,18 @@ declare global {
       apiBaseUrl?: string;
       frontendBaseUrl?: string;
       voiceBaseUrl?: string;
+      authMethods?: string[];
     };
   }
+}
+
+// Sign-in surfaces the server has enabled. A server that predates the field
+// omits it entirely, so an absent list falls back to GitHub, which was then
+// the only browser method.
+export function authMethods(): string[] {
+  if (typeof window === "undefined") return [];
+  const methods = window.__CLICKCLACK_CONFIG__?.authMethods;
+  return Array.isArray(methods) ? methods : ["github"];
 }
 
 export function apiBaseURL(): string {
@@ -100,4 +110,23 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   const text = await response.text();
   return text ? (JSON.parse(text) as T) : (undefined as T);
+}
+
+export async function apiWithTimeout<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const { signal } = init;
+  if (!signal) return api<T>(path, init);
+  signal.throwIfAborted();
+  // Keep caller cancellation and the deadline without requiring AbortSignal.any.
+  const controller = new AbortController();
+  const timeout = AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS);
+  const onCancel = () => controller.abort(signal.reason);
+  const onTimeout = () => controller.abort(timeout.reason);
+  signal.addEventListener("abort", onCancel, { once: true });
+  timeout.addEventListener("abort", onTimeout, { once: true });
+  try {
+    return await api<T>(path, { ...init, signal: controller.signal });
+  } finally {
+    signal.removeEventListener("abort", onCancel);
+    timeout.removeEventListener("abort", onTimeout);
+  }
 }

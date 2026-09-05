@@ -11,7 +11,7 @@
   import { enhanceMentions } from "../../lib/actions/mention-highlight";
   import { time, markdown } from "../../lib/format";
   import { writeClipboardText } from "../../lib/clipboard";
-  import type { MessageEditController } from "../../lib/messageEditing.svelte";
+  import type { MessageEdit, MessageEditController } from "../../lib/messageEditing.svelte";
   import {
     hasCachedMessageAudio,
     messageAudioKey,
@@ -57,7 +57,7 @@
     deleting?: boolean;
     editController?: MessageEditController;
     editScope?: string;
-    onMessageEdited?: (message: Message) => void;
+    onMessageEdited?: (message: MessageEdit) => void;
     onReply: (message: Message, context: "channel" | "dm") => void;
     onOpenThread: (message: Message) => void;
     onJumpToQuote: (message: Message) => void;

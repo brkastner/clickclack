@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { DEFAULT_HOME_LINK, type HomeLink } from "../../lib/home-link";
   import { safeExternalChannelURL } from "../../lib/chat/channels";
   import { desktop } from "../../lib/desktop";
   import type { ChannelNotificationPreference, Workspace } from "../../lib/types";
@@ -25,6 +26,9 @@
     platform: string;
     searchQuery: string;
     sidebarCollapsed: boolean;
+    homeLink?: HomeLink;
+    workspaceCreatePending?: boolean;
+    workspaceCreateError?: string;
     workspaces: Workspace[];
     selectedWorkspaceID: string;
     createWorkspaceName: string;
@@ -68,6 +72,9 @@
     platform,
     searchQuery,
     sidebarCollapsed,
+    homeLink = DEFAULT_HOME_LINK,
+    workspaceCreatePending = false,
+    workspaceCreateError = "",
     workspaces,
     selectedWorkspaceID,
     createWorkspaceName,
@@ -133,6 +140,9 @@
         </svg>
       </button>
       <WorkspaceSwitcher
+        {homeLink}
+        {workspaceCreatePending}
+        {workspaceCreateError}
         {workspaces}
         {selectedWorkspaceID}
         {createWorkspaceName}

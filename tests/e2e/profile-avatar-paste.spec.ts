@@ -59,6 +59,7 @@ test("profile image paste targets each avatar field and rolls back failed upload
   const darkPreview = page.locator('[data-avatar-preview="dark"]');
   await expect(darkPreview).toHaveAttribute("src", /^blob:/);
   const darkPreviewURL = await darkPreview.getAttribute("src");
+  await expect(page.getByRole("button", { name: "Save profile" })).toBeDisabled();
   releaseUpload();
   await expect(dark).toHaveValue(/^\/api\/uploads\/upl_/);
   await expect
@@ -106,7 +107,18 @@ test("profile image paste targets each avatar field and rolls back failed upload
 
   await dark.fill(hostedDark);
   await light.fill(hostedLight);
+  const saved = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/me" && response.request().method() === "PATCH",
+  );
   await page.getByRole("button", { name: "Save profile" }).click();
+  const saveResponse = await saved;
+  expect(saveResponse.ok()).toBe(true);
+  expect(saveResponse.request().postDataJSON()).toMatchObject({
+    avatar_url: hostedDark,
+    avatar_url_light: hostedLight,
+  });
+  expect(saveResponse.request().postDataJSON()).not.toHaveProperty("notification_settings");
   const response = await page.request.get("/api/me");
   const body = (await response.json()) as {
     user: { avatar_url: string; avatar_url_light: string };

@@ -66,6 +66,24 @@ paths:
                 type: string
         "404":
           description: Metrics are disabled
+  /api/home-link:
+    get:
+      operationId: getHomeLink
+      summary: Workspace rail home destination and label
+      description: Public deployment metadata, read once when the chat shell starts. Relative paths resolve on the frontend origin. Integrated desktop chrome uses /app when url is /; other non-app HTTP(S) destinations open in the system browser.
+      security: []
+      responses:
+        "200":
+          description: Validated deployment settings with defaults applied independently
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeLink"
+              examples:
+                default:
+                  value: { url: "/", label: "cc" }
+                product:
+                  value: { url: "https://product.example.com/portal", label: "Product" }
   /api/auth/magic/request:
     post:
       operationId: requestMagicLink
@@ -94,6 +112,66 @@ paths:
       responses:
         "200":
           description: Created session
+  /api/auth/password/login:
+    post:
+      operationId: passwordLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordLoginRequest"
+      responses:
+        "200":
+          description: Created session
+        "400":
+          description: Missing identifier or password
+        "401":
+          description: Unknown identifier, wrong password, an account without a password set, or a password replaced while this request verified it
+        "403":
+          description: Cross-site login requests are not allowed
+        "415":
+          description: Content-Type must be application/json
+        "429":
+          description: Too many attempts for this client address or identifier
+        "501":
+          description: Password login is not configured
+  /api/auth/password/change:
+    post:
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password replaced; the account's other sessions were revoked
+        "400":
+          description: Missing or unacceptable password
+        "401":
+          description: Not signed in, the current password is wrong, or the calling session was revoked before the change committed
+        "403":
+          description: Cross-site requests are not allowed, and bot tokens cannot change passwords
+        "409":
+          description: The account has no password set and an administrator enrolls it first, or another change replaced the password first and nothing was written
+        "415":
+          description: Content-Type must be application/json
+        "429":
+          description: Too many attempts for this account
+        "501":
+          description: Password login is not configured
+  /api/auth/logout:
+    post:
+      operationId: logout
+      responses:
+        "200":
+          description: The bearer or cookie session that authenticated the call was revoked and the cookie expired
+        "403":
+          description: Cross-site sign-out requests are not allowed
+        "415":
+          description: Content-Type must be application/json
   /api/auth/github/start:
     get:
       operationId: startGitHubOAuth
@@ -1402,9 +1480,25 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: before_seq
+          in: query
+          description: Return the nearest replies before this exclusive thread sequence; mutually exclusive with after_seq, around_seq and latest=true.
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: after_seq
+          in: query
+          description: Return the nearest replies after this exclusive thread sequence.
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: around_seq
+          in: query
+          description: Return a balanced reply window around this thread sequence.
+          schema: { type: integer, format: int64, minimum: 0 }
       responses:
         "200":
-          description: Thread root and replies
+          description: Thread root, chronological replies and authoritative history edges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadPage"
   /api/messages/{message_id}/thread/replies:
     post:
       operationId: createThreadReply
@@ -1847,6 +1941,21 @@ components:
         type: string
         pattern: "^([CDM][A-Z0-9]{16}|(chn|dm|msg)_[A-Za-z0-9-]+)$"
   schemas:
+    HomeLink:
+      type: object
+      required: [url, label]
+      properties:
+        url:
+          type: string
+          minLength: 1
+          default: "/"
+          description: Absolute HTTP(S) URL without credentials, or a path starting with a single slash on the frontend origin. Control characters, backslashes, and protocol-relative URLs are forbidden. Query strings and fragments are allowed.
+        label:
+          type: string
+          minLength: 1
+          maxLength: 32
+          default: cc
+          description: Badge text, limited to 32 Unicode code points. Visually truncated to fit the tile; the accessible title retains the full label.
     CreateWorkspaceRequest:
       type: object
       required: [name]
@@ -1886,6 +1995,23 @@ components:
       required: [token]
       properties:
         token:
+          type: string
+    PasswordLoginRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier:
+          type: string
+          description: Account email address or handle
+        password:
+          type: string
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
           type: string
     ConsumeDesktopGitHubOAuthRequest:
       type: object
@@ -1965,6 +2091,9 @@ components:
           $ref: "#/components/schemas/NotificationSettings"
         appearance_preferences:
           $ref: "#/components/schemas/AppearancePreferences"
+        password_enrolled:
+          type: boolean
+          description: Whether this account has a password on file. Reported only for the signed-in caller, on /api/me.
     BotToken:
       type: object
       required: [id, bot_user_id, workspace_id, name, scopes, created_at]
@@ -3214,6 +3343,30 @@ components:
         unread_count:
           type: integer
           format: int64
+    ThreadPage:
+      type: object
+      required: [root, replies, thread_state, oldest_seq, newest_seq, has_older, has_newer]
+      properties:
+        root:
+          $ref: "#/components/schemas/Message"
+        replies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        thread_state:
+          $ref: "#/components/schemas/ThreadState"
+        oldest_seq:
+          type: integer
+          format: int64
+          description: Oldest returned thread sequence, or zero for an empty page.
+        newest_seq:
+          type: integer
+          format: int64
+          description: Newest returned thread sequence, or zero for an empty page.
+        has_older:
+          type: boolean
+        has_newer:
+          type: boolean
     ThreadState:
       type: object
       required: [root_message_id, reply_count, last_reply_author_ids]
@@ -3378,6 +3531,10 @@ components:
           description: Correlates agent activity and a bot-authored final response with one source message.
         author:
           $ref: "#/components/schemas/User"
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Upload"
         quoted_message_id:
           type: string
         quoted_body_snapshot:

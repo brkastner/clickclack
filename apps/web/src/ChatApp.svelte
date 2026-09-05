@@ -1,7 +1,13 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
+  import { afterNavigate, goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
-  import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError, voiceBaseURL } from "./lib/api";
+  import { toStore } from "svelte/store";
+  import {
+    DEFAULT_HOME_LINK,
+    loadHomeLink,
+    type HomeLink,
+  } from "./lib/home-link";
+  import { APIError, api, apiResourceURL, apiURL, authMethods, frontendBaseURL, readableAPIError, voiceBaseURL } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
   import { avatarSize } from "./lib/avatar-size";
   import { desktop } from "./lib/desktop";
@@ -33,14 +39,12 @@
     withoutPendingAttachmentPreview,
     type PendingAttachment,
   } from "./lib/attachments";
-  import { gifLibrary } from "./lib/gifs";
   import {
     markdownImageViewerItems,
     markdownImageViewerURL,
   } from "./lib/actions/markdown";
   import {
     imageViewerItems,
-    newUploadNonce,
     uploadWorkspaceFile,
     type ImageViewerItem,
   } from "./lib/uploads";
@@ -65,6 +69,9 @@
   } from "./lib/chat/people";
   import { updateBotProfile } from "./lib/bots";
   import { coalesceAgentActivity } from "./lib/chat/agent-activity";
+  import { newNonce } from "./lib/chat/messages";
+  import { MessageRequests, type AuthorUpdate } from "./lib/chat/messageRequests";
+  import { mergeMessageUpdate, type MessageUpdate } from "./lib/chat/messageUpdates";
   import { channelDisplayTitle } from "./lib/chat/channels";
   import {
     redirectTypingToComposer,
@@ -73,15 +80,18 @@
   } from "./lib/chat/typeToFocus";
   import {
     MessageEditController,
+    type MessageEdit,
     type MessageEditSession,
   } from "./lib/messageEditing.svelte";
-  import { connectRealtime, type RealtimeConnection } from "./lib/realtime.svelte";
+  import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "./lib/realtime.svelte";
+  import { ThreadController } from "./lib/thread.svelte";
   import { ReactionController } from "./lib/reactions.svelte";
   import { notifyTyping, stopTyping } from "./lib/typing";
   import ChatComposer from "./components/composer/ChatComposer.svelte";
   import Avatar from "./components/avatar/Avatar.svelte";
   import ArtifactViewer from "./components/artifacts/ArtifactViewer.svelte";
   import ImageViewer from "./components/media/ImageViewer.svelte";
+  import KeystrokeMark from "./components/KeystrokeMark.svelte";
   import MessageList, {
     type MessageListHandle,
     type MessageListState,
@@ -126,8 +136,8 @@
     readDecisionSound,
     type DecisionSound,
   } from "./lib/decisionSound";
-  import { listWorkspaceMembersPage } from "./lib/workspace-members";
-  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadState, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
+  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
   import { findUniqueBotCommand } from "./lib/bot-command-routing";
   import {
@@ -157,6 +167,7 @@
   const OTHER_ALIGN_STORAGE_KEY = "clickclack:other-align:v1";
   const appSessionStartedAt = Date.now();
   const integratedTitleBar = desktop?.integratedTitleBar === true;
+  let homeLink: HomeLink = DEFAULT_HOME_LINK;
 
   export let routeWorkspaceID = "";
   export let routeTargetID = "";
@@ -169,28 +180,35 @@
   let topics: Topic[] = [];
   let channelNotifPreference: ChannelNotificationPreference | null = null;
   let channelNotifPreferences = new Map<string, ChannelNotificationPreference>();
+  let notificationMessageSeqs = new Map<string, number>();
   let channelNotifSaving = false;
   let directConversations: DirectConversation[] = [];
   let messages: Message[] = [];
-  let replies: Message[] = [];
+  $: replies = $threadView.replies;
   let selectedWorkspaceID = "";
   let selectedChannelID = "";
   let selectedDirectID = "";
-  let selectedThread: Message | null = null;
+  const thread = new ThreadController(() => `${selectedWorkspaceID}:${currentConversationKey()}`, reconcileThread);
+  // This legacy component consumes the rune-based owner through a reactive store.
+  const threadView = toStore(() => ({
+    root: thread.root,
+    selection: thread.selection,
+    replies: thread.replies,
+    state: thread.state,
+    draft: thread.draft,
+    error: thread.error,
+  }));
   let selectedComposerTopicID = "";
   let activeTopicFilterID = "";
   let topicFilterGeneration = 0;
   let topicConversationKey = "";
-  let topicFilterLoading = false;
-  let recoverableDraftMessages = new Map<string, Message[]>();
-  let selectedThreadState: ThreadState | null = null;
+  let outgoingMessages = new Map<string, OutgoingMessage>();
   let selectedProfile: User | null = null;
   let pinnedPanelOpen = false;
   // Live workflow runs, keyed by conversation. Ephemeral: nothing is replayed
   // after a reload, so this starts empty and fills from the next frame.
   let workflowRuns: ReadonlyMap<string, WorkflowRun> = new Map();
   let runPanelOpen = false;
-  let openPinnedPanelAfterRoute = false;
   let pinnedMessages: Message[] = [];
   let pinnedMessagesLoading = false;
   let pinnedMessagesError = "";
@@ -211,7 +229,6 @@
   let selectedArtifact: Upload | null = null;
   let artifactConversationKey = "";
   let artifactTrigger: HTMLElement | null = null;
-  let artifactThreadScrollTop: number | null = null;
   let artifactViewerElement: HTMLElement | null = null;
   let shellElement: HTMLElement | null = null;
   let sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
@@ -224,7 +241,6 @@
   let sidebarResizePointerID: number | null = null;
   let artifactModalInertElements = new Set<HTMLElement>();
   let messageBody = "";
-  let replyBody = "";
   let voiceSession: BrowserVoiceSession | null = null;
   let voiceState: VoiceState = { status: "idle" };
   let remoteVoiceStream: MediaStream | null = null;
@@ -239,13 +255,18 @@
   let awaitingVoiceResponses = 0;
   let pendingVoiceDelegations: string[] = [];
   let voiceThinking = false;
-  let voiceFillerTimer: ReturnType<typeof setTimeout> | undefined;
+  let voiceFillerTimer: number | undefined;
   let voiceFillerIndex = 0;
   let committedVoiceTurnIDs = new Set<string>();
   let spokenVoiceMessageIDs = new Set<string>();
   let workspaceName = "";
   let channelName = "";
   let directMemberID = "";
+  let createPending: "workspace" | "channel" | "direct" | null = null;
+  let workspaceCreateError = "";
+  let channelCreateError = "";
+  let directCreateError = "";
+  let createActionSerial = 0;
   let searchQuery = "";
   // A search session owns the right pane until it is closed or replaced.
   // Opening a thread from a result "detours" the pane to that thread while the
@@ -255,7 +276,7 @@
   let searchReturnScrollTop = 0;
   let searchRequestID = 0;
   let pendingAttachments: PendingAttachment[] = [];
-  let showGifPicker = false;
+  const uploadControllers = new Map<string, AbortController>();
   let settingsModalOpen = false;
   let settingsModalSection: AccountSettingsSectionId = "profile";
   let channelSettingsOpen = false;
@@ -263,10 +284,7 @@
   let channelSettingsError = "";
   let showCreateChannel = false;
   let createChannelProfile: ChannelProfileShortcut | null = null;
-  let channelCreateStatus = "";
-  let channelCreating = false;
   let showCreateDirect = false;
-  let gifQuery = "";
   let browserNotificationsEnabled = false;
   let decisionSound: DecisionSound = "chime";
   // Client-only preferences for agent activity. Commentary renders as normal
@@ -279,18 +297,34 @@
   // Left is the default, and an explicit stored preference wins on load.
   let userAlign: "left" | "right" = "left";
   let otherAlign: "left" | "right" = "left";
-  let status = "loading";
+  let appReady = false;
   let authRequired = false;
   let desktopAuthStatus = "";
+  const enabledAuthMethods = authMethods();
+  const githubAuthEnabled = enabledAuthMethods.includes("github");
+  const passwordAuthEnabled = enabledAuthMethods.includes("password");
+  let passwordIdentifier = "";
+  let passwordSecret = "";
+  let magicToken = "";
+  let authSubmitting = false;
+  let authError = "";
+  const authLead = passwordAuthEnabled
+    ? githubAuthEnabled
+      ? "Sign in with your ClickClack account, or continue with GitHub."
+      : "Sign in with your ClickClack account."
+    : githubAuthEnabled
+      ? "Sign in with GitHub to join the guest room."
+      : "Sign in with a token from your ClickClack administrator.";
+  const authFoot = githubAuthEnabled && !passwordAuthEnabled ? "Any GitHub account can join." : "";
   let connected = false;
   let realtimeError = "";
   let realtimeInitializedWorkspaceID = "";
   let pendingRealtimeWorkspaceID = "";
   let socket: RealtimeConnection | null = null;
-  let realtimeMessageLoadQueue: Promise<void> = Promise.resolve();
   let messageList: MessageListHandle | null = null;
   let scrollMemory = new Map<string, MessageListState>();
-  let messageWindows = new Map<string, MessageWindow>();
+  let messageWindows = new Map<string, MessagePage>();
+  const messageRequests = new MessageRequests(() => [user?.id, selectedWorkspaceID, currentConversationKey()].join(":"));
   let loadingMessagePages = new Set<string>();
   let olderPageState: HistoryEdgeState = "idle";
   let newerPageState: HistoryEdgeState = "idle";
@@ -323,7 +357,7 @@
   let workingConversationIDs = new Set<string>();
   let activityClock = Date.now();
   let activityClockSweeper: number | undefined;
-  let appliedRouteKey = "";
+  let activeRouteKey = "";
   let routeApplySerial = 0;
   let messageLoadGeneration = 0;
   let workspacesLoadSerial = 0;
@@ -332,6 +366,8 @@
   let directConversationsLoadSerial = 0;
   let moderationMembersLoadSerial = 0;
   let workspaceMembersLoadSerial = 0;
+  let workspaceMembersAbort: AbortController | null = null;
+  let workspaceMembersError = "";
   let slashCommandsLoadSerial = 0;
   let botCommandsLoadSerial = 0;
   let channelNotifLoadSerial = 0;
@@ -342,10 +378,6 @@
   let deletingMessageIDs = new Set<string>();
   let pendingDeleteMessage: Message | null = null;
   let deleteMessageError = "";
-
-  type MessageWindow = Omit<MessagePage, "messages"> & {
-    messages: Message[];
-  };
 
   type HistoryEdgeState = "idle" | "loading" | "settling";
   type HiddenDirectUndo = {
@@ -409,14 +441,11 @@
       ? channels.find((channel) => channel.id === selectedChannelID) || {}
       : {};
   $: activeUnreadCount = unreadCountForKey(activeConversationKey, activeUnreadState);
-  $: desktopUnreadCount = status === "ready"
+  $: desktopUnreadCount = appReady
     ? channels.reduce((total, channel) => total + (channel.unread_count || 0), 0) +
       directConversations.reduce((total, conversation) => total + (conversation.unread_count || 0), 0)
     : 0;
   $: desktop?.setUnreadCount(desktopUnreadCount);
-  $: if (desktop && appliedRouteKey && typeof window !== "undefined") {
-    desktop.setActiveRoute(`${window.location.pathname}${window.location.search}${window.location.hash}`);
-  }
   $: activeUnreadBoundarySeq = activeUnreadCount > 0 ? activeUnreadState.last_read_seq || 0 : 0;
   $: activeUnreadBoundaryLoaded = activeUnreadCount > 0
     ? unreadBoundaryLoadedForKey(activeConversationKey, activeUnreadBoundarySeq, messageWindows)
@@ -532,7 +561,6 @@
   function resetTopicStateForConversation(conversationKey: string) {
     if (conversationKey === topicConversationKey) return;
     topicConversationKey = conversationKey;
-    topicFilterLoading = false;
     selectedComposerTopicID = "";
     updateActiveTopicFilter("");
   }
@@ -544,7 +572,7 @@
   }
 
   function activeMessageScopeKey(): string {
-    return `${selectedWorkspaceID}:${currentConversationKey()}:${activeTopicFilterID}:${topicFilterGeneration}`;
+    return `${selectedWorkspaceID}:${currentConversationKey()}:${activeTopicFilterID}:${topicFilterGeneration}:${messageLoadGeneration}`;
   }
 
   function topicsForChannel(source: Topic[], channelID: string): Topic[] {
@@ -582,7 +610,7 @@
   // A run panel open in a conversation that stops reporting closes itself: the
   // pane would otherwise hold an empty state the operator never asked for.
   $: if (runPanelOpen && !runPanelAvailable) runPanelOpen = false;
-  $: sidePanelOpen = pinnedPanelOpen || runPanelOpen || selectedThread !== null || selectedProfile !== null || selectedArtifact !== null;
+  $: sidePanelOpen = pinnedPanelOpen || runPanelOpen || $threadView.selection !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
   $: searchPaneVisible = searchSession !== null && !searchThreadDetour;
   $: if (selectedArtifact && artifactConversationKey && artifactConversationKey !== activeConversationKey) {
@@ -607,16 +635,14 @@
       : "";
   $: if (replyContext === "channel" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   $: if (replyContext === "dm" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
-  $: if (replyContext === "thread" && replyTarget && selectedThread && replyTarget.id !== selectedThread.id && !replies.some((r) => r.id === replyTarget?.id)) clearReplyTarget();
-  $: if (status === "ready" && user && routeKey(routeWorkspaceID, routeTargetID) !== appliedRouteKey) {
-    void applyRoute(routeWorkspaceID, routeTargetID);
+  // Observe route inputs, not bookkeeping changed by a local pane selection.
+  $: if (appReady) {
+    followRoute(routeWorkspaceID, routeTargetID);
   }
-  $: filteredGifs = showGifPicker
-    ? gifLibrary.filter((gif) => {
-        const query = gifQuery.trim().toLowerCase();
-        return !query || gif.title.toLowerCase().includes(query) || gif.tags.some((tag) => tag.includes(query));
-      })
-    : [];
+
+  afterNavigate(() => {
+    desktop?.setActiveRoute(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+  });
 
   onMount(() => {
     voiceSession = new BrowserVoiceSession({
@@ -630,6 +656,9 @@
     });
     loadActivityPrefs();
     loadSidebarWidth();
+    void loadHomeLink((path) => api<unknown>(path)).then((link) => {
+      homeLink = link;
+    });
     activityClockSweeper = window.setInterval(() => {
       activityClock = Date.now();
     }, 30_000);
@@ -810,11 +839,11 @@
       return;
     }
     if (!selectedChannelID && !selectedDirectID) {
-      status = "pick or create a channel";
+      composerNotice = { kind: "error", text: "Pick or create a channel" };
       return;
     }
     if (selectedDirect && !selectedDirectWritable) {
-      status = "This conversation has no active recipient";
+      composerNotice = { kind: "error", text: "This conversation has no active recipient" };
       return;
     }
     const focusedDestination = voiceDestinationForFocus({
@@ -882,6 +911,33 @@
     } catch {
       desktopAuthStatus = "Could not open your browser. Try again.";
     }
+  }
+
+  // A fresh document prevents account-scoped state from crossing sign-ins.
+  async function completeSignIn(path: string, body: Record<string, string>) {
+    if (authSubmitting) return;
+    authSubmitting = true;
+    authError = "";
+    try {
+      await api(path, { method: "POST", body: JSON.stringify(body) });
+      window.location.reload();
+    } catch (error) {
+      authError = readableAPIError(error, "Could not sign in.");
+      authSubmitting = false;
+    }
+  }
+
+  function submitPasswordLogin(event: SubmitEvent) {
+    event.preventDefault();
+    void completeSignIn("/api/auth/password/login", {
+      identifier: passwordIdentifier,
+      password: passwordSecret,
+    });
+  }
+
+  function submitMagicToken(event: SubmitEvent) {
+    event.preventDefault();
+    void completeSignIn("/api/auth/magic/consume", { token: magicToken });
   }
 
   function loadActivityPrefs() {
@@ -956,6 +1012,13 @@
     voiceSession = null;
     voiceInputStream = null;
     remoteVoiceStream = null;
+    clearPendingUpload();
+    thread.close();
+    routeApplySerial += 1;
+    messageLoadGeneration += 1;
+    messageRequests.clear();
+    workspaceMembersLoadSerial += 1;
+    workspaceMembersAbort?.abort();
     socket?.close();
     socket = null;
     connected = false;
@@ -974,20 +1037,23 @@
       user = me.user;
       syncBrowserNotificationState();
       await loadWorkspaces();
-      if (workspaces.length === 0) {
-        status = "create a workspace";
-        return;
-      }
-      await applyRoute(routeWorkspaceID, routeTargetID);
-      status = "ready";
+      // Let workspace projections settle before admitting routes in a later flush.
+      appReady = true;
     } catch (error) {
-      if (error instanceof APIError && (error.status === 401 || error.status === 403)) {
-        authRequired = true;
-        status = "auth";
-        return;
-      }
-      status = error instanceof Error ? error.message : "Could not load ClickClack";
+      handleAppLoadError(error);
     }
+  }
+
+  function handleAppLoadError(error: unknown) {
+    if (error instanceof APIError && (error.status === 401 || error.status === 403)) {
+      socket?.close();
+      socket = null;
+      settingsModalOpen = false;
+      authRequired = true;
+      appReady = false;
+      return;
+    }
+    composerNotice = { kind: "error", text: readableAPIError(error, "Could not load ClickClack") };
   }
 
   function openProfileSettings() {
@@ -1028,7 +1094,7 @@
       const bot_assignments = profile ? [{ channel_id: channelID, bot_user_id: profile.bot_user_id }] : [];
       channels = channels.map((channel) => channel.id === channelID ? { ...channel, bot_assignments } : channel);
     } catch (error) {
-      status = readableAPIError(error, "Could not assign channel bot");
+      composerNotice = { kind: "error", text: readableAPIError(error, "Could not assign channel bot") };
       await loadChannels();
     }
   }
@@ -1059,15 +1125,8 @@
 
   function handleSettingsUserUpdated(updated: User) {
     user = updated;
-    setActiveMessages(messages.map((message) =>
-      message.author?.id === updated.id ? { ...message, author: updated } : message,
-    ));
-    replies = replies.map((reply) =>
-      reply.author?.id === updated.id ? { ...reply, author: updated } : reply,
-    );
-    if (selectedThread?.author?.id === updated.id) {
-      selectedThread = { ...selectedThread, author: updated };
-    }
+    updateActiveAuthor(updated);
+    thread.updateAuthor(updated);
   }
 
   function syncBrowserNotificationState() {
@@ -1139,7 +1198,7 @@
       method: "POST",
     });
     if (!data.message.route_id) throw new Error("Message route was not allocated");
-    applyEditedMessage(data.message);
+    updateActiveMessage({ id: data.message.id, route_id: data.message.route_id });
     const workspaceRouteID = routeWorkspaceIDFor(data.message.workspace_id);
     if (!workspaceRouteID) throw new Error("Workspace route is unavailable");
     const path = `/app/${encodeURIComponent(workspaceRouteID)}/${encodeURIComponent(data.message.route_id)}`;
@@ -1164,7 +1223,7 @@
     if (!targetID) return "";
     return channels.find((channel) => channel.id === targetID || channel.route_id === targetID)?.route_id ||
       directConversations.find((conversation) => conversation.id === targetID || conversation.route_id === targetID)?.route_id ||
-      (selectedThread?.id === targetID ? selectedThread.route_id || "" : "") ||
+      (thread.root?.id === targetID ? thread.root.route_id || "" : "") ||
       messages.find((message) => message.id === targetID)?.route_id ||
       targetID;
   }
@@ -1175,16 +1234,25 @@
     await goto(path, { replaceState, noScroll: true, keepFocus: true });
   }
 
+  function followRoute(workspaceID: string, targetID: string) {
+    if (routeKey(workspaceID, targetID) !== activeRouteKey) void applyRoute(workspaceID, targetID);
+  }
+
+  function commitSelectedRoute() {
+    routeApplySerial++;
+    // The conversation is already selected; replaying it would clear the new pane.
+    activeRouteKey = routeKey(routeWorkspaceIDFor(), routeTargetIDFor(currentConversationKey()));
+    void navigateToApp(selectedWorkspaceID, currentConversationKey());
+  }
+
   function clearRoutePanelState() {
     // Navigating away abandons a thread borrowed from search; drop the session
     // too so the pane doesn't linger invisibly.
     if (searchThreadDetour) resetSearch();
-    selectedThread = null;
-    selectedThreadState = null;
+    thread.close();
     selectedProfile = null;
     pinnedPanelOpen = false;
     activeComposerContext = "message";
-    replies = [];
     mobileNavOpen = false;
   }
 
@@ -1262,156 +1330,146 @@
 
   async function applyRoute(workspaceIDParam = "", targetIDParam = "") {
     const serial = ++routeApplySerial;
-    reactionController.clear();
-    const requestedRouteKey = routeKey(workspaceIDParam, targetIDParam);
-    const routeTarget = targetIDParam.trim()
-      ? await resolveRouteTarget(workspaceIDParam, targetIDParam)
-      : null;
-    if (serial !== routeApplySerial) return;
-    const workspace = routeTarget
-      ? workspaces.find((candidate) => candidate.id === routeTarget.workspace_id)
-      : workspaces.find((candidate) => candidate.id === workspaceIDParam || candidate.route_id === workspaceIDParam) || workspaces[0];
-    if (!workspace) {
-      commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
-      appliedRouteKey = requestedRouteKey;
-      return;
-    }
-    const canonicalRouteKey = routeTarget
-      ? routeKey(routeTarget.workspace_route_id, routeTarget.target_route_id)
-      : routeKey(workspace.route_id, "");
-
-    const workspaceChanged = selectedWorkspaceID !== workspace.id;
-    if (workspaceChanged) {
-      captureScrollMemory();
-      editController.clear();
-      selectedWorkspaceID = workspace.id;
-      revokePendingAttachmentPreviews(pendingAttachments);
-      pendingAttachments = [];
-      topicsLoadSerial += 1;
-      slashCommandsLoadSerial += 1;
-      botCommandsLoadSerial += 1;
-      workspaceMembersLoadSerial += 1;
-      slashCommands = [];
-      botCommands = [];
-      topics = [];
-      workspaceMemberUsers = [];
-      selectedChannelID = "";
-      selectedDirectID = "";
-      selectedThread = null;
-      selectedThreadState = null;
-      selectedProfile = null;
-      activeComposerContext = "message";
-      replies = [];
-      resetSearch();
-      resetHistoryPaging();
-      messagesLoading = true;
-      pendingRealtimeWorkspaceID = workspace.id;
-    }
-
-    if (workspaceChanged || channels.length === 0) await loadChannels(false, false);
-    if (serial !== routeApplySerial) return;
-    if (workspaceChanged || directConversations.length === 0) await loadDirectConversations();
-    if (workspaceChanged) {
-      await Promise.all([
-        loadModerationMembers(),
-        loadSlashCommands(workspace.id),
-        loadBotCommands(workspace.id),
-        loadTopics(workspace.id),
-      ]);
-      // Mention targets are progressively available; they must not block
-      // navigation while a large workspace is paginated in the background.
-      void loadWorkspaceMembers(workspace.id);
-    }
-    if (serial !== routeApplySerial) return;
-
-    if (routeTarget) {
-      const routeTargetAvailable = await ensureResolvedRouteTargetLoaded(routeTarget, serial);
+    // Record admission, not completion: cancelled routes must not suppress a later visit.
+    activeRouteKey = routeKey(workspaceIDParam, targetIDParam);
+    if (targetIDParam !== thread.selection?.messageID && targetIDParam !== thread.root?.route_id) thread.close();
+    try {
+      reactionController.clear();
+      const routeTarget = targetIDParam.trim()
+        ? await resolveRouteTarget(workspaceIDParam, targetIDParam)
+        : null;
       if (serial !== routeApplySerial) return;
-      if (!routeTargetAvailable) {
+      const workspace = routeTarget
+        ? workspaces.find((candidate) => candidate.id === routeTarget.workspace_id)
+        : workspaces.find((candidate) => candidate.id === workspaceIDParam || candidate.route_id === workspaceIDParam) || workspaces[0];
+      if (!workspace) {
+        commitMessageWindow("", { messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }, "replace");
+        return;
+      }
+      const workspaceChanged = selectedWorkspaceID !== workspace.id;
+      if (workspaceChanged) {
+        captureScrollMemory();
+        editController.clear();
+        messageRequests.clear();
+        resetCreateActions();
+        clearPendingUpload();
+        selectedWorkspaceID = workspace.id;
+        topicsLoadSerial += 1;
+        slashCommandsLoadSerial += 1;
+        botCommandsLoadSerial += 1;
+        workspaceMembersLoadSerial += 1;
+        workspaceMembersAbort?.abort();
+        workspaceMembersError = "";
+        slashCommands = [];
+        botCommands = [];
+        topics = [];
+        workspaceMemberUsers = [];
+        selectedChannelID = "";
+        selectedDirectID = "";
+        thread.close();
+        selectedProfile = null;
+        activeComposerContext = "message";
+        resetSearch();
+        resetHistoryPaging();
+        messagesLoading = true;
+        pendingRealtimeWorkspaceID = workspace.id;
+      }
+
+      if (workspaceChanged || channels.length === 0) await loadChannels(false, false);
+      if (serial !== routeApplySerial) return;
+      if (workspaceChanged || directConversations.length === 0) await loadDirectConversations();
+      if (workspaceChanged) {
+        await Promise.all([
+          loadModerationMembers(),
+          loadSlashCommands(workspace.id),
+          loadBotCommands(workspace.id),
+          loadTopics(workspace.id),
+        ]);
+        // Mention targets are progressively available; they must not block
+        // navigation while a large workspace is paginated in the background.
+        void loadWorkspaceMembers(workspace.id);
+      }
+      if (serial !== routeApplySerial) return;
+
+      if (routeTarget) {
+        const routeTargetAvailable = await ensureResolvedRouteTargetLoaded(routeTarget, serial);
+        if (serial !== routeApplySerial) return;
+        if (!routeTargetAvailable) {
+          clearRoutePanelState();
+          await navigateToApp(workspace.id, defaultTargetID(), true);
+          return;
+        }
+      }
+
+      if (routeTarget?.canonical_path && window.location.pathname !== routeTarget.canonical_path) {
+        activeRouteKey = routeKey(routeTarget.workspace_route_id, routeTarget.target_route_id);
+        await goto(routeTarget.canonical_path, { replaceState: true, noScroll: true, keepFocus: true });
+        if (serial !== routeApplySerial) return;
+      }
+
+      if (routeTarget?.target_type === "channel" && channels.some((channel) => channel.id === routeTarget.target_id)) {
+        const targetID = routeTarget.target_id;
+        const sameConversation =
+          !workspaceChanged && selectedChannelID === targetID && !selectedDirectID && viewKey === targetID;
+        selectedChannelID = targetID;
+        selectedDirectID = "";
+        markConversationReadOnOpen(targetID);
+        rememberLastChannel(workspace.id, targetID);
         clearRoutePanelState();
-        await navigateToApp(workspace.id, defaultTargetID(), true);
+        if (sameConversation) {
+          updateActiveMessageWindowFlags(targetID);
+          connectPendingRealtime(workspace.id);
+          return;
+        }
+        resetTopicStateForConversation(targetID);
+        await Promise.all([loadMessages(), loadPinnedMessages()]);
+        if (serial !== routeApplySerial) return;
+        connectPendingRealtime(workspace.id);
         return;
       }
-    }
 
-    if (routeTarget?.canonical_path && window.location.pathname !== routeTarget.canonical_path) {
-      appliedRouteKey = canonicalRouteKey;
-      await goto(routeTarget.canonical_path, { replaceState: true, noScroll: true, keepFocus: true });
-      if (serial !== routeApplySerial) return;
-    }
+      if (routeTarget?.target_type === "direct" && directConversations.some((conversation) => conversation.id === routeTarget.target_id)) {
+        const targetID = routeTarget.target_id;
+        const sameConversation =
+          !workspaceChanged && selectedDirectID === targetID && !selectedChannelID && viewKey === targetID;
+        selectedDirectID = targetID;
+        selectedChannelID = "";
+        markConversationReadOnOpen(targetID);
+        clearRoutePanelState();
+        if (sameConversation) {
+          updateActiveMessageWindowFlags(targetID);
+          connectPendingRealtime(workspace.id);
+          return;
+        }
+        resetTopicStateForConversation(targetID);
+        await loadMessages();
+        if (serial !== routeApplySerial) return;
+        connectPendingRealtime(workspace.id);
+        return;
+      }
 
-    if (routeTarget?.target_type === "channel" && channels.some((channel) => channel.id === routeTarget.target_id)) {
-      const targetID = routeTarget.target_id;
-      const sameConversation =
-        !workspaceChanged && selectedChannelID === targetID && !selectedDirectID && viewKey === targetID;
-      selectedChannelID = targetID;
-      selectedDirectID = "";
-      markConversationReadOnOpen(targetID);
-      rememberLastChannel(workspace.id, targetID);
+      if (routeTarget?.target_type === "thread") {
+        const resolved = await applyThreadRoute(routeTarget, serial);
+        if (serial !== routeApplySerial) return;
+        if (resolved) connectPendingRealtime(workspace.id);
+        return;
+      }
+
+      const fallbackTargetID = defaultTargetID();
       clearRoutePanelState();
-      const shouldOpenPinnedPanel = openPinnedPanelAfterRoute;
-      openPinnedPanelAfterRoute = false;
-      if (sameConversation) {
-        pinnedPanelOpen = shouldOpenPinnedPanel;
-        appliedRouteKey = canonicalRouteKey;
-        updateActiveMessageWindowFlags(targetID);
+      if (!fallbackTargetID) {
+        selectedChannelID = "";
+        selectedDirectID = "";
+        resetTopicStateForConversation("");
+        await loadMessages();
+        if (workspaceIDParam !== workspace.route_id || targetIDParam) await navigateToApp(workspace.id, "", true);
         connectPendingRealtime(workspace.id);
         return;
       }
-      resetTopicStateForConversation(targetID);
-      await Promise.all([loadMessages(), loadPinnedMessages(targetID, "")]);
-      if (serial !== routeApplySerial) return;
-      pinnedPanelOpen = shouldOpenPinnedPanel;
-      appliedRouteKey = canonicalRouteKey;
-      connectPendingRealtime(workspace.id);
-      return;
+      await navigateToApp(workspace.id, fallbackTargetID, true);
+    } catch (error) {
+      if (serial === routeApplySerial) handleAppLoadError(error);
     }
-
-    if (routeTarget?.target_type === "direct" && directConversations.some((conversation) => conversation.id === routeTarget.target_id)) {
-      const targetID = routeTarget.target_id;
-      const sameConversation =
-        !workspaceChanged && selectedDirectID === targetID && !selectedChannelID && viewKey === targetID;
-      selectedDirectID = targetID;
-      selectedChannelID = "";
-      markConversationReadOnOpen(targetID);
-      clearRoutePanelState();
-      if (sameConversation) {
-        appliedRouteKey = canonicalRouteKey;
-        updateActiveMessageWindowFlags(targetID);
-        connectPendingRealtime(workspace.id);
-        return;
-      }
-      resetTopicStateForConversation(targetID);
-      await loadMessages();
-      if (serial !== routeApplySerial) return;
-      appliedRouteKey = canonicalRouteKey;
-      connectPendingRealtime(workspace.id);
-      return;
-    }
-
-    if (routeTarget?.target_type === "thread") {
-      const resolved = await applyThreadRoute(routeTarget);
-      if (serial !== routeApplySerial) return;
-      if (resolved) {
-        appliedRouteKey = canonicalRouteKey;
-        connectPendingRealtime(workspace.id);
-        return;
-      }
-    }
-
-    const fallbackTargetID = defaultTargetID();
-    clearRoutePanelState();
-    if (!fallbackTargetID) {
-      selectedChannelID = "";
-      selectedDirectID = "";
-      resetTopicStateForConversation("");
-      await loadMessages();
-      appliedRouteKey = requestedRouteKey;
-      if (workspaceIDParam !== workspace.route_id || targetIDParam) await navigateToApp(workspace.id, "", true);
-      connectPendingRealtime(workspace.id);
-      return;
-    }
-    await navigateToApp(workspace.id, fallbackTargetID, true);
   }
 
   async function ensureResolvedRouteTargetLoaded(route: RouteTarget, serial: number): Promise<boolean> {
@@ -1458,7 +1516,7 @@
     }
   }
 
-  async function applyThreadRoute(route: RouteTarget): Promise<boolean> {
+  async function applyThreadRoute(route: RouteTarget, serial: number): Promise<boolean> {
     if (route.workspace_id !== selectedWorkspaceID) return false;
     const parentChannelID = route.parent_type === "channel" ? route.parent_id || "" : "";
     const parentDirectID = route.parent_type === "direct" ? route.parent_id || "" : "";
@@ -1474,44 +1532,83 @@
     } else {
       return false;
     }
-    const sameThread = selectedThread?.id === route.target_id && viewKey === currentConversationKey();
+    messageRequests.prune();
+    const sameThread = thread.root?.id === route.target_id && viewKey === currentConversationKey();
     selectedProfile = null;
     pinnedPanelOpen = false;
     activeComposerContext = "thread";
     mobileNavOpen = false;
-    await refreshThread(route.target_id);
-    if (parentChannelID) await loadPinnedMessages(parentChannelID, "");
+    if (!await selectThread(route.target_id, undefined, () => serial === routeApplySerial)) return false;
+    const selection = thread.selection;
+    if (parentChannelID) await loadPinnedMessages();
+    if (!thread.isCurrent(selection) || serial !== routeApplySerial) return false;
     if (
       !sameThread &&
       parentChannelID &&
-      selectedThread &&
-      (selectedThread.thread_state?.reply_count ?? 0) === 0
+      thread.root &&
+      (thread.root.thread_state?.reply_count ?? 0) === 0
     ) {
-      const root = selectedThread;
-      selectedThread = null;
-      selectedThreadState = null;
-      replies = [];
+      const root = thread.root;
+      thread.close();
       activeComposerContext = "message";
       await loadMessagesAround(root);
       return true;
     }
-    if (!sameThread && selectedThread) await loadMessagesAround(selectedThread);
+    if (!sameThread && thread.root) await loadMessagesAround(thread.root);
     return true;
   }
 
-  async function createWorkspace() {
-    if (!workspaceName.trim()) return;
-    const data = await api<{ workspace: Workspace }>("/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name: workspaceName })
-    });
-    workspaceName = "";
+  function resetCreateActions() {
+    createActionSerial++;
+    createPending = null;
+    workspaceCreateError = "";
+    channelCreateError = "";
+    directCreateError = "";
     showWorkspaceCreate = false;
-    workspaces = [...workspaces, data.workspace];
-    mobileNavOpen = false;
-    await applyRoute(data.workspace.route_id || data.workspace.id, "");
-    await navigateToApp(data.workspace.id);
-    status = "ready";
+    showCreateChannel = false;
+    createChannelProfile = null;
+    showCreateDirect = false;
+  }
+
+  function toggleWorkspaceCreate() {
+    const open = !showWorkspaceCreate;
+    resetCreateActions();
+    showWorkspaceCreate = open;
+  }
+
+  function openCreateDirect() {
+    resetCreateActions();
+    showCreateDirect = true;
+    void loadWorkspaceMembers();
+  }
+
+  async function createWorkspace() {
+    if (createPending === "workspace" || !workspaceName.trim()) return;
+    const workspaceID = selectedWorkspaceID;
+    const routeSerial = routeApplySerial;
+    const request = ++createActionSerial;
+    const isCurrent = () => request === createActionSerial && routeSerial === routeApplySerial && workspaceID === selectedWorkspaceID;
+    createPending = "workspace";
+    workspaceCreateError = "";
+    try {
+      const data = await api<{ workspace: Workspace }>("/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: workspaceName })
+      });
+      // A committed create remains discoverable after its form loses ownership.
+      if (!workspaces.some((workspace) => workspace.id === data.workspace.id)) {
+        workspaces = [...workspaces, data.workspace];
+      }
+      if (!isCurrent()) return;
+      workspaceName = "";
+      showWorkspaceCreate = false;
+      mobileNavOpen = false;
+      await navigateToApp(data.workspace.id);
+    } catch (error) {
+      if (isCurrent()) workspaceCreateError = readableAPIError(error, "Could not create workspace");
+    } finally {
+      if (request === createActionSerial) createPending = null;
+    }
   }
 
   async function selectWorkspace(workspaceID: string) {
@@ -1537,10 +1634,9 @@
     }
     if (resetSidePanel) {
       if (searchThreadDetour) resetSearch();
-      selectedThread = null;
+      thread.close();
       selectedProfile = null;
       activeComposerContext = "message";
-      replies = [];
     }
     if (loadInitialMessages) await loadMessages();
   }
@@ -1581,7 +1677,7 @@
       await loadLatestMessages();
     } catch (error) {
       if (currentConversationKey() !== conversationKey || activeTopicFilterID) return;
-      setActiveMessages(localDraftMessagesForView(conversationKey));
+      updateActiveMessages();
       composerNotice = {
         kind: "error",
         text:
@@ -1616,27 +1712,22 @@
 
   async function loadWorkspaceMembers(workspaceID = selectedWorkspaceID) {
     const serial = ++workspaceMembersLoadSerial;
+    workspaceMembersAbort?.abort();
+    const controller = new AbortController();
+    workspaceMembersAbort = controller;
+    workspaceMembersError = "";
     if (!workspaceID) {
       workspaceMemberUsers = [];
       return;
     }
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({
-          workspaceID,
-          cursor,
-          limit: 100,
-        });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
       if (serial !== workspaceMembersLoadSerial || workspaceID !== selectedWorkspaceID) return;
-      workspaceMemberUsers = members;
-    } catch {
-      if (serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
+      workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === workspaceMembersLoadSerial && workspaceID === selectedWorkspaceID) {
         workspaceMemberUsers = [];
+        workspaceMembersError = memberLoadErrorMessage(error);
       }
     }
   }
@@ -1694,46 +1785,44 @@
       data.member,
     ];
     await loadChannels(false, false, false);
-    status = "ready";
   }
 
   function openCreateChannel(profile: ChannelProfileShortcut | null = null) {
+    resetCreateActions();
     createChannelProfile = profile;
-    channelCreateStatus = "";
     showCreateChannel = true;
   }
 
   async function createChannel() {
-    if (!selectedWorkspaceID || !channelName.trim() || channelCreating) return;
-    channelCreating = true;
-    channelCreateStatus = "";
+    if (createPending === "channel" || !selectedWorkspaceID || !channelName.trim()) return;
+    const workspaceID = selectedWorkspaceID;
+    const routeSerial = routeApplySerial;
+    const profile = createChannelProfile;
+    const request = ++createActionSerial;
+    const isCurrent = () => request === createActionSerial && routeSerial === routeApplySerial && workspaceID === selectedWorkspaceID;
+    createPending = "channel";
+    channelCreateError = "";
     try {
-      const data = await api<{ channel: Channel }>(`/api/workspaces/${selectedWorkspaceID}/channels`, {
+      const data = await api<{ channel: Channel }>(`/api/workspaces/${workspaceID}/channels`, {
         method: "POST",
         body: JSON.stringify({ name: channelName, kind: "public" })
       });
-      const profile = createChannelProfile;
-      const channel = profile
-        ? {
-            ...data.channel,
-            bot_assignments: [{ channel_id: data.channel.id, bot_user_id: profile.bot_user_id }],
-          }
-        : data.channel;
       if (profile) {
-        await api(`/api/channels/${channel.id}/bot-assignments/${profile.bot_user_id}`, {
-          method: "PUT",
-        });
+        await api(`/api/channels/${data.channel.id}/bot-assignments/${profile.bot_user_id}`, { method: "PUT" });
+        data.channel.bot_assignments = [{ channel_id: data.channel.id, bot_user_id: profile.bot_user_id }];
       }
+      if (workspaceID === selectedWorkspaceID && !channels.some((channel) => channel.id === data.channel.id)) {
+        channels = [...channels, data.channel];
+      }
+      if (!isCurrent()) return;
       channelName = "";
-      channels = [...channels.filter((candidate) => candidate.id !== channel.id), channel];
-      showCreateChannel = false;
       createChannelProfile = null;
-      await navigateToApp(selectedWorkspaceID, channel.id);
+      showCreateChannel = false;
+      await navigateToApp(workspaceID, data.channel.id);
     } catch (error) {
-      channelCreateStatus = readableAPIError(error, "Could not create channel");
-      await loadChannels(false, false, false);
+      if (isCurrent()) channelCreateError = readableAPIError(error, "Could not create channel");
     } finally {
-      channelCreating = false;
+      if (request === createActionSerial) createPending = null;
     }
   }
 
@@ -1799,50 +1888,56 @@
     }
   }
 
-  function isCurrentMessageLoad(generation: number, targetKey: string): boolean {
-    return generation === messageLoadGeneration && currentConversationKey() === targetKey;
+  function beginMessageLoad(loading = false): () => boolean {
+    resetHistoryPaging();
+    messagesLoading = loading;
+    messageLoadGeneration += 1;
+    // Page selection changes do not retire updates for this conversation's rows.
+    messageRequests.prune();
+    const scopeKey = activeMessageScopeKey();
+    return () => activeMessageScopeKey() === scopeKey;
+  }
+
+  async function replaceMessageWindow(query: string, direction: MessageWindowDirection = "replace", isCurrent = beginMessageLoad()) {
+    const targetKey = currentConversationKey();
+    if (targetKey !== viewKey) messagesLoading = true;
+    try {
+      if (!targetKey) {
+        if (isCurrent()) commitMessageWindow("", { messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }, direction);
+        return;
+      }
+      await messageRequests.run(() => api<MessagePage>(messagePagePath(query)), (data) => {
+        let window = data;
+        const previous = messageWindows.get(targetKey);
+        // A latest snapshot predating the current tail cannot erase newer confirmed rows.
+        if (!window.has_newer && previous && previous.newest_seq > window.newest_seq) {
+          window = previous.oldest_seq > window.newest_seq ? previous : {
+            ...window,
+            messages: mergeMessageWindows(window.messages, previous.messages.filter((message) => messageSeq(message) > window.newest_seq)),
+            newest_seq: previous.newest_seq,
+            has_newer: previous.has_newer,
+          };
+        }
+        commitMessageWindow(targetKey, window, direction);
+      }, isCurrent);
+    } catch (error) {
+      if (isCurrent()) throw error;
+    } finally {
+      if (isCurrent()) messagesLoading = false;
+    }
   }
 
   async function loadMessages(preserveScroll = true) {
     if (preserveScroll) captureScrollMemory();
-    const targetKey = currentConversationKey();
-    const generation = ++messageLoadGeneration;
-    const isSwitching = targetKey !== viewKey;
-    resetHistoryPaging();
-    if (isSwitching) {
-      messagesLoading = true;
-    }
-    try {
-      if (!selectedDirectID && !selectedChannelID) {
-        commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
-        return;
-      }
-      const data = await api<MessagePage>(messagePagePath(initialMessagePageQuery()));
-      if (!isCurrentMessageLoad(generation, targetKey)) return;
-      commitMessageWindow(targetKey, pageToWindow(data), "replace");
-    } finally {
-      if (isCurrentMessageLoad(generation, targetKey)) {
-        messagesLoading = false;
-      }
-    }
+    return replaceMessageWindow(initialMessagePageQuery());
   }
 
-  async function loadLatestMessages() {
+  async function loadLatestMessages(isCurrent = beginMessageLoad()) {
     const targetKey = currentConversationKey();
     if (!targetKey) return;
-    const generation = ++messageLoadGeneration;
-    resetHistoryPaging();
     messagesLoading = true;
     scrollMemory.set(targetKey, { atBottom: true });
-    try {
-      const data = await api<MessagePage>(messagePagePath(`limit=${INITIAL_MESSAGE_LIMIT}`));
-      if (!isCurrentMessageLoad(generation, targetKey)) return;
-      commitMessageWindow(targetKey, pageToWindow(data), "replace");
-    } finally {
-      if (isCurrentMessageLoad(generation, targetKey)) {
-        messagesLoading = false;
-      }
-    }
+    return replaceMessageWindow(`limit=${INITIAL_MESSAGE_LIMIT}`, "replace", isCurrent);
   }
 
   function initialMessagePageQuery(): string {
@@ -1876,13 +1971,12 @@
   }
 
   async function setTopicFilter(topicID: string) {
-    if (!selectedChannelID || topicID === activeTopicFilterID || topicFilterLoading) return;
+    if (!selectedChannelID || topicID === activeTopicFilterID) return;
     const conversationKey = currentConversationKey();
     const previousTopicID = activeTopicFilterID;
     const previousComposerTopicID = selectedComposerTopicID;
     const previousWindow = messageWindows.get(conversationKey);
     const previousScroll = scrollMemory.get(conversationKey);
-    topicFilterLoading = true;
     updateActiveTopicFilter(topicID);
     const generation = topicFilterGeneration;
     if (topicID) selectedComposerTopicID = topicID;
@@ -1890,12 +1984,7 @@
     messageWindows.delete(conversationKey);
     try {
       await loadLatestMessages();
-      if (
-        currentConversationKey() !== conversationKey ||
-        topicFilterGeneration !== generation
-      ) {
-        return;
-      }
+      if (currentConversationKey() !== conversationKey || topicFilterGeneration !== generation) return;
       if (topicID) markActiveViewRead({ all: true, allowTopicFilter: true });
     } catch (error) {
       if (
@@ -1934,7 +2023,7 @@
           commitView(conversationKey, previousWindow.messages);
           updateActiveMessageWindowFlags(conversationKey, previousWindow);
         } else {
-          setActiveMessages(localDraftMessagesForView(conversationKey));
+          updateActiveMessages();
         }
         if (previousScroll) {
           scrollMemory.set(conversationKey, previousScroll);
@@ -1948,32 +2037,35 @@
             ? `Topic could not change: ${error.message}`
             : "Topic could not change",
       };
-    } finally {
-      topicFilterLoading = false;
     }
-  }
-
-  function pageToWindow(page: MessagePage): MessageWindow {
-    return {
-      messages: page.messages,
-      oldest_seq: page.oldest_seq,
-      newest_seq: page.newest_seq,
-      has_older: page.has_older,
-      has_newer: page.has_newer,
-    };
   }
 
   function commitMessageWindow(
     key: string,
-    window: MessageWindow,
+    window: MessagePage,
     direction: MessageWindowDirection,
   ) {
+    const confirmed = outgoingForView(key)
+      .flatMap((outgoing) => outgoing.receipt ? [outgoing.receipt] : [])
+      .sort((a, b) => messageSeq(a) - messageSeq(b));
+    let newestSeq = messageSeq(window.messages.at(-1));
+    // Receipts extend a fetched live interval only when they prove the next sequence.
+    // Topic-filtered gaps and older history must still be fetched through the page API.
+    if (!window.has_newer) {
+      for (const message of confirmed) {
+        if (messageSeq(message) === newestSeq + 1) {
+          window = { ...window, messages: [...window.messages, message] };
+          newestSeq = messageSeq(message);
+        }
+      }
+    }
+    if (confirmed.some((message) => messageSeq(message) > newestSeq)) window = { ...window, has_newer: true };
     const trimmedMessages = trimMessageWindow(key, window.messages, direction);
     const firstSeq = trimmedMessages[0]?.channel_seq || 0;
     const lastSeq = trimmedMessages[trimmedMessages.length - 1]?.channel_seq || 0;
     const droppedOlder = firstSeq > (window.messages[0]?.channel_seq || firstSeq);
     const droppedNewer = lastSeq < (window.messages[window.messages.length - 1]?.channel_seq || lastSeq);
-    const nextWindow: MessageWindow = {
+    const nextWindow: MessagePage = {
       messages: trimmedMessages,
       oldest_seq: firstSeq,
       newest_seq: lastSeq,
@@ -1982,10 +2074,12 @@
     };
     rememberMessageWindow(key, nextWindow);
     updateActiveMessageWindowFlags(key, nextWindow);
+    // An append must not consume the position captured for a pending history page.
+    if (direction !== "append" || key !== viewKey) viewRestoreState = scrollMemory.get(key);
     commitView(key, trimmedMessages);
   }
 
-  function rememberMessageWindow(key: string, window: MessageWindow) {
+  function rememberMessageWindow(key: string, window: MessagePage) {
     if (!key) return;
     messageWindows.delete(key);
     messageWindows.set(key, window);
@@ -2078,7 +2172,7 @@
     if (scrollAnchor) ids.add(scrollAnchor);
     const editSession = editController.session(key);
     if (editSession) ids.add(editSession.messageID);
-    if (selectedThread && belongsToView(selectedThread, key)) ids.add(selectedThread.id);
+    if (thread.root && belongsToView(thread.root, key)) ids.add(thread.root.id);
     if (replyTarget && belongsToView(replyTarget, key)) ids.add(replyTarget.id);
     for (const message of messages) {
       if ((message.status === "pending" || message.status === "failed") && belongsToView(message, key)) {
@@ -2124,21 +2218,20 @@
     captureScrollMemory();
     let committed = false;
     try {
-      const data = await api<MessagePage>(messagePagePath(`before_seq=${encodeURIComponent(String(window.oldest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`));
-      if (activeMessageScopeKey() !== scopeKey) return;
-      const merged = mergeMessageWindows(data.messages, messages);
-      commitMessageWindow(key, {
-        messages: merged,
-        oldest_seq: data.oldest_seq || window.oldest_seq,
-        newest_seq: window.newest_seq,
-        has_older: data.has_older,
-        has_newer: window.has_newer,
-      }, "prepend");
-      committed = true;
-      setHistoryEdgeState("older", "settling");
+      await messageRequests.run(() => api<MessagePage>(messagePagePath(`before_seq=${encodeURIComponent(String(window.oldest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`)), (data) => {
+        const currentWindow = messageWindows.get(key);
+        if (!currentWindow) return;
+        commitMessageWindow(key, {
+          ...currentWindow,
+          messages: mergeMessageWindows(data.messages, currentWindow.messages),
+          has_older: data.has_older,
+        }, "prepend");
+        committed = true;
+        setHistoryEdgeState("older", "settling");
+      }, () => activeMessageScopeKey() === scopeKey);
     } catch (error) {
       if (activeMessageScopeKey() === scopeKey) {
-        status = error instanceof Error ? error.message : "Could not load older messages";
+        composerNotice = { kind: "error", text: readableAPIError(error, "Could not load older messages") };
       }
     } finally {
       loadingMessagePages.delete(loadKey);
@@ -2165,31 +2258,13 @@
     setHistoryEdgeState("newer", "loading");
     let committed = false;
     try {
-      const data = await api<MessagePage>(messagePagePath(`after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`));
-      if (activeMessageScopeKey() !== scopeKey) return;
-      if (data.messages.length === 0) {
-        commitMessageWindow(key, { ...window, has_newer: data.has_newer }, "append");
-        committed = true;
-        setHistoryEdgeState("newer", "settling");
-        return;
-      }
-      const merged = mergeMessageWindows(messages, data.messages);
-      commitMessageWindow(
-        key,
-        {
-          messages: merged,
-          oldest_seq: window.oldest_seq,
-          newest_seq: data.newest_seq || window.newest_seq,
-          has_older: window.has_older,
-          has_newer: data.has_newer,
-        },
-        "append",
-      );
-      committed = true;
-      setHistoryEdgeState("newer", "settling");
+      await messageRequests.run(() => api<MessagePage>(messagePagePath(`after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`)), (data) => {
+        committed = appendMessagePage(key, data, window.newest_seq);
+        if (committed) setHistoryEdgeState("newer", "settling");
+      }, () => activeMessageScopeKey() === scopeKey);
     } catch (error) {
       if (activeMessageScopeKey() === scopeKey) {
-        status = error instanceof Error ? error.message : "Could not load newer messages";
+        composerNotice = { kind: "error", text: readableAPIError(error, "Could not load newer messages") };
       }
     } finally {
       loadingMessagePages.delete(loadKey);
@@ -2197,65 +2272,46 @@
     }
   }
 
-  function loadNewerMessagesFromRealtime(): Promise<void> {
-    const targetWorkspaceID = selectedWorkspaceID;
+  async function loadNewerMessagesFromRealtime(isCurrent: () => boolean): Promise<void> {
     const targetKey = currentConversationKey();
-    const targetScopeKey = activeMessageScopeKey();
-    if (!targetWorkspaceID || !targetKey) return Promise.resolve();
+    const scopeKey = activeMessageScopeKey();
+    if (!selectedWorkspaceID || !targetKey) return;
 
-    // Serialize only the active message-window fetch. Rendering and scrolling
-    // stay outside this queue because animation frames can pause while the app
-    // is unfocused.
-    const load = realtimeMessageLoadQueue
-      .catch(() => undefined)
-      .then(async () => {
-        if (
-          selectedWorkspaceID !== targetWorkspaceID ||
-          currentConversationKey() !== targetKey ||
-          activeMessageScopeKey() !== targetScopeKey
-        ) {
-          return;
-        }
-        const window = messageWindows.get(targetKey);
-        if (!window || window.newest_seq <= 0) {
-          await loadMessages();
-          return;
-        }
-        const data = await api<MessagePage>(
-          messagePagePath(
-            `after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`,
-          ),
-        );
-        if (
-          selectedWorkspaceID !== targetWorkspaceID ||
-          currentConversationKey() !== targetKey ||
-          activeMessageScopeKey() !== targetScopeKey
-        ) {
-          return;
-        }
-        const currentWindow = messageWindows.get(targetKey);
-        if (!currentWindow) return;
-        const responseNewestSeq = data.newest_seq || window.newest_seq;
-        const hasNewer =
-          responseNewestSeq > currentWindow.newest_seq
-            ? data.has_newer
-            : responseNewestSeq < currentWindow.newest_seq
-              ? currentWindow.has_newer
-              : currentWindow.has_newer || data.has_newer;
-        commitMessageWindow(
-          targetKey,
-          {
-            messages: mergeMessageWindows(messages, data.messages),
-            oldest_seq: currentWindow.oldest_seq,
-            newest_seq: Math.max(currentWindow.newest_seq, responseNewestSeq),
-            has_older: currentWindow.has_older,
-            has_newer: hasNewer,
-          },
-          "append",
-        );
-      });
-    realtimeMessageLoadQueue = load;
-    return load;
+    // The durable event queue serializes these fetches, independently of frames.
+    const window = messageWindows.get(targetKey);
+    if (!window || window.newest_seq <= 0) {
+      await loadMessages();
+      return;
+    }
+    await messageRequests.run(
+      () => api<MessagePage>(messagePagePath(
+        `after_seq=${encodeURIComponent(String(window.newest_seq))}&limit=${PAGE_MESSAGE_LIMIT}`,
+      )),
+      (data) => { appendMessagePage(targetKey, data, window.newest_seq); },
+      () => isCurrent() && activeMessageScopeKey() === scopeKey,
+    );
+  }
+
+  function appendMessagePage(key: string, data: MessagePage, afterSeq: number): boolean {
+    const currentWindow = messageWindows.get(key);
+    if (!currentWindow) return false;
+    const responseNewestSeq = data.newest_seq || afterSeq;
+    const hasNewer =
+      responseNewestSeq > currentWindow.newest_seq
+        ? data.has_newer
+        : responseNewestSeq < currentWindow.newest_seq
+          ? currentWindow.has_newer
+          : currentWindow.has_newer || data.has_newer;
+    commitMessageWindow(
+      key,
+      {
+        ...currentWindow,
+        messages: mergeMessageWindows(currentWindow.messages, data.messages),
+        has_newer: hasNewer,
+      },
+      "append",
+    );
+    return true;
   }
 
   function handleHistorySettled(state: MessageListViewportState) {
@@ -2674,12 +2730,20 @@
 
   async function maybeShowBrowserNotification(event: RealtimeEvent, affectsActiveView: boolean) {
     if (event.type !== "message.created" && event.type !== "thread.reply_created") return;
+    const { channelID, dmID } = messageEventScope(event);
+    const seq = eventMessageSeq(event);
+    if (event.type === "message.created" && seq > 0) {
+      const key = channelID || dmID;
+      if (seq <= (notificationMessageSeqs.get(key) || 0)) return;
+      // Track received events independently of snapshots, before awaiting delivery,
+      // so a handler retry cannot repeat the alert.
+      notificationMessageSeqs.set(key, seq);
+    }
     const payload = event.payload as Record<string, unknown>;
     const kind = typeof payload.kind === "string" ? payload.kind : "";
     if (kind === "agent_commentary" || kind === "agent_tool") return;
     if (!browserNotificationsEnabled) return;
     if (document.visibilityState === "visible" && affectsActiveView) return;
-    const { channelID, dmID } = messageEventScope(event);
     if (channelID) {
       const preference = await notificationPreferenceForChannel(channelID);
       if (!preference || !browserNotificationsEnabled) return;
@@ -2756,22 +2820,6 @@
     return stripped.length > 180 ? `${stripped.slice(0, 177)}...` : stripped;
   }
 
-  function messageEventAlreadyAccounted(event: RealtimeEvent): boolean {
-    if (event.type !== "message.created") return false;
-    const seq = eventMessageSeq(event);
-    if (seq <= 0) return false;
-    const { channelID, dmID } = messageEventScope(event);
-    if (channelID) {
-      const channel = channels.find((c) => c.id === channelID);
-      return seq <= (channel?.last_seq || 0);
-    }
-    if (dmID) {
-      const dm = directConversations.find((c) => c.id === dmID);
-      return seq <= (dm?.last_seq || 0);
-    }
-    return false;
-  }
-
   async function loadUnknownDirectConversationFromEvent(event: RealtimeEvent): Promise<boolean> {
     const payload = event.payload as Record<string, unknown>;
     const dmID = typeof payload.direct_conversation_id === "string" ? payload.direct_conversation_id : "";
@@ -2823,28 +2871,26 @@
   function commitView(key: string, msgs: Message[]) {
     // Update viewKey + messages atomically so MessageList sees the swap as one tick.
     const switchingView = key !== viewKey;
-    viewRestoreState = scrollMemory.get(key);
-    // Preserve outgoing optimistic placeholders for this view that the server
-    // hasn't echoed yet. Without this the placeholder would flicker out when a
-    // sibling realtime event triggers a reload mid-flight.
-    const localOptimistic = localDraftMessagesForView(key);
+    // Unfetched sends overlay the canonical window without changing its page cursors.
+    for (const [nonce, outgoing] of outgoingMessages) {
+      if (!outgoing.message.status && (outgoing.draft.viewKey !== key ||
+        (activeTopicFilterID && outgoing.draft.topicID !== activeTopicFilterID))) outgoingMessages.delete(nonce);
+    }
+    const localOptimistic = outgoingForView(key).map((outgoing) => outgoing.message);
     const localByID = new Map(localOptimistic.map((m) => [m.id, m]));
     const localByNonce = new Map(localOptimistic.filter((m) => m.nonce).map((m) => [m.nonce, m]));
     reactionController.seedMessages(msgs);
     const merged = msgs.map((m) => {
       const local = localByID.get(m.id) || (m.nonce ? localByNonce.get(m.nonce) : undefined);
       if (!local) return m;
-      if (m.nonce && pendingDrafts.has(m.nonce)) {
-        return {
-          ...m,
-          nonce: local.nonce,
-          status: local.status,
-          attachments: local.attachments?.length ? local.attachments : m.attachments,
-        };
+      if (!local.status && (local.attachments || []).every((attachment) => m.attachments?.some((fresh) => fresh.id === attachment.id))) {
+        outgoingMessages.delete(local.nonce!);
       }
       return {
         ...m,
         nonce: local.nonce,
+        status: local.status,
+        delivery_failure: local.delivery_failure,
         attachments: local.attachments?.length ? local.attachments : m.attachments,
       };
     });
@@ -2852,14 +2898,10 @@
     const knownNonces = new Set(merged.map((m) => m.nonce).filter(Boolean));
     const preserve = localOptimistic.filter(
       (m) =>
-        (m.status === "pending" || m.status === "failed") &&
-        m.id.startsWith("tmp_") &&
         !knownIDs.has(m.id) &&
-        !(m.nonce && knownNonces.has(m.nonce)) &&
-        belongsToView(m, key) &&
-        (!activeTopicFilterID || m.topic_id === activeTopicFilterID),
+        !(m.nonce && knownNonces.has(m.nonce)),
     );
-    messages = preserve.length > 0 ? [...merged, ...preserve] : merged;
+    messages = [...merged, ...preserve].sort((a, b) => (a.channel_seq || Infinity) - (b.channel_seq || Infinity));
     editController.reconcile(key, messages);
     viewKey = key;
     rememberUnreadMarkerForMessages(key, messages);
@@ -2870,32 +2912,28 @@
     }
   }
 
-  function setActiveMessages(nextMessages: Message[], direction: MessageWindowDirection = "append") {
+  function updateActiveMessage(updated: MessageUpdate) {
+    updateActiveMessages(messageRequests.updateMessage(updated));
+  }
+
+  function updateActiveAuthor(updated: AuthorUpdate) {
+    updateActiveMessages(messageRequests.updateAuthor(updated));
+  }
+
+  function updateActiveMessages(update?: (message: Message) => Message) {
     const key = currentConversationKey();
     const window = key ? messageWindows.get(key) : undefined;
-    if (!key || !window) {
-      messages = nextMessages;
-      return;
+    if (update) {
+      for (const outgoing of outgoingMessages.values()) {
+        const local = outgoing.message;
+        // Server metadata cannot complete or discard an in-flight send or attachment.
+        outgoing.message = { ...update(local), status: local.status, attachments: local.attachments };
+        if (outgoing.receipt) outgoing.receipt = update(outgoing.receipt);
+      }
     }
-    const scopedMessages = nextMessages.filter((message) => belongsToView(message, key));
-    const trimmedMessages = trimMessageWindow(key, scopedMessages, direction);
-    const sequencedMessages = trimmedMessages.filter((message) => (message.channel_seq || 0) > 0);
-    const oldestSeq = sequencedMessages[0]?.channel_seq || window.oldest_seq;
-    const newestSeq = sequencedMessages[sequencedMessages.length - 1]?.channel_seq || window.newest_seq;
-    const droppedOlder = messageSeq(trimmedMessages[0]) > messageSeq(scopedMessages[0]);
-    const droppedNewer =
-      messageSeq(trimmedMessages[trimmedMessages.length - 1]) <
-      messageSeq(scopedMessages[scopedMessages.length - 1]);
-    messages = trimmedMessages;
-    rememberMessageWindow(key, {
-      ...window,
-      messages: trimmedMessages,
-      oldest_seq: oldestSeq,
-      newest_seq: newestSeq,
-      has_older: window.has_older || droppedOlder,
-      has_newer: window.has_newer || droppedNewer,
-    });
-    updateActiveMessageWindowFlags(key);
+    const canonical = update ? window?.messages.map(update) || [] : window?.messages || [];
+    if (window) commitMessageWindow(key, { ...window, messages: canonical }, "append");
+    else commitView(key, canonical);
   }
 
   function messageSeq(message: Message | undefined): number {
@@ -2907,27 +2945,30 @@
     return message.channel_id === key || message.direct_conversation_id === key;
   }
 
-  async function scrollMessagesToBottom() {
+  async function scrollMessagesToBottom(isCurrent: () => boolean = () => true) {
     await tick();
-    await messageList?.scrollToBottom();
+    if (isCurrent()) await messageList?.scrollToBottom();
   }
 
   function isAtLiveEdge(): boolean {
-    return messageList?.isNearBottom(LIVE_EDGE_TOLERANCE_PX) !== false;
+    return messageList?.isFollowing() || messageList?.isNearBottom(LIVE_EDGE_TOLERANCE_PX) !== false;
   }
 
-  async function revealOwnSentMessage() {
-    await scrollMessagesToBottom();
-  }
-
-  async function jumpToLiveChat() {
+  async function jumpToLiveChat(revealSentMessage = false) {
+    const reload = messagesLoading || activeHasNewer || activeUnreadCount > 0;
+    const isCurrent = beginMessageLoad();
     try {
-      if (activeHasNewer || activeUnreadCount > 0) await loadLatestMessages();
-      await scrollMessagesToBottom();
-      markActiveViewRead({ all: true });
-      await scrollMessagesToBottom();
+      if (reload) await loadLatestMessages(isCurrent);
+      await scrollMessagesToBottom(isCurrent);
+      if (!isCurrent()) return;
+      if (!activeHasNewer) markActiveViewRead({ all: true });
+      await scrollMessagesToBottom(isCurrent);
     } catch (error) {
-      status = error instanceof Error ? error.message : "Could not jump to latest messages";
+      if (isCurrent()) {
+        composerNotice = { kind: "error", text: readableAPIError(error, "Could not jump to latest messages") };
+        // The send receipt is confirmed even when missing history cannot reload.
+        if (revealSentMessage) await scrollMessagesToBottom(isCurrent);
+      }
     }
   }
 
@@ -2947,11 +2988,11 @@
     nonce?: string;
   };
 
-  let pendingDrafts = new Map<string, OutgoingDraft>();
-
-  function newNonce(): string {
-    return newUploadNonce();
-  }
+  type OutgoingMessage = {
+    draft: OutgoingDraft;
+    message: Message;
+    receipt?: Message;
+  };
 
   function buildOptimisticMessage(nonce: string, draft: OutgoingDraft, id = `tmp_${nonce}`): Message {
     const now = new Date().toISOString();
@@ -2985,11 +3026,11 @@
       return;
     }
     if (selectedDirect && !selectedDirectWritable) {
-      status = "This conversation has no active recipient";
+      composerNotice = { kind: "error", text: "This conversation has no active recipient" };
       return;
     }
     if (!selectedChannelID && !selectedDirectID) {
-      status = "pick or create a channel";
+      composerNotice = { kind: "ephemeral", text: "Pick or create a channel to send a message." };
       return;
     }
     stopTyping();
@@ -3086,7 +3127,7 @@
     stopTyping();
     composerNotice = null;
     messageBody = content.body;
-    revokePendingAttachmentPreviews(pendingAttachments);
+    clearPendingUpload();
     pendingAttachments = pendingAttachmentsForUploads(content.uploads, newNonce);
     if (replyTarget) clearReplyTarget();
     activeComposerContext = "message";
@@ -3151,67 +3192,37 @@
     return err.message;
   }
 
-  function localDraftMessagesForView(viewKey: string): Message[] {
-    const candidates = [...messages, ...(recoverableDraftMessages.get(viewKey) || [])].filter(
-      (message) =>
-        (message.status === "pending" || message.status === "failed") &&
-        belongsToView(message, viewKey) &&
-        (!activeTopicFilterID || message.topic_id === activeTopicFilterID),
+  function outgoingForView(viewKey: string): OutgoingMessage[] {
+    return [...outgoingMessages.values()].filter(
+      ({ draft }) => draft.viewKey === viewKey &&
+        (!activeTopicFilterID || draft.topicID === activeTopicFilterID),
     );
-    const drafts = new Map<string, Message>();
-    for (const message of candidates) {
-      const key = message.nonce ? `nonce:${message.nonce}` : `id:${message.id}`;
-      drafts.set(key, message);
-    }
-    return [...drafts.values()];
-  }
-
-  function rememberRecoverableDraft(viewKey: string, draftMessage: Message) {
-    const existing = recoverableDraftMessages.get(viewKey) || [];
-    const next = existing.filter(
-      (message) =>
-        message.id !== draftMessage.id &&
-        !(draftMessage.nonce && message.nonce === draftMessage.nonce),
-    );
-    recoverableDraftMessages = new Map(recoverableDraftMessages).set(viewKey, [
-      ...next,
-      draftMessage,
-    ]);
-  }
-
-  function forgetRecoverableDraft(viewKey: string, messageID: string, nonce?: string) {
-    const existing = recoverableDraftMessages.get(viewKey);
-    if (!existing) return;
-    const next = existing.filter(
-      (message) => message.id !== messageID && !(nonce && message.nonce === nonce),
-    );
-    const updated = new Map(recoverableDraftMessages);
-    if (next.length > 0) updated.set(viewKey, next);
-    else updated.delete(viewKey);
-    recoverableDraftMessages = updated;
   }
 
   async function revealFailedDraft(
-    draft: OutgoingDraft,
+    outgoing: OutgoingMessage,
     failedMessage: Message,
     notice: string,
+    isCurrent: () => boolean,
   ) {
-    rememberRecoverableDraft(draft.viewKey, failedMessage);
+    const { draft } = outgoing;
+    outgoing.message = failedMessage;
     if (currentConversationKey() !== draft.viewKey) return;
     let reloadFailed = false;
     const originalFilterStillActive =
       activeTopicFilterID === draft.topicFilterID &&
       topicFilterGeneration === draft.topicFilterGeneration;
     if (
-      originalFilterStillActive &&
+      isCurrent() && originalFilterStillActive &&
       activeTopicFilterID &&
       draft.topicID !== activeTopicFilterID
     ) {
       updateActiveTopicFilter("");
       scrollMemory.delete(draft.viewKey);
       messageWindows.delete(draft.viewKey);
+      isCurrent = beginMessageLoad();
       try {
-        await loadLatestMessages();
+        await loadLatestMessages(isCurrent);
       } catch {
         reloadFailed = true;
       }
@@ -3225,34 +3236,23 @@
       };
       return;
     }
-    if (reloadFailed) setActiveMessages(localDraftMessagesForView(draft.viewKey));
-    const failedID = failedMessage.id;
-    const failedNonce = failedMessage.nonce;
-    const existingIndex = messages.findIndex(
-      (message) => message.id === failedID || (failedNonce && message.nonce === failedNonce),
-    );
-    if (existingIndex >= 0) {
-      setActiveMessages(
-        messages.map((message, index) => (index === existingIndex ? failedMessage : message)),
-      );
-    } else {
-      setActiveMessages([...messages, failedMessage]);
-    }
+    updateActiveMessages();
     composerNotice = {
       kind: "error",
       text: reloadFailed ? `${notice} The unfiltered timeline could not reload.` : notice,
     };
-    await revealOwnSentMessage();
+    await scrollMessagesToBottom(isCurrent);
   }
 
   async function dispatchDraft(draft: OutgoingDraft, existingNonce?: string, existingMessageID?: string) {
+    const revealGeneration = messageLoadGeneration;
+    const isCurrent = () => messageLoadGeneration === revealGeneration && currentConversationKey() === draft.viewKey;
     const nonce = existingNonce ?? draft.nonce ?? newNonce();
     const tmpID = `tmp_${nonce}`;
     const localID = existingMessageID ?? tmpID;
     const matchesTopicFilter = !activeTopicFilterID || draft.topicID === activeTopicFilterID;
     const shouldRevealSentMessage =
       !existingNonce && currentConversationKey() === draft.viewKey && matchesTopicFilter;
-    const shouldRefreshLatestAfterSend = shouldRevealSentMessage && activeHasNewer;
     const expectedAgentIDs = expectedAgentIDsForConversation(draft.viewKey, draft.botCommandID);
     if (expectedAgentIDs.length > 0) {
       updateConversationAgentWork(draft.viewKey, {
@@ -3261,14 +3261,12 @@
         agentIDs: expectedAgentIDs,
       });
     }
-    pendingDrafts.set(nonce, draft);
     const placeholder = buildOptimisticMessage(nonce, draft, localID);
-    if (existingNonce) rememberRecoverableDraft(draft.viewKey, placeholder);
-    if (existingNonce) {
-      setActiveMessages(messages.map((m) => (m.id === localID ? placeholder : m)));
-    } else if (currentConversationKey() === draft.viewKey && matchesTopicFilter) {
-      setActiveMessages([...messages, placeholder]);
-      void revealOwnSentMessage();
+    const outgoing: OutgoingMessage = { draft, message: placeholder, receipt: outgoingMessages.get(nonce)?.receipt };
+    outgoingMessages.set(nonce, outgoing);
+    if (currentConversationKey() === draft.viewKey && matchesTopicFilter) {
+      updateActiveMessages();
+      if (!existingNonce) void scrollMessagesToBottom();
     }
     const path = draft.directConversationID
       ? `/api/dms/${draft.directConversationID}/messages`
@@ -3282,17 +3280,17 @@
     if (draft.topicID) payload.topic_id = draft.topicID;
     if (draft.botCommandID) payload.bot_command_id = draft.botCommandID;
     try {
-      const data = await api<{ message: Message }>(path, {
+      let message = outgoing.receipt || (await api<{ message: Message }>(path, {
         method: "POST",
         body: JSON.stringify(payload),
-      });
+      })).message;
+      outgoing.receipt = message;
       if (draft.directConversationID) {
         directConversations = promoteDirectConversation(
           directConversations,
           draft.directConversationID,
         );
       }
-      let message = data.message;
       updateConversationAgentWork(draft.viewKey, {
         type: "pending.replace",
         sendID: nonce,
@@ -3321,6 +3319,7 @@
         ...message,
         attachments: mergeUploads(message.attachments, attachedUploads),
       };
+      outgoing.receipt = message;
       if (failedUploads.length > 0) {
         const noun = failedUploads.length === 1 ? "attachment" : "attachments";
         const failedMessage: Message = {
@@ -3331,117 +3330,88 @@
           attachments: mergeUploads(message.attachments, failedUploads),
         };
         await revealFailedDraft(
-          draft,
+          outgoing,
           failedMessage,
           `The message was sent, but ${failedUploads.length} ${noun} failed. Retry or discard the local retry below.`,
+          isCurrent,
         );
         return;
       }
-      forgetRecoverableDraft(draft.viewKey, message.id, nonce);
-      pendingDrafts.delete(nonce);
-      // Replace placeholder with the real message (or append if a concurrent
-      // realtime reload already removed our placeholder).
-      const tmpIndex = messages.findIndex((m) => m.id === localID);
-      if (tmpIndex >= 0) {
-        setActiveMessages(messages.map((m) => (m.id === localID ? message : m)));
-      } else if (messages.some((m) => m.id === message.id)) {
-        setActiveMessages(messages.map((m) => (m.id === message.id ? message : m)));
-      } else if (
-        belongsToView(message, currentConversationKey()) &&
-        (!activeTopicFilterID || message.topic_id === activeTopicFilterID) &&
-        !messages.some((m) => m.id === message.id)
-      ) {
-        setActiveMessages([...messages, message]);
-      }
-      if (currentConversationKey() === draft.viewKey && shouldRevealSentMessage) {
-        if (shouldRefreshLatestAfterSend) {
-          await loadLatestMessages();
-        }
-        await revealOwnSentMessage();
-        markActiveViewRead({ all: true, seq: message.channel_seq || 0 });
-      }
+      outgoing.message = { ...message, nonce };
+      if (currentConversationKey() === draft.viewKey) updateActiveMessages();
+      else outgoingMessages.delete(nonce);
     } catch (err) {
       console.warn("send failed", err);
       if (requestDefinitelyRejected(err)) {
         updateConversationAgentWork(draft.viewKey, { type: "pending.fail", sendID: nonce });
       }
       await revealFailedDraft(
-        draft,
+        outgoing,
         { ...placeholder, status: "failed", delivery_failure: "message" },
         "The message failed to send. Retry or discard it below.",
+        isCurrent,
       );
+      return;
     }
+    if (isCurrent() && shouldRevealSentMessage) await jumpToLiveChat(true);
   }
 
   function retryFailedMessage(message: Message) {
     if (!message.nonce) return;
-    const draft = pendingDrafts.get(message.nonce);
-    if (!draft) {
-      // We lost the draft (e.g., page reload). Best we can do is reuse the
-      // placeholder body — but our pending tracker is in-memory only, so we
-      // simply discard.
-      discardFailedMessage(message);
-      return;
-    }
-    void dispatchDraft({ ...draft, viewKey: draft.viewKey }, message.nonce, message.id);
+    const draft = outgoingMessages.get(message.nonce)?.draft;
+    if (draft) void dispatchDraft(draft, message.nonce, message.id);
   }
 
   function discardFailedMessage(message: Message) {
-    const draft = message.nonce ? pendingDrafts.get(message.nonce) : undefined;
-    if (message.nonce) {
-      if (draft) forgetRecoverableDraft(draft.viewKey, message.id, message.nonce);
-      pendingDrafts.delete(message.nonce);
-    }
-    if (message.delivery_failure === "attachments" && draft) {
-      const attachedUploadIDs = new Set(draft.attachedUploadIDs || []);
-      setActiveMessages(
-        messages.map((candidate) =>
-          candidate.id === message.id
-            ? {
-                ...candidate,
-                status: undefined,
-                delivery_failure: undefined,
-                attachments: (candidate.attachments || []).filter((upload) =>
-                  attachedUploadIDs.has(upload.id),
-                ),
-              }
-            : candidate,
-        ),
-      );
-      return;
-    }
-    setActiveMessages(messages.filter((candidate) => candidate.id !== message.id));
+    if (!message.nonce) return;
+    const outgoing = outgoingMessages.get(message.nonce);
+    if (outgoing?.receipt) outgoing.message = { ...outgoing.receipt, nonce: message.nonce };
+    else outgoingMessages.delete(message.nonce);
+    updateActiveMessages();
   }
 
   async function revealEditSession(scope: string, session: MessageEditSession) {
-    if (scope !== activeConversationKey) return;
-    if (session.surface === "timeline") messageList?.scrollToMessage(session.messageID);
-    const surfaceRoot = document.querySelector(
-      session.surface === "timeline" ? "main.timeline" : '[aria-label="Thread pane"]',
-    );
+    let selection = thread.selection;
+    const current = () => scope === activeConversationKey &&
+      editController.session(scope)?.generation === session.generation &&
+      (session.surface !== "thread" || thread.selection === selection);
+    if (!current()) return;
+    // Revealing an existing edit supersedes any route still resolving.
+    routeApplySerial++;
+    if (session.surface === "thread") {
+      if (session.threadRootID && selection?.messageID !== session.threadRootID) {
+        pinnedPanelOpen = false;
+        thread.select(session.threadRootID);
+        selection = thread.selection;
+        if (!await selectThread(session.threadRootID, undefined, current)) return;
+      }
+      if (!await thread.target({ messageID: session.messageID, threadSeq: session.threadSeq }, current)) return;
+      if (!current()) return;
+      if (thread.root?.route_id) await navigateToApp(selectedWorkspaceID, thread.root.id);
+    } else {
+      messageList?.scrollToMessage(session.messageID);
+      await navigateToApp(selectedWorkspaceID, thread.root?.id || currentConversationKey());
+    }
     for (let attempt = 0; attempt < 16; attempt += 1) {
       await tick();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const editor = surfaceRoot
-        ?.querySelector(`[data-message-id="${CSS.escape(session.messageID)}"]`)
+      if (!current()) return;
+      const editor = document.querySelector(
+        session.surface === "timeline" ? "main.timeline" : '[aria-label="Thread pane"]',
+      )?.querySelector(`[data-message-id="${CSS.escape(session.messageID)}"]`)
         ?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit message"]');
       if (!editor) continue;
-      editor.focus();
+      editor.focus({ preventScroll: true });
       return;
     }
   }
 
-  function applyEditedMessage(updated: Message) {
-    setActiveMessages(
-      messages.map((current) => (current.id === updated.id ? { ...current, ...updated } : current)),
-    );
-    replies = replies.map((reply) =>
-      reply.id === updated.id ? { ...reply, ...updated } : reply,
-    );
+  function applyEditedMessage(updated: MessageEdit) {
+    updateActiveMessage(updated);
+    thread.updateMessage(updated);
     pinnedMessages = pinnedMessages.map((current) =>
-      current.id === updated.id ? { ...current, ...updated } : current,
+      current.id === updated.id ? mergeMessageUpdate(current, updated) : current,
     );
-    if (selectedThread?.id === updated.id) selectedThread = { ...selectedThread, ...updated };
   }
 
   function requestMessageDelete(message: Message) {
@@ -3459,12 +3429,10 @@
       const data = await api<{ message: Message }>(`/api/messages/${message.id}`, { method: "DELETE" });
       const deleted = data.message;
       editController.cancelMessage(currentConversationKey(), deleted.id);
-      setActiveMessages(messages.map((current) => (current.id === deleted.id ? { ...current, ...deleted } : current)));
-      replies = replies.map((reply) => (reply.id === deleted.id ? { ...reply, ...deleted } : reply));
+      updateActiveMessage(deleted);
+      thread.updateMessage(deleted);
       pinnedMessages = pinnedMessages.filter((current) => current.id !== deleted.id);
-      if (selectedThread?.id === deleted.id) selectedThread = { ...selectedThread, ...deleted };
       if (replyTarget?.id === deleted.id) clearReplyTarget();
-      status = "";
       pendingDeleteMessage = null;
     } catch (error) {
       deleteMessageError = error instanceof Error ? error.message : "Could not delete message";
@@ -3476,15 +3444,16 @@
   }
 
   async function openThread(message: Message) {
+    routeApplySerial++;
     resetSearch();
     pinnedPanelOpen = false;
-    await refreshThread(message.id, message);
-    if (selectedWorkspaceID && selectedThread?.route_id && window.location.pathname !== appHref(selectedWorkspaceID, selectedThread.id)) {
-      await navigateToApp(selectedWorkspaceID, selectedThread.id);
+    const loaded = await selectThread(message.id, message);
+    if (loaded && selectedWorkspaceID && thread.root?.route_id) {
+      await navigateToApp(selectedWorkspaceID, thread.root.id);
     }
   }
 
-  async function refreshThread(
+  async function selectThread(
     messageID: string,
     optimisticRoot?: Message,
     shouldCommit: () => boolean = () => true,
@@ -3492,31 +3461,36 @@
     selectedArtifact = null;
     artifactConversationKey = "";
     selectedProfile = null;
-    if (optimisticRoot) {
-      selectedThread = optimisticRoot;
-      activeComposerContext = "thread";
-    }
-    const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
-    if (!shouldCommit()) return false;
-    const [root, ...loadedReplies] = [
-      { ...data.root, thread_state: data.thread_state },
-      ...data.replies,
-    ];
-    reactionController.seedMessages([root, ...loadedReplies]);
-    editController.reconcile(currentConversationKey(), [root, ...loadedReplies]);
-    selectedThread = root;
     activeComposerContext = "thread";
-    setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
-    replies = loadedReplies;
-    selectedThreadState = data.thread_state;
-    return true;
+    thread.select(messageID, optimisticRoot);
+    try {
+      return await thread.open(shouldCommit);
+    } catch {
+      // The owner retains the load error for the pane; background refreshes still reject.
+      return false;
+    }
+  }
+
+  function reconcileThread(freshMessages: Message[] = []) {
+    const root = thread.root;
+    if (!root) return;
+    reactionController.seedMessages(freshMessages);
+    editController.reconcile(currentConversationKey(), [root, ...thread.replies]);
+    // Thread view commits own its summary, not the timeline's body or author snapshot.
+    updateActiveMessage({ id: root.id, thread_state: root.thread_state });
   }
 
   async function refreshThreadSummary(messageID: string) {
-    const data = await api<{ root: Message; replies: Message[]; thread_state: ThreadState }>(`/api/messages/${messageID}/thread`);
-    const root = { ...data.root, thread_state: data.thread_state };
-    reactionController.seedMessages([root]);
-    setActiveMessages(messages.map((message) => message.id === root.id ? root : message));
+    await messageRequests.run(() => api<ThreadPage>(`/api/messages/${messageID}/thread?latest=true&limit=1`), (data) => {
+      const root = { ...data.root, thread_state: data.thread_state };
+      reactionController.seedMessages([root]);
+      updateActiveMessage(root);
+    });
+  }
+
+  async function refreshActiveMessage(messageID: string, isCurrent: () => boolean) {
+    if (!messages.some((message) => message.id === messageID) && !messageRequests.pending) return;
+    await messageRequests.run(() => api<{ message: Message }>(`/api/messages/${messageID}`), (data) => updateActiveMessage(data.message), isCurrent);
   }
 
   function shouldRefreshThreadSummary(rootID: string, event: RealtimeEvent): boolean {
@@ -3532,63 +3506,31 @@
   }
 
   async function sendReply() {
-    const body = replyBody.trim();
-    if (!body || !selectedThread) return;
-    if (selectedDirect && !selectedDirectWritable) {
-      status = "This direct message has no active recipient";
-      return;
-    }
+    if (selectedDirect && !selectedDirectWritable) return;
     const conversationID = currentConversationKey();
-    const nonce = newNonce();
-    const quote = replyTarget && replyContext === "thread" ? replyTarget : null;
-    replyBody = "";
-    const expectedAgentIDs = expectedAgentIDsForConversation(
-      conversationID,
-      undefined,
-      selectedThread,
-    );
-    if (expectedAgentIDs.length > 0) {
-      updateConversationAgentWork(conversationID, {
-        type: "pending.start",
-        sendID: nonce,
-        agentIDs: expectedAgentIDs,
-      });
-    }
-    const payload: Record<string, unknown> = { body, nonce };
-    if (quote) payload.quoted_message_id = quote.id;
-    try {
-      const data = await api<{ message: Message; thread_state: ThreadState }>(
-        `/api/messages/${selectedThread.id}/thread/replies`,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-      );
-      updateConversationAgentWork(conversationID, {
-        type: "pending.replace",
-        sendID: nonce,
-        replacementID: data.message.id,
-      });
-      if (directConversations.some((conversation) => conversation.id === conversationID)) {
-        directConversations = promoteDirectConversation(directConversations, conversationID);
+    const workspaceID = selectedWorkspaceID;
+    const agentIDs = expectedAgentIDsForConversation(conversationID, undefined, thread.root);
+    await thread.send(undefined, (delivery) => {
+      if (delivery.type === "sending" && agentIDs.length > 0) {
+        updateConversationAgentWork(conversationID, { type: "pending.start", sendID: delivery.nonce, agentIDs });
+      } else if (delivery.type === "sent") {
+        updateConversationAgentWork(conversationID, { type: "pending.replace", sendID: delivery.nonce, replacementID: delivery.message.id });
+        if (workspaceID === selectedWorkspaceID) {
+          directConversations = promoteDirectConversation(directConversations, conversationID);
+        }
+      } else if (delivery.type === "failed" && requestDefinitelyRejected(delivery.error)) {
+        updateConversationAgentWork(conversationID, { type: "pending.fail", sendID: delivery.nonce });
       }
-      if (quote) clearReplyTarget();
-      if (!replies.some((reply) => reply.id === data.message.id)) {
-        replies = [...replies, data.message];
-      }
-      selectedThreadState = data.thread_state;
-    } catch (error) {
-      if (requestDefinitelyRejected(error)) {
-        updateConversationAgentWork(conversationID, { type: "pending.fail", sendID: nonce });
-      }
-      status = error instanceof Error ? error.message : "Could not send reply";
-      if (!replyBody.trim()) replyBody = body;
-    }
+    });
   }
 
   function setReplyTarget(message: Message, context: "channel" | "dm" | "thread") {
-    replyTarget = message;
-    replyContext = context;
+    if (context === "thread") {
+      thread.setQuote(message);
+    } else {
+      replyTarget = message;
+      replyContext = context;
+    }
     activeComposerContext = context === "thread" ? "thread" : "message";
   }
 
@@ -3597,7 +3539,7 @@
   }
 
   function activeComposerTarget(): ComposerInputElement | null {
-    if (activeComposerContext === "thread" && selectedThread && replyInput) return replyInput;
+    if (activeComposerContext === "thread" && thread.root && replyInput) return replyInput;
     return messageInput;
   }
 
@@ -3609,17 +3551,23 @@
   async function jumpToQuotedMessage(message: Message) {
     const targetID = message.quoted_message_id;
     if (!targetID) return;
+    if (message.parent_message_id && message.thread_root_id === thread.selection?.messageID) {
+      await thread.target({ messageID: targetID });
+      return;
+    }
+    const isCurrent = beginMessageLoad();
     const scrolled = messageList?.scrollToMessage(targetID) ?? false;
     if (scrolled) {
-      await highlightMessage(targetID);
+      await highlightMessage(targetID, isCurrent);
       return;
     }
     const data = await api<{ message: Message }>(`/api/messages/${targetID}`);
-    if (!belongsToView(data.message, currentConversationKey())) return;
+    if (!isCurrent() || !belongsToView(data.message, currentConversationKey())) return;
     await loadMessagesAround(data.message);
   }
 
   async function jumpToUnreadBoundary() {
+    beginMessageLoad();
     suppressAutoReadUntil = Date.now() + 1200;
     if (activeUnreadBoundaryLoaded && messageList?.scrollToDivider(false)) return;
     await loadUnreadBoundaryAround();
@@ -3635,14 +3583,13 @@
     const seq = boundarySeq + 1;
     if (seq <= 0) return;
     await loadMessagesAroundSeq(seq);
-    await tick();
-    messageList?.scrollToDivider(false);
   }
 
-  async function highlightMessage(messageID: string) {
+  async function highlightMessage(messageID: string, isCurrent: () => boolean) {
     for (let attempt = 0; attempt < 16; attempt += 1) {
       await tick();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (!isCurrent()) return;
       const node = document.querySelector<HTMLElement>(
         `[data-message-id="${CSS.escape(messageID)}"]`,
       );
@@ -3661,7 +3608,7 @@
     const query = searchQuery.trim();
     // Search takes over the shared right pane: retire whatever occupies it.
     if (selectedArtifact) closeArtifactViewer();
-    if (selectedThread || selectedProfile) closeSidePanel();
+    if (thread.root || selectedProfile) closeSidePanel();
     const requestID = ++searchRequestID;
     const scope: SearchScope =
       selectedDirectID && selectedDirect
@@ -3765,10 +3712,12 @@
     const session = searchSession;
     const targetID = result.channel_id || result.direct_conversation_id || "";
     if (!session || !selectedWorkspaceID || !targetID) return;
+    // A result owns the pane even while Back's parent route is still resolving.
+    routeApplySerial++;
     searchSession = { ...session, activeResultID: result.id };
     if (currentConversationKey() !== targetID) {
       await navigateToApp(selectedWorkspaceID, targetID);
-      await applyRoute(selectedWorkspaceID, targetID);
+      await applyRoute(routeWorkspaceIDFor(selectedWorkspaceID), routeTargetIDFor(targetID));
     }
     if (currentConversationKey() !== targetID) return;
     if (result.parent_message_id) {
@@ -3778,33 +3727,24 @@
       searchReturnScrollTop = returnScrollTop;
       const requestID = searchRequestID;
       searchThreadDetour = true;
-      try {
-        const loaded = await refreshThread(
-          result.thread_root_id,
-          undefined,
-          () =>
-            requestID === searchRequestID &&
-            searchThreadDetour &&
-            searchSession?.activeResultID === result.id,
-        );
-        if (!loaded) return;
-      } catch (error) {
-        searchThreadDetour = false;
-        await tick();
-        throw error;
-      }
-      if (selectedThread?.route_id) {
-        await navigateToApp(selectedWorkspaceID, selectedThread.id);
-      }
-      await tick();
-      const reply = document.querySelector<HTMLElement>(
-        `.thread [data-message-id="${CSS.escape(result.id)}"]`,
+      const loaded = await selectThread(
+        result.thread_root_id,
+        undefined,
+        () =>
+          requestID === searchRequestID &&
+          searchThreadDetour &&
+          searchSession?.activeResultID === result.id,
       );
-      reply?.scrollIntoView({ block: "center" });
-      document.querySelector<HTMLElement>(".thread .thread-back")?.focus();
-      await highlightMessage(result.id);
+      if (!loaded) return;
+      const targetCurrent = () => requestID === searchRequestID && searchThreadDetour && searchSession?.activeResultID === result.id;
+      if (!await thread.target({ messageID: result.id, threadSeq: result.thread_seq }, targetCurrent)) return;
+      if (!targetCurrent()) return;
+      if (thread.root?.route_id) await navigateToApp(selectedWorkspaceID, thread.root.id);
+      await tick();
+      if (targetCurrent()) document.querySelector<HTMLElement>(".thread .thread-back")?.focus({ preventScroll: true });
       return;
     }
+    await navigateToApp(selectedWorkspaceID, targetID);
     if (result.channel_seq && result.channel_seq > 0) {
       await loadMessagesAroundSeq(result.channel_seq, result.id);
       return;
@@ -3813,13 +3753,12 @@
   }
 
   async function returnToSearchFromThread() {
+    routeApplySerial++;
     if (!searchSession || !searchThreadDetour) return;
     const parentTargetID = currentConversationKey();
-    if (replyContext === "thread") clearReplyTarget();
-    selectedThread = null;
+    thread.close();
     selectedProfile = null;
     activeComposerContext = "message";
-    replies = [];
     searchThreadDetour = false;
     if (selectedWorkspaceID && parentTargetID) {
       await navigateToApp(selectedWorkspaceID, parentTargetID);
@@ -3847,32 +3786,31 @@
   async function loadMessagesAroundSeq(seq: number, targetMessageID = "") {
     const targetKey = currentConversationKey();
     if (!targetKey) return;
-    if (activeTopicFilterID) {
+    const clearingTopic = Boolean(activeTopicFilterID);
+    if (clearingTopic) {
       updateActiveTopicFilter("");
       messageWindows.delete(targetKey);
-      messagesLoading = true;
     }
-    const targetScopeKey = activeMessageScopeKey();
+    const isCurrent = beginMessageLoad(clearingTopic);
     if (targetMessageID) {
       scrollMemory.set(targetKey, { atBottom: false, anchorMessageID: targetMessageID, anchorPixelOffset: 0 });
     }
-    const isSwitching = targetKey !== viewKey;
-    resetHistoryPaging();
-    if (isSwitching) {
-      messagesLoading = true;
+    await replaceMessageWindow(`around_seq=${encodeURIComponent(String(seq))}&limit=${INITIAL_MESSAGE_LIMIT}`, "around", isCurrent);
+    await tick();
+    if (!isCurrent()) return;
+    if (targetMessageID) {
+      messageList?.scrollToMessage(targetMessageID);
+      await highlightMessage(targetMessageID, isCurrent);
+    } else {
+      messageList?.scrollToDivider(false);
     }
-    try {
-      const data = await api<MessagePage>(messagePagePath(`around_seq=${encodeURIComponent(String(seq))}&limit=${INITIAL_MESSAGE_LIMIT}`));
-      if (currentConversationKey() !== targetKey || activeMessageScopeKey() !== targetScopeKey) return;
-      commitMessageWindow(targetKey, pageToWindow(data), "around");
-      await tick();
-      if (targetMessageID) {
-        messageList?.scrollToMessage(targetMessageID);
-        await highlightMessage(targetMessageID);
-      }
-    } finally {
-      if (currentConversationKey() === targetKey) messagesLoading = false;
-    }
+  }
+
+  function clearPendingUpload() {
+    for (const controller of uploadControllers.values()) controller.abort();
+    uploadControllers.clear();
+    revokePendingAttachmentPreviews(pendingAttachments);
+    pendingAttachments = [];
   }
 
   function updatePendingAttachment(
@@ -3887,6 +3825,12 @@
   async function uploadPendingAttachment(key: string) {
     const pending = pendingAttachments.find((attachment) => attachment.key === key);
     if (!pending || pending.workspaceID !== selectedWorkspaceID) return;
+    uploadControllers.get(key)?.abort();
+    const controller = new AbortController();
+    uploadControllers.set(key, controller);
+    const isCurrent = () => uploadControllers.get(key) === controller &&
+      !controller.signal.aborted && pending.workspaceID === selectedWorkspaceID &&
+      pendingAttachments.some((attachment) => attachment.key === key);
     updatePendingAttachment(key, (attachment) => ({
       ...attachment,
       state: "uploading",
@@ -3894,8 +3838,8 @@
       error: undefined,
     }));
     try {
-      const upload = await uploadWorkspaceFile(pending.workspaceID, pending.file, pending.key);
-      if (pending.workspaceID !== selectedWorkspaceID) return;
+      const upload = await uploadWorkspaceFile(pending.workspaceID, pending.file, pending.key, controller.signal);
+      if (!isCurrent()) return;
       updatePendingAttachment(key, (attachment) => ({
         ...withoutPendingAttachmentPreview(attachment),
         state: "ready",
@@ -3903,17 +3847,19 @@
         error: undefined,
       }));
     } catch (error) {
-      if (pending.workspaceID !== selectedWorkspaceID) return;
+      if (!isCurrent()) return;
       updatePendingAttachment(key, (attachment) => ({
         ...withoutPendingAttachmentPreview(attachment),
         state: "failed",
         upload: undefined,
-        error: readableAPIError(error),
+        error: readableAPIError(error, "Could not upload file"),
       }));
       composerNotice = {
         kind: "error",
         text: `Could not upload ${pending.file.name}. Retry or remove it before sending.`,
       };
+    } finally {
+      if (uploadControllers.get(key) === controller) uploadControllers.delete(key);
     }
   }
 
@@ -3975,6 +3921,8 @@
   }
 
   function removePendingAttachment(key: string) {
+    uploadControllers.get(key)?.abort();
+    uploadControllers.delete(key);
     const removed = pendingAttachments.find((attachment) => attachment.key === key);
     if (removed) revokePendingAttachmentPreviews([removed]);
     pendingAttachments = pendingAttachments.filter((attachment) => attachment.key !== key);
@@ -4003,28 +3951,6 @@
       : [...directConversations, conversation];
   }
 
-  async function createDirectConversation(memberID = directMemberID) {
-    const trimmed = memberID.trim();
-    if (!selectedWorkspaceID || !trimmed) return;
-    const data = await api<{ conversation: DirectConversation }>("/api/dms", {
-      method: "POST",
-      body: JSON.stringify({ workspace_id: selectedWorkspaceID, member_ids: [trimmed] })
-    });
-    directMemberID = "";
-    showCreateDirect = false;
-    upsertDirectConversation(data.conversation);
-    mobileNavOpen = false;
-    await navigateToApp(selectedWorkspaceID, data.conversation.id);
-  }
-
-  async function startDirectFromModal(memberID: string) {
-    const trimmed = memberID.trim();
-    if (!trimmed) return;
-    await startDirectWithUser(trimmed);
-    directMemberID = "";
-    showCreateDirect = false;
-  }
-
   async function selectDirectConversation(conversationID: string) {
     mobileNavOpen = false;
     markConversationReadOnOpen(conversationID);
@@ -4041,22 +3967,32 @@
 
   async function startDirectWithUser(memberID: string) {
     const trimmed = memberID.trim();
-    if (!selectedWorkspaceID || !trimmed) return;
-    const existing = directConversations.find((conversation) =>
-      conversation.members.some((member) => member.id === trimmed),
-    );
-    if (existing) {
-      mobileNavOpen = false;
-      await navigateToApp(selectedWorkspaceID, existing.id);
-      return;
+    if (createPending === "direct" || !selectedWorkspaceID || !trimmed) return;
+    const workspaceID = selectedWorkspaceID;
+    const routeSerial = routeApplySerial;
+    const request = ++createActionSerial;
+    const isCurrent = () => request === createActionSerial && routeSerial === routeApplySerial && workspaceID === selectedWorkspaceID;
+    createPending = "direct";
+    directCreateError = "";
+    try {
+      // The server owns exact membership, duplicate prevention, and reopening.
+      const data = await api<{ conversation: DirectConversation }>("/api/dms", {
+        method: "POST",
+        body: JSON.stringify({ workspace_id: workspaceID, member_ids: [trimmed] })
+      });
+      if (workspaceID === selectedWorkspaceID && !directConversations.some((conversation) => conversation.id === data.conversation.id)) {
+        upsertDirectConversation(data.conversation);
+      }
+      if (!isCurrent()) return;
+      directMemberID = "";
+      showCreateDirect = false;
+      clearRoutePanelState();
+      await navigateToApp(workspaceID, data.conversation.id);
+    } catch (error) {
+      if (isCurrent()) directCreateError = readableAPIError(error, "Could not start direct message");
+    } finally {
+      if (request === createActionSerial) createPending = null;
     }
-    const data = await api<{ conversation: DirectConversation }>("/api/dms", {
-      method: "POST",
-      body: JSON.stringify({ workspace_id: selectedWorkspaceID, member_ids: [trimmed] })
-    });
-    upsertDirectConversation(data.conversation);
-    mobileNavOpen = false;
-    await navigateToApp(selectedWorkspaceID, data.conversation.id);
   }
 
   function clearHiddenDirectUndo() {
@@ -4090,9 +4026,8 @@
       if (undo.restoreRoute) {
         await navigateToApp(undo.conversation.workspace_id, data.conversation.id);
       }
-      status = "direct message restored";
     } catch (error) {
-      status = error instanceof Error ? error.message : "Could not restore direct message";
+      composerNotice = { kind: "error", text: readableAPIError(error, "Could not restore direct message") };
     }
   }
 
@@ -4133,14 +4068,29 @@
           authoritativeResync,
         );
         if (!isCurrent()) return;
+        if (!preserveScroll || authoritativeResync) {
+          // Initial snapshots suppress historical alerts; ordinary refreshes must not consume live events.
+          notificationMessageSeqs = new Map(
+            [...channels, ...directConversations].map((conversation) => [conversation.id, conversation.last_seq || 0]),
+          );
+        }
         realtimeInitializedWorkspaceID = workspaceID;
-        if (workspaceID === selectedWorkspaceID && status === realtimeError) status = "ready";
         realtimeError = "";
       },
       onError: (error) => {
         if (workspaceID === selectedWorkspaceID) {
-          realtimeError = error instanceof Error ? error.message : "Could not process realtime event";
-          status = realtimeError;
+          if (error instanceof WorkspaceUnavailableError) {
+            // A newer workspace route may still be waiting for resolution.
+            if (routeWorkspaceID && routeWorkspaceID !== workspaceID && routeWorkspaceID !== routeWorkspaceIDFor(workspaceID)) return;
+            socket?.close();
+            void goto("/app", { invalidateAll: true, replaceState: true }).catch(handleAppLoadError);
+            return;
+          }
+          if (error instanceof APIError && error.status === 401) {
+            handleAppLoadError(error);
+            return;
+          }
+          realtimeError = readableAPIError(error, "Could not process realtime event");
         }
       },
       onStatusChange: (next) => {
@@ -4157,7 +4107,7 @@
   ) {
     const serial = ++realtimeReconcileSerial;
     if (!workspaceID || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
-    const selectedThreadID = selectedThread?.id || "";
+    const selectedThreadID = thread.root?.id || "";
     const selectedBotProfileID = selectedProfile?.kind === "bot" ? selectedProfile.id : "";
     typingEntries = [];
     agentProgressTurns = [];
@@ -4200,8 +4150,8 @@
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
     await loadPinnedMessages();
     if (serial !== realtimeReconcileSerial || workspaceID !== selectedWorkspaceID || !isCurrent()) return;
-    if (selectedThreadID && selectedThread?.id === selectedThreadID) {
-      await refreshThread(selectedThreadID, selectedThread);
+    if (selectedThreadID && thread.root?.id === selectedThreadID) {
+      await thread.refresh(isCurrent);
     }
     if (selectedBotProfileID && selectedProfile?.id === selectedBotProfileID) {
       const refreshed = lookupUser(selectedBotProfileID);
@@ -4209,8 +4159,9 @@
     }
   }
 
-  async function handleEvent(event: RealtimeEvent) {
+  async function handleEvent(event: RealtimeEvent, isCurrent: () => boolean) {
     await updateConversationWorkingFromEvent(event);
+    if (!isCurrent()) return;
     if (
       (event.type === "pin.added" || event.type === "pin.removed") &&
       event.channel_id === selectedChannelID &&
@@ -4242,7 +4193,7 @@
       if (event.workspace_id === selectedWorkspaceID) {
         void loadBotCommands(event.workspace_id, true).catch((error) => {
           if (event.workspace_id !== selectedWorkspaceID) return;
-          status = error instanceof Error ? error.message : "Could not refresh bot commands";
+          realtimeError = readableAPIError(error, "Could not refresh bot commands");
           connectRealtimeSocket();
         });
       }
@@ -4281,7 +4232,7 @@
           }
         }
         if (!selectedChannelID && !selectedDirectID) {
-          commitMessageWindow("", pageToWindow({ messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }), "replace");
+          commitMessageWindow("", { messages: [], oldest_seq: 0, newest_seq: 0, has_older: false, has_newer: false }, "replace");
           return;
         }
         await loadMessages();
@@ -4295,7 +4246,6 @@
     ) {
       await loadTopics(event.workspace_id);
     }
-    if (messageEventAlreadyAccounted(event)) return;
     const recentDirectConversationID = directConversationIDForRecencyEvent(event);
     if (recentDirectConversationID) {
       directConversations = promoteDirectConversation(
@@ -4340,44 +4290,38 @@
       // Optimistic-send echo: if this is our own outgoing message, the HTTP
       // response will swap the placeholder; skip the reload to avoid a flicker.
       const echoNonce = event.payload.nonce;
-      if (event.type === "message.created" && echoNonce && pendingDrafts.has(echoNonce)) {
+      if (event.type === "message.created" && echoNonce && outgoingMessages.has(echoNonce)) {
         return;
       }
       // Snapshot stuck-to-bottom state BEFORE mutating messages. Once the
       // reload completes, virtua's scrollSize grows while offset is unchanged
       // and the cached atBottom flag flips to false — we'd lose the signal.
       const wasAtLiveEdge = isAtLiveEdge();
-      if (event.type === "message.created" && !wasAtLiveEdge) {
+      const seq = eventMessageSeq(event);
+      const missingMessage = event.type === "message.created" && (
+        seq <= 0 || seq > (messageWindows.get(currentConversationKey())?.newest_seq || 0)
+      );
+      if (missingMessage && !wasAtLiveEdge) {
         suppressAutoReadUntil = Date.now() + 1200;
         markMessageWindowHasNewer(currentConversationKey());
-      } else if (event.type === "message.created") {
-        await loadNewerMessagesFromRealtime();
-      } else {
-        await loadMessages();
+      } else if (missingMessage) {
+        await loadNewerMessagesFromRealtime(isCurrent);
+      } else if (event.type !== "message.created") {
+        await refreshActiveMessage(event.payload.message_id || "", isCurrent);
       }
+      if (!isCurrent()) return;
       if (event.type === "message.created") {
-        handleUnreadBump(event, wasAtLiveEdge);
+        handleUnreadBump(event, wasAtLiveEdge, missingMessage);
       }
-      // Drive the scroll explicitly from here rather than relying on the
-      // MessageList $effect: its cached atBottom may already have flipped.
-      if (event.type === "message.created" && wasAtLiveEdge) {
-        await scrollMessagesToBottom();
-        markActiveViewRead({ all: true, seq: eventMessageSeq(event) });
-      }
+      // MessageList owns following and read receipts once layout settles.
+      // Waiting for its frames here would stop durable ingestion in hidden tabs.
+    }
+    if (await thread.handleEvent(event, isCurrent)) {
+      return;
     }
     const rootID = event.payload.root_message_id || event.payload.message_id;
-    if (
-      rootID &&
-      event.type === "thread.state_updated" &&
-      shouldRefreshThreadSummary(rootID, event)
-    ) {
-      if (selectedThread?.id === rootID) {
-        await refreshThread(rootID, selectedThread);
-      } else {
-        await refreshThreadSummary(rootID);
-      }
-    } else if (event.type !== "thread.reply_created" && selectedThread && rootID === selectedThread.id) {
-      await refreshThread(selectedThread.id, selectedThread);
+    if (rootID && event.type === "thread.state_updated" && shouldRefreshThreadSummary(rootID, event)) {
+      await refreshThreadSummary(rootID);
     }
   }
 
@@ -4405,7 +4349,7 @@
         { ...window, messages: updateMessages(window.messages) },
       ]),
     );
-    selectedThread = selectedThread ? replaceMessageUsers(selectedThread, updated) : null;
+    thread.updateAuthor(updated);
     replyTarget = replyTarget ? replaceMessageUsers(replyTarget, updated) : null;
     pendingDeleteMessage = pendingDeleteMessage
       ? replaceMessageUsers(pendingDeleteMessage, updated)
@@ -4413,9 +4357,11 @@
     selectedProfile = selectedProfile
       ? replaceCachedUser(selectedProfile, updated)
       : selectedProfile;
-    recoverableDraftMessages = new Map(
-      [...recoverableDraftMessages].map(([key, drafts]) => [key, updateMessages(drafts)]),
-    );
+    for (const outgoing of outgoingMessages.values()) {
+      outgoing.message = replaceMessageUsers(outgoing.message, updated);
+      if (outgoing.receipt) outgoing.receipt = replaceMessageUsers(outgoing.receipt, updated);
+    }
+    messageRequests.updateAuthor(updated);
     if (searchSession) {
       searchSession = {
         ...searchSession,
@@ -4456,12 +4402,13 @@
       workspaceMemberUsers.find((member) => member.id === botUserID) ??
       lookupUser(botUserID);
     if (!cached) return;
+    const identity = event.payload as typeof event.payload & Partial<Pick<User, "handle" | "avatar_url" | "avatar_url_light">>;
     applyCachedUserIdentity({
       ...cached,
       display_name: event.payload.display_name ?? cached.display_name,
-      handle: event.payload.handle ?? cached.handle,
-      avatar_url: event.payload.avatar_url ?? cached.avatar_url,
-      avatar_url_light: event.payload.avatar_url_light ?? cached.avatar_url_light,
+      handle: identity.handle ?? cached.handle,
+      avatar_url: identity.avatar_url ?? cached.avatar_url,
+      avatar_url_light: identity.avatar_url_light ?? cached.avatar_url_light,
     });
   }
 
@@ -4515,7 +4462,7 @@
     }
     if (selectedProfile?.id === botUserID) selectedProfile = null;
 
-    const selectedThreadID = selectedThread?.id || "";
+    const threadSelection = thread.selection;
     await Promise.all([
       loadDirectConversations(),
       loadModerationMembers(),
@@ -4523,8 +4470,8 @@
       loadBotCommands(),
     ]);
     void loadWorkspaceMembers();
-    await loadMessages();
-    if (selectedThreadID) await refreshThread(selectedThreadID);
+    updateActiveAuthor({ id: botUserID, handle: "", former_handle: formerHandle, deleted_at: deletedAt });
+    if (thread.isCurrent(threadSelection)) await thread.refresh();
   }
 
   async function handleBotMembershipRemovedEvent(event: RealtimeEvent) {
@@ -4568,7 +4515,7 @@
     }
   }
 
-  function handleUnreadBump(event: RealtimeEvent, activeWasAtBottom?: boolean) {
+  function handleUnreadBump(event: RealtimeEvent, activeWasAtBottom?: boolean, newToView = false) {
     const payload = event.payload as Record<string, unknown>;
     const { channelID, dmID } = messageEventScope(event);
     // Durable agent activity messages never bump unread counts, mirroring the
@@ -4581,44 +4528,23 @@
     // Threaded replies don't affect channel unread (channel_seq isn't assigned).
     if (payload.parent_message_id) return;
     const seq = eventMessageSeq(event);
-    if (channelID) {
-      const isActive = channelID === selectedChannelID && !selectedDirectID;
-      const activeAtBottom =
-        isActive && !activeTopicFilterID ? activeWasAtBottom ?? isAtLiveEdge() : false;
-      const channel = channels.find((c) => c.id === channelID);
-      const incomingSeq = seq > 0 ? seq : (channel?.last_seq || 0) + 1;
-      if (isActive && !activeAtBottom && (channel?.unread_count || 0) === 0) {
-        rememberUnreadMarkerFromEvent(channelID, channel?.last_read_seq || 0, event.created_at);
-      }
-      channels = channels.map((c) => {
-        if (c.id !== channelID) return c;
-        const lastSeq = Math.max(c.last_seq || 0, incomingSeq);
-        const lastReadSeq =
-          isActive && !activeAtBottom && (c.unread_count || 0) === 0
-            ? Math.max(c.last_read_seq || 0, incomingSeq - 1)
-            : c.last_read_seq || 0;
-        const unread = activeAtBottom ? 0 : (c.unread_count || 0) + 1;
-        return { ...c, last_seq: lastSeq, last_read_seq: lastReadSeq, unread_count: unread };
-      });
-    } else if (dmID) {
-      const isActive = dmID === selectedDirectID;
-      const activeAtBottom = isActive ? activeWasAtBottom ?? isAtLiveEdge() : false;
-      const dm = directConversations.find((c) => c.id === dmID);
-      const incomingSeq = seq > 0 ? seq : (dm?.last_seq || 0) + 1;
-      if (isActive && !activeAtBottom && (dm?.unread_count || 0) === 0) {
-        rememberUnreadMarkerFromEvent(dmID, dm?.last_read_seq || 0, event.created_at);
-      }
-      directConversations = directConversations.map((c) => {
-        if (c.id !== dmID) return c;
-        const lastSeq = Math.max(c.last_seq || 0, incomingSeq);
-        const lastReadSeq =
-          isActive && !activeAtBottom && (c.unread_count || 0) === 0
-            ? Math.max(c.last_read_seq || 0, incomingSeq - 1)
-            : c.last_read_seq || 0;
-        const unread = activeAtBottom ? 0 : (c.unread_count || 0) + 1;
-        return { ...c, last_seq: lastSeq, last_read_seq: lastReadSeq, unread_count: unread };
-      });
-    }
+    const key = channelID || dmID;
+    if (!key) return;
+    const state = unreadStateForKey(key);
+    const isActive = channelID ? channelID === selectedChannelID && !selectedDirectID : dmID === selectedDirectID;
+    const activeAtBottom = isActive && (!channelID || !activeTopicFilterID) && (activeWasAtBottom ?? isAtLiveEdge());
+    // A snapshot can count a live message before its row reaches the following view.
+    if (seq > 0 && seq <= (state.last_seq || 0) && !(newToView && activeAtBottom)) return;
+    const incomingSeq = seq > 0 ? seq : (state.last_seq || 0) + 1;
+    const startsUnread = isActive && !activeAtBottom && (state.unread_count || 0) === 0;
+    if (startsUnread) rememberUnreadMarkerFromEvent(key, state.last_read_seq || 0, event.created_at);
+    const next = {
+      last_seq: Math.max(state.last_seq || 0, incomingSeq),
+      last_read_seq: startsUnread ? Math.max(state.last_read_seq || 0, incomingSeq - 1) : state.last_read_seq || 0,
+      unread_count: activeAtBottom ? 0 : (state.unread_count || 0) + 1,
+    };
+    if (channelID) channels = channels.map((channel) => channel.id === key ? { ...channel, ...next } : channel);
+    else directConversations = directConversations.map((conversation) => conversation.id === key ? { ...conversation, ...next } : conversation);
   }
 
   function handleTypingEvent(event: RealtimeEvent) {
@@ -4739,7 +4665,7 @@
     if (fromMessages) return fromMessages;
     const fromReplies = replies.find((msg) => msg.author?.id === userID)?.author;
     if (fromReplies) return fromReplies;
-    if (selectedThread?.author?.id === userID) return selectedThread.author;
+    if (thread.root?.author?.id === userID) return thread.root.author;
     const fromModeration = moderationMembers.find((member) => member.user.id === userID)?.user;
     if (fromModeration) return fromModeration;
     for (const dm of directConversations) {
@@ -4774,12 +4700,13 @@
 
   function openUserProfile(profile?: User | null) {
     if (!profile || profile.deleted_at) return;
+    resetCreateActions();
     resetSearch();
     selectedArtifact = null;
     artifactConversationKey = "";
-    selectedThread = null;
-    pinnedPanelOpen = false;
+    clearRoutePanelState();
     selectedProfile = profile;
+    commitSelectedRoute();
     if (
       (currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator") &&
       !moderationMembers.some((member) => member.user.id === profile.id)
@@ -4789,11 +4716,6 @@
   }
 
   function handleComposerKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && replyTarget && replyContext !== "thread") {
-      event.preventDefault();
-      clearReplyTarget();
-      return;
-    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
@@ -4801,11 +4723,6 @@
   }
 
   function handleReplyKey(event: KeyboardEvent) {
-    if (event.key === "Escape" && replyTarget && replyContext === "thread") {
-      event.preventDefault();
-      clearReplyTarget();
-      return;
-    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendReply();
@@ -4825,9 +4742,6 @@
 
   function openArtifactViewer(upload: Upload) {
     artifactTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    artifactThreadScrollTop = selectedThread
-      ? (document.querySelector<HTMLElement>(".thread-scroll")?.scrollTop ?? null)
-      : null;
     artifactConversationKey = activeConversationKey;
     selectedArtifact = upload;
     void tick().then(() => {
@@ -4842,16 +4756,11 @@
     artifactConversationKey = "";
     artifactTrigger = null;
     void tick().then(() => {
-      if (artifactThreadScrollTop !== null) {
-        const threadScroll = document.querySelector<HTMLElement>(".thread-scroll");
-        if (threadScroll) threadScroll.scrollTop = artifactThreadScrollTop;
-      }
-      artifactThreadScrollTop = null;
       if (trigger?.isConnected) {
         trigger.focus({ preventScroll: true });
         return;
       }
-      const scope = selectedThread ? document.querySelector<HTMLElement>(".thread") : document;
+      const scope = thread.root ? document.querySelector<HTMLElement>(".thread") : document;
       scope
         ?.querySelector<HTMLElement>(`[data-artifact-upload-id="${CSS.escape(uploadID)}"]`)
         ?.focus({ preventScroll: true });
@@ -4901,22 +4810,6 @@
     openImageViewerItems(markdownImageViewerItems(target), url);
   }
 
-  function appendToComposer(snippet: string) {
-    const prefix = messageBody && !messageBody.endsWith("\n") ? "\n" : "";
-    messageBody = `${messageBody}${prefix}${snippet}`;
-  }
-
-  function applyMarkdownWrap(before: string, after = before) {
-    const placeholder = before === "```" ? "\ncode\n" : "text";
-    appendToComposer(`${before}${placeholder}${after}`);
-  }
-
-  function pickGif(url: string, title: string) {
-    appendToComposer(`![${title}](${url})`);
-    showGifPicker = false;
-    gifQuery = "";
-  }
-
   function closeSidePanel() {
     if (selectedArtifact) {
       closeArtifactViewer();
@@ -4928,36 +4821,29 @@
     }
     if (pinnedPanelOpen) {
       pinnedPanelOpen = false;
+      commitSelectedRoute();
       return;
     }
-    const threadWasOpen = selectedThread !== null;
-    const searchDetourWasOpen = searchThreadDetour;
-    const parentTargetID = currentConversationKey();
-    editController.cancel(parentTargetID, "thread");
-    if (replyContext === "thread") clearReplyTarget();
-    selectedThread = null;
-    selectedProfile = null;
-    activeComposerContext = "message";
-    replies = [];
-    // Closing a thread opened from search closes the whole pane, session included.
-    if (searchDetourWasOpen) resetSearch();
-    if ((threadWasOpen || searchDetourWasOpen) && selectedWorkspaceID && parentTargetID) {
-      void navigateToApp(selectedWorkspaceID, parentTargetID);
-    }
+    resetCreateActions();
+    editController.cancel(currentConversationKey(), "thread");
+    clearRoutePanelState();
+    commitSelectedRoute();
   }
 
   function toggleSidePanelFromTopbar() {
-    if (selectedThread) {
+    if (thread.root) {
       closeSidePanel();
       return;
     }
     if (sidePanelOpen) closeSidePanel();
-    status = "pick a message to open its thread";
+    composerNotice = { kind: "ephemeral", text: "Pick a message to open its thread." };
   }
 
-  async function loadPinnedMessages(channelID = selectedChannelID, directID = selectedDirectID) {
+  async function loadPinnedMessages() {
+    const channelID = selectedChannelID;
     const serial = ++pinnedMessagesLoadSerial;
-    if (!channelID || directID) {
+    const isCurrent = () => serial === pinnedMessagesLoadSerial && channelID === selectedChannelID && !selectedDirectID;
+    if (!channelID || selectedDirectID) {
       pinnedMessages = [];
       pinnedMessagesError = "";
       pinnedMessagesLoading = false;
@@ -4966,14 +4852,16 @@
     pinnedMessagesLoading = true;
     pinnedMessagesError = "";
     try {
-      const data = await api<{ messages: Message[] }>(`/api/channels/${channelID}/pins?limit=100`);
-      if (serial !== pinnedMessagesLoadSerial || channelID !== selectedChannelID || selectedDirectID) return;
-      pinnedMessages = data.messages;
+      await messageRequests.run(
+        () => api<{ messages: Message[] }>(`/api/channels/${channelID}/pins?limit=100`),
+        (data) => { pinnedMessages = data.messages.filter((message) => !message.deleted_at); },
+        isCurrent,
+      );
     } catch (error) {
-      if (serial !== pinnedMessagesLoadSerial) return;
+      if (!isCurrent()) return;
       pinnedMessagesError = error instanceof Error ? error.message : "Could not load pinned messages";
     } finally {
-      if (serial === pinnedMessagesLoadSerial) pinnedMessagesLoading = false;
+      if (isCurrent()) pinnedMessagesLoading = false;
     }
   }
 
@@ -4988,7 +4876,7 @@
         body: JSON.stringify({ message_id: message.id }),
       });
     }
-    await loadPinnedMessages(channelID, "");
+    if (channelID === selectedChannelID && !selectedDirectID) await loadPinnedMessages();
   }
 
   // The right pane holds one thing at a time, so opening the run view closes
@@ -5011,32 +4899,24 @@
       return;
     }
     if (!selectedChannelID || selectedDirectID) return;
-    const threadWasOpen = selectedThread !== null;
-    const searchDetourWasOpen = searchThreadDetour;
-    const parentTargetID = currentConversationKey();
+    const opening = !pinnedPanelOpen;
     resetSearch();
-    selectedThread = null;
-    selectedThreadState = null;
-    selectedProfile = null;
-    replies = [];
-    if ((threadWasOpen || searchDetourWasOpen) && selectedWorkspaceID && parentTargetID) {
-      openPinnedPanelAfterRoute = true;
-      await navigateToApp(selectedWorkspaceID, parentTargetID);
-      return;
-    }
-    pinnedPanelOpen = true;
-    void loadPinnedMessages();
+    clearRoutePanelState();
+    pinnedPanelOpen = opening;
+    commitSelectedRoute();
+    if (opening) void loadPinnedMessages();
   }
 
   async function openPinnedMessageThread(message: Message) {
+    routeApplySerial++;
     pinnedPanelOpen = false;
-    await refreshThread(message.thread_root_id, message.parent_message_id ? undefined : message);
+    const loaded = await selectThread(message.thread_root_id, message.parent_message_id ? undefined : message);
     if (
-      selectedWorkspaceID &&
-      selectedThread?.route_id &&
-      window.location.pathname !== appHref(selectedWorkspaceID, selectedThread.id)
+      loaded && selectedWorkspaceID &&
+      thread.root?.route_id &&
+      window.location.pathname !== appHref(selectedWorkspaceID, thread.root.id)
     ) {
-      await navigateToApp(selectedWorkspaceID, selectedThread.id);
+      await navigateToApp(selectedWorkspaceID, thread.root.id);
     }
   }
 
@@ -5075,6 +4955,7 @@
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) return;
     containArtifactModalFocus(event);
     if (event.defaultPrevented) return;
     if (handleVoiceKeyboardShortcut(event)) return;
@@ -5104,9 +4985,13 @@
         event.preventDefault();
         resetSearch();
         return;
-      } else if (replyTarget) {
+      } else if (replyTarget || thread.draft?.quote) {
         event.preventDefault();
-        clearReplyTarget();
+        if (thread.draft?.quote && (activeComposerContext === "thread" || !replyTarget)) {
+          thread.setQuote(null);
+        } else {
+          clearReplyTarget();
+        }
         return;
       } else {
         // Esc with no modal/reply jumps you to live chat.
@@ -5120,8 +5005,7 @@
       event.key.length === 1 &&
       !event.ctrlKey &&
       !event.metaKey &&
-      !event.altKey &&
-      !event.isComposing
+      !event.altKey
     ) {
       const active = document.activeElement;
       if (
@@ -5146,16 +5030,13 @@
   function closeModal() {
     if (pendingDeleteMessage && deletingMessageIDs.has(pendingDeleteMessage.id)) return;
     if (channelSettingsSaving) return;
+    resetCreateActions();
     pendingDeleteMessage = null;
     deleteMessageError = "";
     selectedImage = null;
     settingsModalOpen = false;
     channelSettingsOpen = false;
     channelSettingsError = "";
-    showCreateChannel = false;
-    createChannelProfile = null;
-    channelCreateStatus = "";
-    showCreateDirect = false;
   }
 
   function closeMobileNav() {
@@ -5242,7 +5123,7 @@
   <main class="auth-shell">
     <section class="auth-panel" aria-label="Sign in">
       <div class="auth-brand">
-        <div class="mark">cc</div>
+        <KeystrokeMark class="mark" size={44} />
         <div class="brand-text">
           <strong>ClickClack</strong>
           <span>OpenClaw workspace chat</span>
@@ -5250,14 +5131,46 @@
       </div>
       <div class="auth-copy">
         <h1>Welcome.</h1>
-        <p>Sign in with GitHub to join the guest room.</p>
+        <p>{authLead}</p>
       </div>
-      <a class="github-login" href={apiURL("/api/auth/github/start")} onclick={signInWithGitHub}>
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.69-3.87-1.37-3.87-1.37-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.34.96.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.94 10.94 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56 4.56-1.52 7.85-5.83 7.85-10.91C23.5 5.65 18.35.5 12 .5z"/>
-        </svg>
-        Continue with GitHub
-      </a>
+      {#if passwordAuthEnabled}
+        <form class="auth-form" onsubmit={submitPasswordLogin}>
+          <label class="field">
+            <span>Email or username</span>
+            <input
+              bind:value={passwordIdentifier}
+              autocomplete="username"
+              name="identifier"
+              required
+              type="text"
+            />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input
+              bind:value={passwordSecret}
+              autocomplete="current-password"
+              name="password"
+              required
+              type="password"
+            />
+          </label>
+          <button class="auth-submit" type="submit" disabled={authSubmitting}>
+            {authSubmitting ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+      {/if}
+      {#if githubAuthEnabled}
+        {#if passwordAuthEnabled}
+          <p class="auth-divider"><span>or</span></p>
+        {/if}
+        <a class="github-login" href={apiURL("/api/auth/github/start")} onclick={signInWithGitHub}>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.69-3.87-1.37-3.87-1.37-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.34.96.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.94 10.94 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56 4.56-1.52 7.85-5.83 7.85-10.91C23.5 5.65 18.35.5 12 .5z"/>
+          </svg>
+          Continue with GitHub
+        </a>
+      {/if}
       {#if !desktop}
         <a class="openclaw-login" href={apiURL("/api/auth/openclaw/start")}>
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -5269,7 +5182,30 @@
           Sign in with OpenClaw ID
         </a>
       {/if}
-      <p class="auth-foot">{desktopAuthStatus || "Any GitHub account can join."}</p>
+      {#if authError}
+        <p class="auth-error" role="alert">{authError}</p>
+      {/if}
+      <details class="auth-magic" open={!githubAuthEnabled && !passwordAuthEnabled}>
+        <summary>Have a sign-in token?</summary>
+        <form class="auth-form" onsubmit={submitMagicToken}>
+          <label class="field">
+            <span>Sign-in token</span>
+            <input
+              bind:value={magicToken}
+              autocomplete="one-time-code"
+              name="token"
+              required
+              type="text"
+            />
+          </label>
+          <button class="auth-submit auth-submit-quiet" type="submit" disabled={authSubmitting}>
+            Use token
+          </button>
+        </form>
+      </details>
+      {#if desktopAuthStatus || authFoot}
+        <p class="auth-foot">{desktopAuthStatus || authFoot}</p>
+      {/if}
     </section>
   </main>
 {:else}
@@ -5284,7 +5220,7 @@
   class:search-open={searchPaneVisible}
   class:artifact-open={selectedArtifact !== null}
   data-connected={connected}
-  data-app-ready={connected && status === "ready"}
+  data-app-ready={connected && appReady}
   style={`--sidebar-width: ${effectiveSidebarWidth}px`}
 >
   {#if integratedTitleBar && desktop}
@@ -5309,13 +5245,16 @@
       {sidebarCollapsed}
       {mobileNavOpen}
       mobileNavigation={mobileNavViewport}
+      {homeLink}
+      workspaceCreatePending={createPending === "workspace"}
+      {workspaceCreateError}
       {workspaces}
       {selectedWorkspaceID}
       createWorkspaceName={workspaceName}
       {showWorkspaceCreate}
       hrefForWorkspace={(workspaceID) => appHref(workspaceID)}
       onSelectWorkspace={(workspaceID) => void selectWorkspace(workspaceID)}
-      onToggleWorkspaceCreate={() => (showWorkspaceCreate = !showWorkspaceCreate)}
+      onToggleWorkspaceCreate={toggleWorkspaceCreate}
       onWorkspaceName={(value) => (workspaceName = value)}
       onCreateWorkspace={() => void createWorkspace()}
       onOpenChannelSettings={openChannelSettings}
@@ -5350,7 +5289,11 @@
     ></button>
   {/if}
 
+
   <Sidebar
+    {homeLink}
+    workspaceCreatePending={createPending === "workspace"}
+    {workspaceCreateError}
     workspaceID={selectedWorkspaceID}
     {workspaces}
     createWorkspaceName={workspaceName}
@@ -5376,14 +5319,14 @@
       void assignChannelProfile(channelID, profile)}
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
     onStartDirect={(memberID) => void startDirectWithUser(memberID)}
-    onCreateDirect={() => (showCreateDirect = true)}
+    onCreateDirect={openCreateDirect}
     onHideDirect={(conversationID) => void hideDirectConversation(conversationID)}
     hiddenDirectTitle={hiddenDirectUndo?.title}
     onUndoHideDirect={() => void undoHideDirectConversation()}
     onOpenProfile={openUserProfile}
     onOpenSettings={openProfileSettings}
     onSelectWorkspace={(workspaceID) => void selectWorkspace(workspaceID)}
-    onToggleWorkspaceCreate={() => (showWorkspaceCreate = !showWorkspaceCreate)}
+    onToggleWorkspaceCreate={toggleWorkspaceCreate}
     onWorkspaceName={(value) => (workspaceName = value)}
     onCreateWorkspace={() => void createWorkspace()}
     onOpenWorkspaceSettings={openWorkspaceSettings}
@@ -5436,7 +5379,7 @@
         workspaceName={selectedWorkspace?.name}
         currentUserID={user?.id}
         {searchQuery}
-        threadOpen={selectedThread !== null}
+        threadOpen={$threadView.root !== null}
         pinnedOpen={pinnedPanelOpen}
         runAvailable={runPanelAvailable}
         runOpen={runPanelOpen}
@@ -5488,7 +5431,7 @@
       loadingOlder={activeLoadingOlder}
       loadingNewer={activeLoadingNewer}
       prepending={olderPageState !== "idle"}
-      selectedThreadID={selectedThread?.id}
+      selectedThreadID={$threadView.root?.id}
       currentUserID={user?.id}
       {reactionController}
       reactionsDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
@@ -5529,9 +5472,17 @@
 
     <div class="composer-dock">
     <AgentResponding
-      active={agentResponding && selectedThread === null}
+      active={agentResponding && $threadView.root === null}
       agentNames={activeRespondingAgentNames}
     />
+
+    {#if realtimeError}
+      <p class="composer-notice composer-notice--error" role="status">Live updates: {realtimeError}</p>
+    {/if}
+
+    {#if workspaceMembersError}
+      <p class="composer-notice composer-notice--error" role="status">Mentions unavailable: {workspaceMembersError}</p>
+    {/if}
 
     {#if composerNotice}
       <div
@@ -5541,7 +5492,7 @@
         aria-live="polite"
       >
         <span class="composer-notice__label">
-          {composerNotice.kind === "ephemeral" ? "Only visible to you" : "Couldn’t send"}
+          {composerNotice.kind === "ephemeral" ? "Only visible to you" : "Action failed"}
         </span>
         <span class="composer-notice__text">{composerNotice.text}</span>
         <button
@@ -5598,9 +5549,6 @@
       onToggleVoiceAutoSend={toggleVoiceAutoSend}
       onSendVoice={sendVoiceDraft}
       onEndVoice={endVoiceSession}
-      showGifPicker={showGifPicker}
-      gifQuery={gifQuery}
-      filteredGifs={filteredGifs}
       slashCommands={selectedChannelID ? slashCommands : []}
       botCommands={composerBotCommands}
       {mentionPeople}
@@ -5619,11 +5567,6 @@
       onRemoveUpload={removePendingAttachment}
       onRetryUpload={(key) => void uploadPendingAttachment(key)}
       onClearReply={clearReplyTarget}
-      onApplyMarkdownWrap={applyMarkdownWrap}
-      onAppendToComposer={appendToComposer}
-      onToggleGif={() => (showGifPicker = !showGifPicker)}
-      onGifQuery={(value) => (gifQuery = value)}
-      onPickGif={pickGif}
     />
     </div>
   </main>
@@ -5690,14 +5633,17 @@
           void setTopicFilter(topicID);
         }}
       />
-    {:else if selectedThread}
+    {:else if $threadView.root}
       <ThreadPanel
-        root={selectedThread}
+        history={thread}
+        root={$threadView.root}
         {replies}
         channel={selectedChannel}
-        threadState={selectedThreadState}
-        {replyBody}
-        replyTarget={replyTarget && replyContext === "thread" ? replyTarget : null}
+        threadState={$threadView.state}
+        replyBody={$threadView.draft?.body ?? ""}
+        replyTarget={$threadView.draft?.quote ?? null}
+        replyError={$threadView.draft?.error || $threadView.error}
+        replySending={$threadView.draft?.sending ?? false}
         {mentionPeople}
         {mentionAttentionUserID}
         {agentResponding}
@@ -5705,7 +5651,7 @@
         replyDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
         onClose={closeSidePanel}
         onBack={searchThreadDetour && searchSession ? () => void returnToSearchFromThread() : undefined}
-        onReplyBody={(value) => (replyBody = value)}
+        onReplyBody={(value) => thread.updateDraft(value)}
         onSubmitReply={() => void sendReply()}
         onReplyKeydown={handleReplyKey}
         onReplyFocus={() => (activeComposerContext = "thread")}
@@ -5714,7 +5660,7 @@
         {reactionController}
         reactionsDisabled={Boolean(selectedDirect && !selectedDirectWritable)}
         onSetReplyTarget={setReplyTarget}
-        onClearReply={clearReplyTarget}
+        onClearReply={() => thread.setQuote(null)}
         canDeleteAnyMessage={canDeleteAnyMessage && !selectedDirectID}
         {deletingMessageIDs}
         onDeleteMessage={requestMessageDelete}
@@ -5731,6 +5677,17 @@
         onOpenImage={openImageViewer}
         onOpenArtifact={openArtifactViewer}
       />
+    {:else if $threadView.selection}
+      <header>
+        <strong>Thread</strong>
+        <button class="close" aria-label="Close thread" onclick={closeSidePanel}>×</button>
+      </header>
+      {#if $threadView.error}
+        <p class="composer-notice" role="alert">{$threadView.error}</p>
+        <button type="button" class="ghost-action" onclick={() => $threadView.selection && void selectThread($threadView.selection.messageID)}>Retry loading thread</button>
+      {:else}
+        <p class="composer-notice" role="status">Loading thread…</p>
+      {/if}
     {:else if selectedProfile}
       <ProfilePane
         profile={selectedProfile}
@@ -5741,12 +5698,13 @@
         onSaveBotProfile={saveBotProfile}
         onClose={closeSidePanel}
         onEdit={openProfileSettings}
+        messagePending={createPending === "direct"}
+        messageError={directCreateError}
         onMessage={(memberID) => void startDirectWithUser(memberID)}
         onApprove={(memberID) => void updateMemberModeration(memberID, { role: "member", clear_timeout: true, blocked: false })}
         onTimeout={(memberID) => void updateMemberModeration(memberID, { timeout_minutes: 60 })}
         onBlock={(memberID) => void updateMemberModeration(memberID, { blocked: true })}
         onUnblock={(memberID) => void updateMemberModeration(memberID, { blocked: false, clear_timeout: true })}
-        onSetStatus={() => (status = "status messages are coming soon")}
       />
     {:else}
       <ThreadEmptyState />
@@ -5786,9 +5744,9 @@
 {#if showCreateChannel}
   <CreateChannelModal
     {channelName}
-    status={channelCreateStatus}
+    pending={createPending === "channel"}
+    error={channelCreateError}
     profileName={createChannelProfile?.display_name}
-    creating={channelCreating}
     onChannelName={(value) => (channelName = value)}
     onClose={closeModal}
     onCreate={() => void createChannel()}
@@ -5796,12 +5754,14 @@
 {/if}
 {#if showCreateDirect}
   <CreateDirectModal
-    people={recentPeople}
+    people={mentionPeople}
     currentUserID={user?.id}
     memberID={directMemberID}
+    pending={createPending === "direct"}
+    error={directCreateError || workspaceMembersError}
     onMemberID={(value) => (directMemberID = value)}
     onClose={closeModal}
-    onStart={(memberID) => void startDirectFromModal(memberID)}
+    onStart={(memberID) => void startDirectWithUser(memberID)}
   />
 {/if}
 {#if pendingDeleteMessage}

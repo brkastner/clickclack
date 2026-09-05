@@ -8,6 +8,7 @@ package storedb
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 
 	"github.com/lib/pq"
 )
@@ -653,6 +654,19 @@ type DeleteUploadQuotaReservationParams struct {
 
 func (q *Queries) DeleteUploadQuotaReservation(ctx context.Context, arg DeleteUploadQuotaReservationParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteUploadQuotaReservation, arg.ID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteUserPassword = `-- name: DeleteUserPassword :execrows
+DELETE FROM user_passwords
+WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserPassword(ctx context.Context, userID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUserPassword, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -1604,6 +1618,28 @@ func (q *Queries) GetIdentityEmailForUser(ctx context.Context, userID string) (s
 	return email, err
 }
 
+const getLiveUserSessionExpiry = `-- name: GetLiveUserSessionExpiry :one
+SELECT expires_at
+FROM sessions
+WHERE user_id = $1
+  AND token_hash = $2
+  AND revoked_at IS NULL
+FOR UPDATE
+`
+
+type GetLiveUserSessionExpiryParams struct {
+	UserID    string `json:"user_id"`
+	TokenHash string `json:"token_hash"`
+}
+
+// Keep logout from invalidating the caller before rotation commits.
+func (q *Queries) GetLiveUserSessionExpiry(ctx context.Context, arg GetLiveUserSessionExpiryParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getLiveUserSessionExpiry, arg.UserID, arg.TokenHash)
+	var expires_at string
+	err := row.Scan(&expires_at)
+	return expires_at, err
+}
+
 const getMagicLinkByToken = `-- name: GetMagicLinkByToken :one
 SELECT id, token, token_hash, email, display_name, created_at, expires_at, used_at
 FROM auth_magic_links
@@ -1648,6 +1684,24 @@ func (q *Queries) GetMemberModerationState(ctx context.Context, arg GetMemberMod
 	var i GetMemberModerationStateRow
 	err := row.Scan(&i.TimeoutUntil, &i.BlockedAt)
 	return i, err
+}
+
+const getMessageIDByAuthorNonce = `-- name: GetMessageIDByAuthorNonce :one
+SELECT id
+FROM messages
+WHERE author_id = $1 AND client_nonce = $2
+`
+
+type GetMessageIDByAuthorNonceParams struct {
+	AuthorID    string `json:"author_id"`
+	ClientNonce string `json:"client_nonce"`
+}
+
+func (q *Queries) GetMessageIDByAuthorNonce(ctx context.Context, arg GetMessageIDByAuthorNonceParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getMessageIDByAuthorNonce, arg.AuthorID, arg.ClientNonce)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getNotificationSettings = `-- name: GetNotificationSettings :one
@@ -1984,6 +2038,7 @@ FROM identities i
 JOIN users u ON u.id = i.user_id
 WHERE i.provider = $1
   AND i.provider_subject = $2
+FOR UPDATE OF u
 `
 
 type GetUserByIdentityProviderSubjectParams struct {
@@ -2016,6 +2071,19 @@ func (q *Queries) GetUserByIdentityProviderSubject(ctx context.Context, arg GetU
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getUserPasswordHash = `-- name: GetUserPasswordHash :one
+SELECT password_hash
+FROM user_passwords
+WHERE user_id = $1
+`
+
+func (q *Queries) GetUserPasswordHash(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserPasswordHash, userID)
+	var password_hash string
+	err := row.Scan(&password_hash)
+	return password_hash, err
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
@@ -2832,6 +2900,42 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 	return err
 }
 
+const insertSessionForVerifiedPassword = `-- name: InsertSessionForVerifiedPassword :execrows
+INSERT INTO sessions (id, token, token_hash, user_id, created_at, expires_at)
+SELECT $1, $2, $3, p.user_id, $4, $5
+FROM user_passwords p
+WHERE p.user_id = $6
+  AND p.password_hash = $7
+FOR SHARE OF p
+`
+
+type InsertSessionForVerifiedPasswordParams struct {
+	ID           string `json:"id"`
+	Token        string `json:"token"`
+	TokenHash    string `json:"token_hash"`
+	CreatedAt    string `json:"created_at"`
+	ExpiresAt    string `json:"expires_at"`
+	UserID       string `json:"user_id"`
+	VerifiedHash string `json:"verified_hash"`
+}
+
+// Hold the credential against rotation until the session commits.
+func (q *Queries) InsertSessionForVerifiedPassword(ctx context.Context, arg InsertSessionForVerifiedPasswordParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSessionForVerifiedPassword,
+		arg.ID,
+		arg.Token,
+		arg.TokenHash,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+		arg.UserID,
+		arg.VerifiedHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const insertThreadReply = `-- name: InsertThreadReply :exec
 INSERT INTO messages (id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, channel_seq, thread_seq, body, body_format, created_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, turn_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, 'markdown', $10, $11, $12, $13, $14, $15)
@@ -3091,6 +3195,17 @@ type LatestEventCursorParams struct {
 
 func (q *Queries) LatestEventCursor(ctx context.Context, arg LatestEventCursorParams) (string, error) {
 	row := q.db.QueryRowContext(ctx, latestEventCursor, arg.UserID, arg.WorkspaceID)
+	var cursor string
+	err := row.Scan(&cursor)
+	return cursor, err
+}
+
+const latestWorkspaceEventCursor = `-- name: LatestWorkspaceEventCursor :one
+SELECT cursor FROM events WHERE workspace_id = $1 ORDER BY cursor DESC LIMIT 1
+`
+
+func (q *Queries) LatestWorkspaceEventCursor(ctx context.Context, workspaceID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, latestWorkspaceEventCursor, workspaceID)
 	var cursor string
 	err := row.Scan(&cursor)
 	return cursor, err
@@ -3871,6 +3986,68 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 	return items, nil
 }
 
+const listIdentitySyncUsers = `-- name: ListIdentitySyncUsers :many
+SELECT u.id, u.kind, u.display_name, u.handle, u.avatar_url,
+       i.provider, i.provider_subject, i.email
+FROM users u
+JOIN identities i ON i.user_id = u.id
+WHERE u.id IN (
+  SELECT candidate.user_id FROM identities candidate
+  WHERE candidate.provider = $1
+     OR lower(candidate.email) IN (SELECT jsonb_array_elements_text(CAST($2 AS jsonb)))
+)
+ORDER BY u.id, i.id
+FOR UPDATE OF u, i
+`
+
+type ListIdentitySyncUsersParams struct {
+	Source string          `json:"source"`
+	Emails json.RawMessage `json:"emails"`
+}
+
+type ListIdentitySyncUsersRow struct {
+	ID              string `json:"id"`
+	Kind            string `json:"kind"`
+	DisplayName     string `json:"display_name"`
+	Handle          string `json:"handle"`
+	AvatarUrl       string `json:"avatar_url"`
+	Provider        string `json:"provider"`
+	ProviderSubject string `json:"provider_subject"`
+	Email           string `json:"email"`
+}
+
+func (q *Queries) ListIdentitySyncUsers(ctx context.Context, arg ListIdentitySyncUsersParams) ([]ListIdentitySyncUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdentitySyncUsers, arg.Source, arg.Emails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdentitySyncUsersRow
+	for rows.Next() {
+		var i ListIdentitySyncUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.Provider,
+			&i.ProviderSubject,
+			&i.Email,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMentionedUserIDs = `-- name: ListMentionedUserIDs :many
 SELECT u.id, lower(u.handle) AS handle
 FROM users u
@@ -3901,6 +4078,71 @@ func (q *Queries) ListMentionedUserIDs(ctx context.Context, arg ListMentionedUse
 	for rows.Next() {
 		var i ListMentionedUserIDsRow
 		if err := rows.Scan(&i.ID, &i.Handle); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPasswordLoginsByIdentifier = `-- name: ListPasswordLoginsByIdentifier :many
+SELECT DISTINCT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at,
+       COALESCE(p.password_hash, '') AS password_hash
+FROM users u
+LEFT JOIN user_passwords p ON p.user_id = u.id
+WHERE u.kind = 'human'
+  AND (
+    (u.handle <> '' AND lower(u.handle) = lower($1))
+    OR EXISTS (
+      SELECT 1 FROM identities i
+      WHERE i.user_id = u.id AND lower(i.email) = lower($1)
+    )
+  )
+ORDER BY u.created_at, u.id
+LIMIT 2
+`
+
+type ListPasswordLoginsByIdentifierRow struct {
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	OwnerUserID    sql.NullString `json:"owner_user_id"`
+	DisplayName    string         `json:"display_name"`
+	Handle         string         `json:"handle"`
+	AvatarUrl      string         `json:"avatar_url"`
+	AvatarUrlLight string         `json:"avatar_url_light"`
+	CreatedAt      string         `json:"created_at"`
+	PasswordHash   string         `json:"password_hash"`
+}
+
+// Password login accepts either an identity email or a handle. Both sides are
+// folded because identity rows keep the casing they were created with, and two
+// rows are read so an ambiguous identifier can be rejected rather than guessed.
+func (q *Queries) ListPasswordLoginsByIdentifier(ctx context.Context, identifier string) ([]ListPasswordLoginsByIdentifierRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPasswordLoginsByIdentifier, identifier)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPasswordLoginsByIdentifierRow
+	for rows.Next() {
+		var i ListPasswordLoginsByIdentifierRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.OwnerUserID,
+			&i.DisplayName,
+			&i.Handle,
+			&i.AvatarUrl,
+			&i.AvatarUrlLight,
+			&i.CreatedAt,
+			&i.PasswordHash,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -4140,6 +4382,154 @@ func (q *Queries) ListReactionsForMessages(ctx context.Context, arg ListReaction
 			&i.Emoji,
 			&i.ReactionCount,
 			&i.ReactedByMe,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listThreadReplyPage = `-- name: ListThreadReplyPage :many
+WITH descending_page AS (
+ SELECT candidate.id, candidate.workspace_id, candidate.channel_id, candidate.direct_conversation_id, candidate.author_id, candidate.parent_message_id, candidate.thread_root_id, candidate.topic_id, candidate.channel_seq, candidate.thread_seq, candidate.body, candidate.body_format, candidate.created_at, candidate.edited_at, candidate.deleted_at, candidate.quoted_message_id, candidate.quoted_body_snapshot, candidate.quoted_author_id, candidate.client_nonce, candidate.route_id, candidate.kind, candidate.turn_id FROM messages candidate
+ WHERE candidate.thread_root_id = $1 AND candidate.parent_message_id = $1
+   AND candidate.thread_seq > $2 AND candidate.thread_seq <= $3
+   AND CAST($4 AS INTEGER) = 1
+ ORDER BY candidate.thread_seq DESC LIMIT $5
+), ascending_page AS (
+ SELECT candidate.id, candidate.workspace_id, candidate.channel_id, candidate.direct_conversation_id, candidate.author_id, candidate.parent_message_id, candidate.thread_root_id, candidate.topic_id, candidate.channel_seq, candidate.thread_seq, candidate.body, candidate.body_format, candidate.created_at, candidate.edited_at, candidate.deleted_at, candidate.quoted_message_id, candidate.quoted_body_snapshot, candidate.quoted_author_id, candidate.client_nonce, candidate.route_id, candidate.kind, candidate.turn_id FROM messages candidate
+ WHERE candidate.thread_root_id = $1 AND candidate.parent_message_id = $1
+   AND candidate.thread_seq > $2 AND candidate.thread_seq <= $3
+   AND CAST($4 AS INTEGER) = 0
+ ORDER BY candidate.thread_seq ASC LIMIT $5
+), page AS (
+ SELECT id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, edited_at, deleted_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, route_id, kind, turn_id FROM descending_page UNION ALL SELECT id, workspace_id, channel_id, direct_conversation_id, author_id, parent_message_id, thread_root_id, topic_id, channel_seq, thread_seq, body, body_format, created_at, edited_at, deleted_at, quoted_message_id, quoted_body_snapshot, quoted_author_id, client_nonce, route_id, kind, turn_id FROM ascending_page
+)
+SELECT m.id, m.workspace_id, m.channel_id, m.direct_conversation_id, m.author_id, m.parent_message_id, m.thread_root_id, m.topic_id, m.channel_seq, m.thread_seq, m.body, m.body_format, m.created_at, m.edited_at, m.deleted_at, m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id, m.client_nonce, m.route_id, m.kind, m.turn_id,
+ u.kind AS author_kind, u.owner_user_id AS author_owner_id, u.display_name AS author_name,
+ u.handle AS author_handle, u.avatar_url AS author_avatar, u.created_at AS author_created,
+ at.former_handle AS author_former_handle, at.deleted_at AS author_deleted,
+ qu.kind AS quote_kind, qu.owner_user_id AS quote_owner_id, qu.display_name AS quote_name,
+ qu.handle AS quote_handle, qu.avatar_url AS quote_avatar, qu.created_at AS quote_created,
+ qt.former_handle AS quote_former_handle, qt.deleted_at AS quote_deleted
+FROM page m
+JOIN users u ON u.id = m.author_id
+LEFT JOIN bot_tombstones at ON at.bot_user_id = u.id
+LEFT JOIN users qu ON qu.id = m.quoted_author_id
+LEFT JOIN bot_tombstones qt ON qt.bot_user_id = qu.id
+ORDER BY m.thread_seq ASC
+`
+
+type ListThreadReplyPageParams struct {
+	RootID          string        `json:"root_id"`
+	LowerSeq        sql.NullInt64 `json:"lower_seq"`
+	UpperSeq        sql.NullInt64 `json:"upper_seq"`
+	DescendingOrder int32         `json:"descending_order"`
+	PageLimit       int32         `json:"page_limit"`
+}
+
+type ListThreadReplyPageRow struct {
+	ID                   string         `json:"id"`
+	WorkspaceID          string         `json:"workspace_id"`
+	ChannelID            sql.NullString `json:"channel_id"`
+	DirectConversationID sql.NullString `json:"direct_conversation_id"`
+	AuthorID             string         `json:"author_id"`
+	ParentMessageID      sql.NullString `json:"parent_message_id"`
+	ThreadRootID         string         `json:"thread_root_id"`
+	TopicID              sql.NullString `json:"topic_id"`
+	ChannelSeq           sql.NullInt64  `json:"channel_seq"`
+	ThreadSeq            sql.NullInt64  `json:"thread_seq"`
+	Body                 string         `json:"body"`
+	BodyFormat           string         `json:"body_format"`
+	CreatedAt            string         `json:"created_at"`
+	EditedAt             sql.NullString `json:"edited_at"`
+	DeletedAt            sql.NullString `json:"deleted_at"`
+	QuotedMessageID      sql.NullString `json:"quoted_message_id"`
+	QuotedBodySnapshot   string         `json:"quoted_body_snapshot"`
+	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
+	ClientNonce          string         `json:"client_nonce"`
+	RouteID              sql.NullString `json:"route_id"`
+	Kind                 string         `json:"kind"`
+	TurnID               sql.NullString `json:"turn_id"`
+	AuthorKind           string         `json:"author_kind"`
+	AuthorOwnerID        sql.NullString `json:"author_owner_id"`
+	AuthorName           string         `json:"author_name"`
+	AuthorHandle         string         `json:"author_handle"`
+	AuthorAvatar         string         `json:"author_avatar"`
+	AuthorCreated        string         `json:"author_created"`
+	AuthorFormerHandle   sql.NullString `json:"author_former_handle"`
+	AuthorDeleted        sql.NullString `json:"author_deleted"`
+	QuoteKind            sql.NullString `json:"quote_kind"`
+	QuoteOwnerID         sql.NullString `json:"quote_owner_id"`
+	QuoteName            sql.NullString `json:"quote_name"`
+	QuoteHandle          sql.NullString `json:"quote_handle"`
+	QuoteAvatar          sql.NullString `json:"quote_avatar"`
+	QuoteCreated         sql.NullString `json:"quote_created"`
+	QuoteFormerHandle    sql.NullString `json:"quote_former_handle"`
+	QuoteDeleted         sql.NullString `json:"quote_deleted"`
+}
+
+func (q *Queries) ListThreadReplyPage(ctx context.Context, arg ListThreadReplyPageParams) ([]ListThreadReplyPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listThreadReplyPage,
+		arg.RootID,
+		arg.LowerSeq,
+		arg.UpperSeq,
+		arg.DescendingOrder,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListThreadReplyPageRow
+	for rows.Next() {
+		var i ListThreadReplyPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ChannelID,
+			&i.DirectConversationID,
+			&i.AuthorID,
+			&i.ParentMessageID,
+			&i.ThreadRootID,
+			&i.TopicID,
+			&i.ChannelSeq,
+			&i.ThreadSeq,
+			&i.Body,
+			&i.BodyFormat,
+			&i.CreatedAt,
+			&i.EditedAt,
+			&i.DeletedAt,
+			&i.QuotedMessageID,
+			&i.QuotedBodySnapshot,
+			&i.QuotedAuthorID,
+			&i.ClientNonce,
+			&i.RouteID,
+			&i.Kind,
+			&i.TurnID,
+			&i.AuthorKind,
+			&i.AuthorOwnerID,
+			&i.AuthorName,
+			&i.AuthorHandle,
+			&i.AuthorAvatar,
+			&i.AuthorCreated,
+			&i.AuthorFormerHandle,
+			&i.AuthorDeleted,
+			&i.QuoteKind,
+			&i.QuoteOwnerID,
+			&i.QuoteName,
+			&i.QuoteHandle,
+			&i.QuoteAvatar,
+			&i.QuoteCreated,
+			&i.QuoteFormerHandle,
+			&i.QuoteDeleted,
 		); err != nil {
 			return nil, err
 		}
@@ -4941,15 +5331,51 @@ func (q *Queries) LockBotWorkspaceMembership(ctx context.Context, arg LockBotWor
 	return user_id, err
 }
 
-const lockChannelForPinning = `-- name: LockChannelForPinning :one
+const lockChannelForUpdate = `-- name: LockChannelForUpdate :one
 SELECT id FROM channels WHERE id = $1 FOR UPDATE
 `
 
-func (q *Queries) LockChannelForPinning(ctx context.Context, channelID string) (string, error) {
-	row := q.db.QueryRowContext(ctx, lockChannelForPinning, channelID)
+func (q *Queries) LockChannelForUpdate(ctx context.Context, channelID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockChannelForUpdate, channelID)
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockEventRecipient = `-- name: LockEventRecipient :one
+SELECT id FROM users WHERE id = $1 FOR KEY SHARE
+`
+
+func (q *Queries) LockEventRecipient(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockEventRecipient, userID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockEventWorkspace = `-- name: LockEventWorkspace :one
+SELECT id FROM workspaces WHERE id = $1 FOR KEY SHARE
+`
+
+func (q *Queries) LockEventWorkspace(ctx context.Context, workspaceID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockEventWorkspace, workspaceID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockIdentityProviderSubject = `-- name: LockIdentityProviderSubject :exec
+SELECT pg_advisory_xact_lock(hashtext('clickclack.identity.' || $1::text), hashtext($2::text))
+`
+
+type LockIdentityProviderSubjectParams struct {
+	Provider        string `json:"provider"`
+	ProviderSubject string `json:"provider_subject"`
+}
+
+func (q *Queries) LockIdentityProviderSubject(ctx context.Context, arg LockIdentityProviderSubjectParams) error {
+	_, err := q.db.ExecContext(ctx, lockIdentityProviderSubject, arg.Provider, arg.ProviderSubject)
+	return err
 }
 
 const lockMessageForPinning = `-- name: LockMessageForPinning :one
@@ -4975,6 +5401,15 @@ func (q *Queries) LockMessageForReaction(ctx context.Context, messageID string) 
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockWorkspaceEventLog = `-- name: LockWorkspaceEventLog :exec
+SELECT pg_advisory_xact_lock(hashtext('clickclack.events'), hashtext($1::text))
+`
+
+func (q *Queries) LockWorkspaceEventLog(ctx context.Context, workspaceID string) error {
+	_, err := q.db.ExecContext(ctx, lockWorkspaceEventLog, workspaceID)
+	return err
 }
 
 const lockWorkspaceForUpdate = `-- name: LockWorkspaceForUpdate :exec
@@ -5247,6 +5682,34 @@ func (q *Queries) RemoveReaction(ctx context.Context, arg RemoveReactionParams) 
 	return result.RowsAffected()
 }
 
+const replaceVerifiedUserPassword = `-- name: ReplaceVerifiedUserPassword :execrows
+UPDATE user_passwords
+SET password_hash = $1,
+    updated_at = $2
+WHERE user_id = $3
+  AND password_hash = $4
+`
+
+type ReplaceVerifiedUserPasswordParams struct {
+	PasswordHash string `json:"password_hash"`
+	UpdatedAt    string `json:"updated_at"`
+	UserID       string `json:"user_id"`
+	VerifiedHash string `json:"verified_hash"`
+}
+
+func (q *Queries) ReplaceVerifiedUserPassword(ctx context.Context, arg ReplaceVerifiedUserPasswordParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, replaceVerifiedUserPassword,
+		arg.PasswordHash,
+		arg.UpdatedAt,
+		arg.UserID,
+		arg.VerifiedHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const requireChannelAdmin = `-- name: RequireChannelAdmin :one
 SELECT 1
 FROM workspace_members
@@ -5488,7 +5951,49 @@ func (q *Queries) RevokeAllBotTokens(ctx context.Context, arg RevokeAllBotTokens
 	return result.RowsAffected()
 }
 
-const setProviderAvatarUnlessExplicit = `-- name: SetProviderAvatarUnlessExplicit :execrows
+const revokeSessionByTokenHash = `-- name: RevokeSessionByTokenHash :execrows
+UPDATE sessions
+SET revoked_at = $1
+WHERE token_hash = $2
+  AND revoked_at IS NULL
+`
+
+type RevokeSessionByTokenHashParams struct {
+	RevokedAt sql.NullString `json:"revoked_at"`
+	TokenHash string         `json:"token_hash"`
+}
+
+func (q *Queries) RevokeSessionByTokenHash(ctx context.Context, arg RevokeSessionByTokenHashParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeSessionByTokenHash, arg.RevokedAt, arg.TokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeUserSessionsExceptTokenHash = `-- name: RevokeUserSessionsExceptTokenHash :execrows
+UPDATE sessions
+SET revoked_at = $1
+WHERE user_id = $2
+  AND revoked_at IS NULL
+  AND token_hash <> $3
+`
+
+type RevokeUserSessionsExceptTokenHashParams struct {
+	RevokedAt     sql.NullString `json:"revoked_at"`
+	UserID        string         `json:"user_id"`
+	KeepTokenHash string         `json:"keep_token_hash"`
+}
+
+func (q *Queries) RevokeUserSessionsExceptTokenHash(ctx context.Context, arg RevokeUserSessionsExceptTokenHashParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeUserSessionsExceptTokenHash, arg.RevokedAt, arg.UserID, arg.KeepTokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setProviderAvatarUnlessExplicit = `-- name: SetProviderAvatarUnlessExplicit :exec
 UPDATE users
 SET avatar_url = $1,
     avatar_url_light = CASE WHEN $1 = '' THEN '' ELSE avatar_url_light END
@@ -5503,12 +6008,9 @@ type SetProviderAvatarUnlessExplicitParams struct {
 }
 
 // Avatar URLs equal to the generated fallback remain fallback-equivalent.
-func (q *Queries) SetProviderAvatarUnlessExplicit(ctx context.Context, arg SetProviderAvatarUnlessExplicitParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, setProviderAvatarUnlessExplicit, arg.AvatarUrl, arg.ID, arg.FallbackUrl)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+func (q *Queries) SetProviderAvatarUnlessExplicit(ctx context.Context, arg SetProviderAvatarUnlessExplicitParams) error {
+	_, err := q.db.ExecContext(ctx, setProviderAvatarUnlessExplicit, arg.AvatarUrl, arg.ID, arg.FallbackUrl)
+	return err
 }
 
 const setUserAvatarIfEmpty = `-- name: SetUserAvatarIfEmpty :exec
@@ -5545,6 +6047,29 @@ func (q *Queries) ThreadNextSeq(ctx context.Context, arg ThreadNextSeqParams) (i
 	var next_seq int64
 	err := row.Scan(&next_seq)
 	return next_seq, err
+}
+
+const threadReplyEdges = `-- name: ThreadReplyEdges :one
+SELECT EXISTS(SELECT 1 FROM messages older WHERE older.thread_root_id = $1 AND older.parent_message_id = $1 AND older.thread_seq < $2) AS has_older,
+       EXISTS(SELECT 1 FROM messages newer WHERE newer.thread_root_id = $1 AND newer.parent_message_id = $1 AND newer.thread_seq > $3) AS has_newer
+`
+
+type ThreadReplyEdgesParams struct {
+	RootID    string        `json:"root_id"`
+	OldestSeq sql.NullInt64 `json:"oldest_seq"`
+	NewestSeq sql.NullInt64 `json:"newest_seq"`
+}
+
+type ThreadReplyEdgesRow struct {
+	HasOlder bool `json:"has_older"`
+	HasNewer bool `json:"has_newer"`
+}
+
+func (q *Queries) ThreadReplyEdges(ctx context.Context, arg ThreadReplyEdgesParams) (ThreadReplyEdgesRow, error) {
+	row := q.db.QueryRowContext(ctx, threadReplyEdges, arg.RootID, arg.OldestSeq, arg.NewestSeq)
+	var i ThreadReplyEdgesRow
+	err := row.Scan(&i.HasOlder, &i.HasNewer)
+	return i, err
 }
 
 const touchBotToken = `-- name: TouchBotToken :exec
@@ -6274,6 +6799,25 @@ type UpsertNotificationSettingsParams struct {
 
 func (q *Queries) UpsertNotificationSettings(ctx context.Context, arg UpsertNotificationSettingsParams) error {
 	_, err := q.db.ExecContext(ctx, upsertNotificationSettings, arg.UserID, arg.PushoverEnabled, arg.PushoverUserKey)
+	return err
+}
+
+const upsertUserPassword = `-- name: UpsertUserPassword :exec
+INSERT INTO user_passwords (user_id, password_hash, updated_at)
+VALUES ($1, $2, $3)
+ON CONFLICT(user_id) DO UPDATE SET
+  password_hash = excluded.password_hash,
+  updated_at = excluded.updated_at
+`
+
+type UpsertUserPasswordParams struct {
+	UserID       string `json:"user_id"`
+	PasswordHash string `json:"password_hash"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+func (q *Queries) UpsertUserPassword(ctx context.Context, arg UpsertUserPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, upsertUserPassword, arg.UserID, arg.PasswordHash, arg.UpdatedAt)
 	return err
 }
 

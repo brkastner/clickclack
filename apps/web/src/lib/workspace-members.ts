@@ -1,4 +1,4 @@
-import { api, APIError } from "./api";
+import { apiWithTimeout, APIError } from "./api";
 import type { User } from "./types";
 
 export type WorkspaceMemberRole = "owner" | "moderator" | "member" | "bot" | "guest";
@@ -26,6 +26,7 @@ export type ListWorkspaceMembersParams = {
   query?: string;
   role?: WorkspaceMemberRole | "";
   limit?: number;
+  signal?: AbortSignal;
 };
 
 export const MEMBERS_PAGE_LIMIT = 100;
@@ -41,7 +42,29 @@ export async function listWorkspaceMembersPage(
   if (params.role) search.set("role", params.role);
   const qs = search.toString();
   const path = `/api/workspaces/${params.workspaceID}/members${qs ? `?${qs}` : ""}`;
-  return api<WorkspaceMemberPage>(path);
+  return apiWithTimeout<WorkspaceMemberPage>(path, { signal: params.signal });
+}
+
+export async function listAllWorkspaceMembers(
+  params: Omit<ListWorkspaceMembersParams, "cursor">,
+): Promise<WorkspaceMember[]> {
+  const members: WorkspaceMember[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    params.signal?.throwIfAborted();
+    const page = await listWorkspaceMembersPage({ ...params, cursor });
+    params.signal?.throwIfAborted();
+    members.push(...page.members);
+    if (!page.has_more) return members;
+    cursor = page.next_cursor;
+    if (!cursor) throw new Error("Member directory returned an incomplete page");
+    if (seenCursors.has(cursor)) {
+      throw new Error("Member directory repeated a pagination cursor");
+    }
+    seenCursors.add(cursor);
+  } while (cursor);
+  return members;
 }
 
 export function memberLoadErrorMessage(err: unknown): string {

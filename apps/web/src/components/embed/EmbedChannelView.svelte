@@ -2,23 +2,28 @@
   import { onDestroy, onMount, tick } from "svelte";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
-  import MessageList, { type MessageListHandle } from "../messages/MessageList.svelte";
-  import {
-    markdownImageViewerItems,
-    markdownImageViewerURL,
-  } from "../../lib/actions/markdown";
-  import { imageViewerItems, type ImageViewerItem } from "../../lib/uploads";
+  import KeystrokeMark from "../KeystrokeMark.svelte";
+  import ProfilePane from "../profile/ProfilePane.svelte";
+  import MessageList, {
+    type MessageListHandle,
+    type MessageListState,
+  } from "../messages/MessageList.svelte";
+  import { markdownImageViewerItems, markdownImageViewerURL } from "../../lib/actions/markdown";
   import { APIError, api, apiResourceURL, readableAPIError } from "../../lib/api";
   import { requestCurrentUser } from "../../lib/appearance";
   import { channelDisplayTitle } from "../../lib/chat/channels";
+  import { newNonce } from "../../lib/chat/messages";
+  import { MessageRequests } from "../../lib/chat/messageRequests";
+  import { listAllWorkspaceMembers, memberLoadErrorMessage } from "../../lib/workspace-members";
+  import { imageViewerItems, type ImageViewerItem } from "../../lib/uploads";
   import type { ComposerInputElement } from "../../lib/chat/typeToFocus";
-  import { listWorkspaceMembersPage } from "../../lib/workspace-members";
   import {
     MessageEditController,
+    type MessageEdit,
     type MessageEditSession,
   } from "../../lib/messageEditing.svelte";
   import { ReactionController } from "../../lib/reactions.svelte";
-  import { connectRealtime, type RealtimeConnection } from "../../lib/realtime.svelte";
+  import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
     Channel,
     Message,
@@ -61,16 +66,22 @@
   let replyTarget = $state<Message | null>(null);
   let messageInput = $state<ComposerInputElement | null>(null);
   let messageList = $state<MessageListHandle | null>(null);
+  let restoreState = $state<MessageListState | undefined>();
   let sendError = $state("");
   let realtimeError = $state("");
   let sending = $state(false);
   let selectedImage = $state<{ items: ImageViewerItem[]; initialIndex: number } | null>(null);
+  let selectedProfile = $state<User | null>(null);
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
-  let failedSubmission: MessageSubmission | null = null;
+  let messageSubmission: MessageSubmission | null = null;
   let workspaceMemberUsers = $state<User[]>([]);
   let memberLoadSerial = 0;
+  let memberLoadAbort: AbortController | null = null;
+  let memberLoadError = $state("");
+  let loadingNewerSerial: number | null = null;
+  const messageRequests = new MessageRequests(() => [user?.id, channel?.id].join(":"));
 
   const mentionPeople = $derived.by(() => {
     const people = new Map<string, User>();
@@ -88,26 +99,20 @@
 
   async function loadWorkspaceMembers(workspaceID: string) {
     const serial = ++memberLoadSerial;
+    memberLoadAbort?.abort();
+    const controller = new AbortController();
+    memberLoadAbort = controller;
+    memberLoadError = "";
     workspaceMemberUsers = [];
     try {
-      const members: User[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await listWorkspaceMembersPage({ workspaceID, cursor, limit: 100 });
-        members.push(...page.members.map((member) => member.user));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
-      if (serial === memberLoadSerial) workspaceMemberUsers = members;
-    } catch {
-      if (serial === memberLoadSerial) workspaceMemberUsers = [];
+      const members = await listAllWorkspaceMembers({ workspaceID, limit: 100, signal: controller.signal });
+      if (serial === memberLoadSerial) workspaceMemberUsers = members.map((member) => member.user);
+    } catch (error) {
+      if (!controller.signal.aborted && serial === memberLoadSerial) {
+        workspaceMemberUsers = [];
+        memberLoadError = memberLoadErrorMessage(error);
+      }
     }
-  }
-
-  function newNonce(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID().replace(/-/g, "");
-    }
-    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
   }
 
   async function revealEditSession(scope: string, session: MessageEditSession) {
@@ -126,10 +131,8 @@
     }
   }
 
-  function applyEditedMessage(updated: Message) {
-    messages = messages.map((message) =>
-      message.id === updated.id ? { ...message, ...updated } : message,
-    );
+  function applyEditedMessage(updated: MessageEdit) {
+    messages = messages.map(messageRequests.updateMessage(updated));
   }
 
   function mergeMessages(...lists: Message[][]): Message[] {
@@ -143,6 +146,7 @@
   }
 
   function applyPage(page: MessagePage, mode: "replace" | "prepend" | "append") {
+    if (mode === "replace") restoreState = undefined;
     reactionController.seedMessages(page.messages);
     messages =
       mode === "replace"
@@ -151,13 +155,30 @@
           ? mergeMessages(page.messages, messages)
           : mergeMessages(messages, page.messages);
     editController.reconcile(channel?.id || "", messages);
-    oldestSeq = messages[0]?.channel_seq || page.oldest_seq || oldestSeq;
-    newestSeq = messages[messages.length - 1]?.channel_seq || page.newest_seq || newestSeq;
-    if (mode !== "append") hasOlder = page.has_older;
-    if (mode !== "prepend") hasNewer = page.has_newer;
+    // A displayed send receipt does not prove the intervening messages were fetched.
+    if (mode === "replace") {
+      oldestSeq = page.oldest_seq;
+      newestSeq = page.newest_seq;
+      hasOlder = page.has_older;
+      hasNewer = page.has_newer;
+    } else {
+      oldestSeq = Math.min(oldestSeq || page.oldest_seq, page.oldest_seq || oldestSeq);
+      if (mode === "prepend") hasOlder = page.has_older;
+      if (mode === "append") {
+        if (page.newest_seq > newestSeq) hasNewer = page.has_newer;
+        else if (page.newest_seq === newestSeq) hasNewer ||= page.has_newer;
+      }
+      newestSeq = Math.max(newestSeq, page.newest_seq);
+    }
   }
 
   function clearChannel() {
+    messageRequests.clear();
+    messageSubmission = null;
+    sending = false;
+    sendError = "";
+    memberLoadSerial += 1;
+    memberLoadAbort?.abort();
     socket?.close();
     socket = null;
     route = null;
@@ -165,15 +186,24 @@
     reactionController.clear();
     editController.clear();
     messages = [];
+    restoreState = undefined;
     oldestSeq = 0;
     newestSeq = 0;
     hasOlder = false;
     hasNewer = false;
+    loadingOlder = false;
+    loadingNewerSerial = null;
     replyTarget = null;
+    selectedProfile = null;
+    selectedImage = null;
   }
 
   function handleLoadError(error: unknown) {
     clearChannel();
+    if (error instanceof WorkspaceUnavailableError) {
+      viewState = "forbidden";
+      return;
+    }
     if (error instanceof APIError) {
       if (error.status === 401) {
         viewState = "auth";
@@ -206,26 +236,16 @@
       if (resolved.route.target_type !== "channel") {
         throw new APIError(404, "Channel route not found");
       }
-      const [channelData, page] = await Promise.all([
-        api<{ channels: Channel[] }>(
-          `/api/workspaces/${encodeURIComponent(resolved.route.workspace_id)}/channels`,
-        ),
-        api<MessagePage>(
-          `/api/channels/${encodeURIComponent(resolved.route.target_id)}/messages?limit=100`,
-        ),
-      ]);
-      const resolvedChannel = channelData.channels.find(
-        (candidate) => candidate.id === resolved.route.target_id,
-      );
-      if (!resolvedChannel) throw new APIError(404, "Channel not found");
-      if (serial !== loadSerial) return;
-      user = me.user;
-      route = resolved.route;
-      void loadWorkspaceMembers(resolved.route.workspace_id);
-      channel = resolvedChannel;
-      applyPage(page, "replace");
-      viewState = "ready";
-      connectSocket(resolved.route.workspace_id);
+      await readChannelSnapshot(resolved.route.workspace_id, resolved.route.target_id, (snapshot) => {
+        if (user && user.id !== me.user.id) messageBody = "";
+        user = me.user;
+        route = resolved.route;
+        void loadWorkspaceMembers(resolved.route.workspace_id);
+        channel = snapshot.channel;
+        applyPage(snapshot, "replace");
+        viewState = "ready";
+        connectSocket(resolved.route.workspace_id);
+      }, () => serial === loadSerial);
     } catch (error) {
       if (serial === loadSerial) handleLoadError(error);
     } finally {
@@ -236,124 +256,115 @@
   async function loadOlderMessages() {
     if (!channel || loadingOlder || !hasOlder || oldestSeq <= 0) return;
     const channelID = channel.id;
+    const serial = loadSerial;
     loadingOlder = true;
     try {
-      const page = await api<MessagePage>(
+      await messageRequests.run(() => api<MessagePage>(
         `/api/channels/${encodeURIComponent(channelID)}/messages?before_seq=${encodeURIComponent(String(oldestSeq))}&limit=100`,
-      );
-      if (channel?.id !== channelID || viewState !== "ready") return;
-      applyPage(page, "prepend");
+      ), (page) => {
+        // Preserve scrolling that happened while the page was loading.
+        restoreState = messageList?.captureState() ?? undefined;
+        applyPage(page, "prepend");
+      }, () => serial === loadSerial && channel?.id === channelID && viewState === "ready");
     } catch (error) {
-      sendError = readableAPIError(error, "Could not load older messages.");
+      if (serial === loadSerial) sendError = readableAPIError(error, "Could not load older messages.");
     } finally {
-      loadingOlder = false;
+      if (serial === loadSerial) loadingOlder = false;
     }
+  }
+
+  async function loadNewerMessages() {
+    const serial = loadSerial;
+    if (loadingNewerSerial === serial || !hasNewer) return;
+    loadingNewerSerial = serial;
+    try {
+      await syncNewMessages(() => serial === loadSerial);
+    } catch (error) {
+      if (serial === loadSerial) reportRealtimeError(error);
+    } finally {
+      if (loadingNewerSerial === serial) loadingNewerSerial = null;
+    }
+  }
+
+  function readChannelSnapshot(
+    workspaceID: string,
+    channelID: string,
+    commit: (snapshot: MessagePage & { channel: Channel }) => void,
+    current: () => boolean,
+  ) {
+    return messageRequests.run(async () => {
+      const [channelData, page] = await Promise.all([
+        api<{ channels: Channel[] }>(`/api/workspaces/${encodeURIComponent(workspaceID)}/channels`),
+        api<MessagePage>(`/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`),
+      ]);
+      const channel = channelData.channels.find((candidate) => candidate.id === channelID);
+      if (!channel) throw new APIError(404, "Channel not found");
+      return { ...page, channel };
+    }, commit, current);
   }
 
   async function reconcileChannelSnapshot(isCurrent: () => boolean = () => true) {
     if (!route || !channel || viewState !== "ready") return;
     const workspaceID = route.workspace_id;
     const channelID = channel.id;
-    try {
-      const [channelData, page] = await Promise.all([
-        api<{ channels: Channel[] }>(
-          `/api/workspaces/${encodeURIComponent(workspaceID)}/channels`,
-        ),
-        api<MessagePage>(`/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`),
-      ]);
-      if (
-        !isCurrent() ||
-        route?.workspace_id !== workspaceID ||
-        channel?.id !== channelID ||
-        viewState !== "ready"
-      ) {
-        return;
-      }
-      const refreshed = channelData.channels.find((candidate) => candidate.id === channelID);
-      if (!refreshed) throw new APIError(404, "Channel not found");
-      channel = refreshed;
-      applyPage(page, "replace");
-    } catch (error) {
-      const stillCurrent =
-        isCurrent() &&
-        route?.workspace_id === workspaceID &&
-        channel?.id === channelID &&
-        viewState === "ready";
-      if (stillCurrent && error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      if (stillCurrent) throw error;
-    }
+    const serial = loadSerial;
+    await readChannelSnapshot(workspaceID, channelID, (snapshot) => {
+      // Replace the page owner while retaining pending updates for this channel's rows.
+      loadSerial++;
+      messageRequests.prune();
+      loadingOlder = false;
+      loadingNewerSerial = null;
+      channel = snapshot.channel;
+      applyPage(snapshot, "replace");
+    }, () => isCurrent() && serial === loadSerial && channel?.id === channelID && viewState === "ready");
   }
 
   async function syncNewMessages(isCurrent: () => boolean = () => true) {
     if (!channel || viewState !== "ready") return;
     const channelID = channel.id;
+    const serial = loadSerial;
+    const current = () => isCurrent() && serial === loadSerial &&
+      channel?.id === channelID && viewState === "ready";
     try {
-      if (newestSeq <= 0) {
-        const latest = await api<MessagePage>(
-          `/api/channels/${encodeURIComponent(channelID)}/messages?limit=100`,
-        );
-        if (isCurrent() && channel?.id === channelID && viewState === "ready") {
-          applyPage(latest, "replace");
-        }
-        return;
-      }
       let cursor = newestSeq;
       for (let pageCount = 0; pageCount < 20; pageCount++) {
-        const page = await api<MessagePage>(
+        const page = await messageRequests.run(() => api<MessagePage>(
           `/api/channels/${encodeURIComponent(channelID)}/messages?after_seq=${encodeURIComponent(String(cursor))}&limit=100`,
-        );
-        if (!isCurrent() || channel?.id !== channelID || viewState !== "ready") return;
-        applyPage(page, "append");
+        ), (page) => applyPage(page, "append"), current);
+        if (!page || !current()) return;
         const nextCursor = page.newest_seq || cursor;
-        if (!page.has_newer || nextCursor <= cursor) return;
+        if (!page.has_newer || nextCursor <= cursor) {
+          clearRealtimeError();
+          return;
+        }
         cursor = nextCursor;
       }
       throw new Error("Realtime message recovery exceeded its page limit");
     } catch (error) {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
+      if (!current()) return;
       throw error;
     }
   }
 
   async function refreshMessage(messageID: string, isCurrent: () => boolean = () => true) {
-    if (!messages.some((message) => message.id === messageID)) return;
-    try {
-      const data = await api<{ message: Message }>(
-        `/api/messages/${encodeURIComponent(messageID)}`,
-      );
-      if (!isCurrent()) return;
-      messages = messages.map((message) =>
-        message.id === data.message.id ? data.message : message,
-      );
+    if (!messages.some((message) => message.id === messageID) && !messageRequests.pending) return;
+    await messageRequests.run(() => api<{ message: Message }>(
+      `/api/messages/${encodeURIComponent(messageID)}`,
+    ), (data) => {
+      applyEditedMessage(data.message);
       editController.reconcile(channel?.id || "", messages);
-    } catch (error) {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      throw error;
-    }
+    }, isCurrent);
   }
 
   async function refreshChannelMetadata(isCurrent: () => boolean = () => true) {
     if (!route || !channel) return;
-    try {
-      const data = await api<{ channels: Channel[] }>(
-        `/api/workspaces/${encodeURIComponent(route.workspace_id)}/channels`,
-      );
-      if (!isCurrent()) return;
-      const refreshed = data.channels.find((candidate) => candidate.id === channel?.id);
-      if (!refreshed) throw new APIError(404, "Channel not found");
-      channel = refreshed;
-    } catch (error) {
-      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
-        handleLoadError(error);
-      }
-      throw error;
-    }
+    const data = await api<{ channels: Channel[] }>(
+      `/api/workspaces/${encodeURIComponent(route.workspace_id)}/channels`,
+    );
+    if (!isCurrent()) return;
+    const refreshed = data.channels.find((candidate) => candidate.id === channel?.id);
+    if (!refreshed) throw new APIError(404, "Channel not found");
+    channel = refreshed;
   }
 
   function eventChannelID(event: RealtimeEvent): string {
@@ -381,9 +392,18 @@
 
   function reportRealtimeError(error: unknown) {
     if (viewState === "ready") {
+      if (error instanceof WorkspaceUnavailableError || (error instanceof APIError && [401, 403, 404].includes(error.status))) {
+        handleLoadError(error);
+        return;
+      }
       realtimeError = readableAPIError(error, "Could not process a realtime update.");
       sendError = realtimeError;
     }
+  }
+
+  function clearRealtimeError() {
+    if (sendError === realtimeError) sendError = "";
+    realtimeError = "";
   }
 
   function connectSocket(workspaceID: string) {
@@ -393,11 +413,11 @@
       onEvent: handleRealtimeEvent,
       onOpen: async (isCurrent, authoritativeResync) => {
         if (authoritativeResync) {
+          reactionController.clear();
           await reconcileChannelSnapshot(isCurrent);
         }
         if (!isCurrent()) return;
-        if (sendError === realtimeError) sendError = "";
-        realtimeError = "";
+        clearRealtimeError();
       },
       onError: reportRealtimeError,
     });
@@ -407,40 +427,45 @@
     const body = messageBody.trim();
     if (!body || !channel || sending) return;
     const channelID = channel.id;
-    const quote = replyTarget;
-    const quotedMessageID = quote?.id;
+    const quotedMessageID = replyTarget?.id;
     const submission =
-      failedSubmission?.body === body &&
-      failedSubmission.quotedMessageID === quotedMessageID
-        ? failedSubmission
+      messageSubmission?.body === body &&
+      messageSubmission.quotedMessageID === quotedMessageID
+        ? messageSubmission
         : { body, nonce: newNonce(), quotedMessageID };
-    failedSubmission = null;
+    // Sends survive window resyncs; clearChannel retires their completion owner.
+    messageSubmission = submission;
     sendError = "";
     sending = true;
-    const payload: Record<string, string> = { body, nonce: submission.nonce };
-    if (quotedMessageID) payload.quoted_message_id = quotedMessageID;
+    let message: Message;
     try {
-      const data = await api<{ message: Message }>(
+      ({ message } = await api<{ message: Message }>(
         `/api/channels/${encodeURIComponent(channelID)}/messages`,
-        { method: "POST", body: JSON.stringify(payload) },
-      );
-      if (channel?.id !== channelID || viewState !== "ready") return;
-      messages = mergeMessages(messages, [data.message]);
-      newestSeq = Math.max(newestSeq, data.message.channel_seq || 0);
-      if (messageBody.trim() === body) messageBody = "";
-      if (quotedMessageID && replyTarget?.id === quotedMessageID) replyTarget = null;
-      await tick();
-      await messageList?.scrollToBottom();
+        { method: "POST", body: JSON.stringify({ body, nonce: submission.nonce, quoted_message_id: quotedMessageID }) },
+      ));
     } catch (error) {
+      if (messageSubmission !== submission) return;
       if (error instanceof APIError && error.status === 401) {
         handleLoadError(error);
         return;
       }
-      failedSubmission = submission;
       sendError = readableAPIError(error, "Could not send this message.");
+      return;
     } finally {
-      sending = false;
+      if (messageSubmission === submission) sending = false;
     }
+    if (messageSubmission !== submission || channel?.id !== channelID || viewState !== "ready") return;
+    messageSubmission = null;
+    // A creation receipt cannot replace a row already observed through a read or edit.
+    messages = mergeMessages([message], messages);
+    if (messageBody.trim() === body) messageBody = "";
+    if (quotedMessageID && replyTarget?.id === quotedMessageID) replyTarget = null;
+    const serial = loadSerial;
+    void syncNewMessages(() => serial === loadSerial).catch((error) => {
+      if (serial === loadSerial) reportRealtimeError(error);
+    });
+    await tick();
+    if (serial === loadSerial && channel?.id === channelID && viewState === "ready") await messageList?.scrollToBottom();
   }
 
   function handleComposerKeydown(event: KeyboardEvent) {
@@ -449,7 +474,7 @@
       replyTarget = null;
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
     }
@@ -485,7 +510,8 @@
 
   function handleInlineImagePointerUp(event: PointerEvent) {
     const target = event.target;
-    if (!(target instanceof HTMLImageElement)) return;
+    if (!(target instanceof HTMLImageElement) || !target.closest(".markdown")) return;
+    event.preventDefault();
     const url = markdownImageViewerURL(target);
     const items = markdownImageViewerItems(target);
     selectedImage = {
@@ -507,6 +533,11 @@
     if (viewState === "auth" && document.visibilityState === "visible") void loadChannel();
   }
 
+  function openProfileDialog(node: HTMLDialogElement) {
+    node.showModal();
+    return { destroy: () => node.close() };
+  }
+
   onMount(() => {
     void loadChannel();
     window.addEventListener("focus", retryAuthOnFocus);
@@ -515,7 +546,7 @@
 
   onDestroy(() => {
     loadSerial += 1;
-    socket?.close();
+    clearChannel();
     window.removeEventListener("focus", retryAuthOnFocus);
     document.removeEventListener("visibilitychange", retryAuthOnFocus);
   });
@@ -543,6 +574,7 @@
       {hasOlder}
       {hasNewer}
       {loadingOlder}
+      {restoreState}
       currentUserID={user?.id}
       {reactionController}
       {editController}
@@ -551,16 +583,17 @@
       onListRef={(handle) => (messageList = handle)}
       onActivateMessageComposer={() => {}}
       onInlineImagePointerUp={handleInlineImagePointerUp}
-      onOpenProfile={() => {}}
+      onOpenProfile={(profile) => (selectedProfile = profile || null)}
       onReply={(message) => setReplyTarget(message)}
       onOpenThread={openThread}
       onJumpToQuote={jumpToQuote}
       onOpenImage={openImageViewer}
       onOpenArtifact={openArtifact}
       onLoadOlder={() => void loadOlderMessages()}
-      onLoadNewer={() => queueMessageSync()}
+      onLoadNewer={() => void loadNewerMessages()}
     />
     <div class="embed-channel-composer-dock">
+      {#if memberLoadError}<p class="embed-notice" role="status">Mentions unavailable: {memberLoadError}</p>{/if}
       {#if sendError}<p class="embed-notice" role="status">{sendError}</p>{/if}
       <ChatComposer
         value={messageBody}
@@ -584,7 +617,7 @@
 {:else if viewState === "auth"}
   <main class="embed-state-shell">
     <section class="embed-state-card" aria-label="Sign in">
-      <div class="embed-mark" aria-hidden="true">cc</div>
+      <KeystrokeMark class="embed-mark" size={42} />
       <h1>Sign in to ClickClack</h1>
       <p>Open ClickClack in a new tab, sign in, then return here. This panel will reconnect automatically.</p>
       <a class="embed-action" href="/app" target="_blank" rel="noopener">Open ClickClack</a>
@@ -626,7 +659,32 @@
   />
 {/if}
 
+{#if selectedProfile}
+  <dialog
+    class="embed-profile thread open"
+    aria-label="Profile"
+    use:openProfileDialog
+    onclose={() => (selectedProfile = null)}
+  >
+    <ProfilePane profile={selectedProfile} currentUser={user} onClose={() => (selectedProfile = null)} />
+  </dialog>
+{/if}
+
 <style>
+  .embed-profile {
+    width: min(400px, calc(100% - 24px));
+    max-height: calc(100dvh - 24px);
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    color: var(--text);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .embed-profile::backdrop {
+    background: rgba(5, 8, 15, 0.54);
+  }
+
   .embed-channel-shell {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -697,12 +755,7 @@
   }
 
   .embed-notice {
-    position: absolute;
-    right: 14px;
-    bottom: calc(100% - 2px);
-    left: 14px;
-    z-index: 2;
-    margin: 0;
+    margin: 6px 14px 0;
     padding: 9px 11px;
     border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line));
     border-radius: var(--radius);
@@ -752,16 +805,12 @@
     line-height: 1.5;
   }
 
-  .embed-mark {
-    display: grid;
-    width: 42px;
-    height: 42px;
+  /* :global reaches the mark component's root, which Svelte does not scope. */
+  .embed-state-card :global(.embed-mark) {
     margin: 0 auto 2px;
-    place-items: center;
-    border-radius: 11px;
-    background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-    color: var(--brand-contrast);
-    font-weight: 800;
+    box-shadow:
+      inset 0 0 0 1px rgba(190, 210, 255, 0.13),
+      var(--key-edge);
   }
 
   .embed-action {

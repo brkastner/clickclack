@@ -55,6 +55,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/home-link": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Workspace rail home destination and label
+     * @description Public deployment metadata, read once when the chat shell starts. Relative paths resolve on the frontend origin. Integrated desktop chrome uses /app when url is /; other non-app HTTP(S) destinations open in the system browser.
+     */
+    get: operations["getHomeLink"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/auth/magic/request": {
     parameters: {
       query?: never;
@@ -81,6 +101,54 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations["consumeMagicLink"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/password/login": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["passwordLogin"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/password/change": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["changePassword"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["logout"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1206,6 +1274,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    HomeLink: {
+      /**
+       * @description Absolute HTTP(S) URL without credentials, or a path starting with a single slash on the frontend origin. Control characters, backslashes, and protocol-relative URLs are forbidden. Query strings and fragments are allowed.
+       * @default /
+       */
+      url: string;
+      /**
+       * @description Badge text, limited to 32 Unicode code points. Visually truncated to fit the tile; the accessible title retains the full label.
+       * @default cc
+       */
+      label: string;
+    };
     CreateWorkspaceRequest: {
       name: string;
       slug?: string;
@@ -1227,6 +1307,15 @@ export interface components {
     };
     ConsumeMagicLinkRequest: {
       token: string;
+    };
+    PasswordLoginRequest: {
+      /** @description Account email address or handle */
+      identifier: string;
+      password: string;
+    };
+    ChangePasswordRequest: {
+      current_password: string;
+      new_password: string;
     };
     ConsumeDesktopGitHubOAuthRequest: {
       /** @description Opaque one-time grant from a legacy protocol-1 or current protocol-2 desktop callback */
@@ -1269,6 +1358,8 @@ export interface components {
       created_at: string;
       notification_settings?: components["schemas"]["NotificationSettings"];
       appearance_preferences?: components["schemas"]["AppearancePreferences"];
+      /** @description Whether this account has a password on file. Reported only for the signed-in caller, on /api/me. */
+      password_enrolled?: boolean;
     };
     BotToken: {
       id: string;
@@ -1687,7 +1778,7 @@ export interface components {
       bot_shelf_order?: string[];
       /** @description Maximum shelf bots to render. 0 shows all. */
       bot_shelf_limit?: number;
-      /** @description Per-bot sidebar hero crop positions as X/Y percentages. */
+      /** @description Per-bot sidebar hero crop positions and zoom. */
       persona_hero_positions?: {
         [key: string]: components["schemas"]["PersonaHeroPosition"];
       };
@@ -1954,6 +2045,23 @@ export interface components {
       /** Format: int64 */
       unread_count?: number;
     };
+    ThreadPage: {
+      root: components["schemas"]["Message"];
+      replies: components["schemas"]["Message"][];
+      thread_state: components["schemas"]["ThreadState"];
+      /**
+       * Format: int64
+       * @description Oldest returned thread sequence, or zero for an empty page.
+       */
+      oldest_seq: number;
+      /**
+       * Format: int64
+       * @description Newest returned thread sequence, or zero for an empty page.
+       */
+      newest_seq: number;
+      has_older: boolean;
+      has_newer: boolean;
+    };
     ThreadState: {
       root_message_id: string;
       /** Format: int64 */
@@ -2044,6 +2152,7 @@ export interface components {
       /** @description Correlates agent activity and a bot-authored final response with one source message. */
       turn_id?: string;
       author?: components["schemas"]["User"];
+      attachments?: components["schemas"]["Upload"][];
       quoted_message_id?: string;
       quoted_body_snapshot?: string;
       quoted_author_id?: string;
@@ -2268,6 +2377,26 @@ export interface operations {
       };
     };
   };
+  getHomeLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Validated deployment settings with defaults applied independently */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HomeLink"];
+        };
+      };
+    };
+  };
   requestMagicLink: {
     parameters: {
       query?: never;
@@ -2319,6 +2448,173 @@ export interface operations {
     responses: {
       /** @description Created session */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  passwordLogin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PasswordLoginRequest"];
+      };
+    };
+    responses: {
+      /** @description Created session */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Missing identifier or password */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unknown identifier, wrong password, an account without a password set, or a password replaced while this request verified it */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Cross-site login requests are not allowed */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Content-Type must be application/json */
+      415: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Too many attempts for this client address or identifier */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Password login is not configured */
+      501: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  changePassword: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChangePasswordRequest"];
+      };
+    };
+    responses: {
+      /** @description Password replaced; the account's other sessions were revoked */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Missing or unacceptable password */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not signed in, the current password is wrong, or the calling session was revoked before the change committed */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Cross-site requests are not allowed, and bot tokens cannot change passwords */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The account has no password set and an administrator enrolls it first, or another change replaced the password first and nothing was written */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Content-Type must be application/json */
+      415: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Too many attempts for this account */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Password login is not configured */
+      501: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  logout: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The bearer or cookie session that authenticated the call was revoked and the cookie expired */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Cross-site sign-out requests are not allowed */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Content-Type must be application/json */
+      415: {
         headers: {
           [name: string]: unknown;
         };
@@ -4478,6 +4774,12 @@ export interface operations {
         limit?: number;
         /** @description Return the latest bounded reply window in chronological order instead of the earliest window. */
         latest?: boolean;
+        /** @description Return the nearest replies before this exclusive thread sequence; mutually exclusive with after_seq, around_seq and latest=true. */
+        before_seq?: number;
+        /** @description Return the nearest replies after this exclusive thread sequence. */
+        after_seq?: number;
+        /** @description Return a balanced reply window around this thread sequence. */
+        around_seq?: number;
       };
       header?: never;
       path: {
@@ -4487,12 +4789,14 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Thread root and replies */
+      /** @description Thread root, chronological replies and authoritative history edges */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          "application/json": components["schemas"]["ThreadPage"];
+        };
       };
     };
   };
