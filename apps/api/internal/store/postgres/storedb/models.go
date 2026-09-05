@@ -438,6 +438,22 @@ type UserPassword struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
+type WorkflowRunSnapshot struct {
+	ID                   string `json:"id"`
+	WorkspaceID          string `json:"workspace_id"`
+	ChannelID            string `json:"channel_id"`
+	DirectConversationID string `json:"direct_conversation_id"`
+	ProducerID           string `json:"producer_id"`
+	Provider             string `json:"provider"`
+	SessionID            string `json:"session_id"`
+	RunID                string `json:"run_id"`
+	Revision             int64  `json:"revision"`
+	Digest               string `json:"digest"`
+	SnapshotJson         string `json:"snapshot_json"`
+	CreatedAt            string `json:"created_at"`
+	UpdatedAt            string `json:"updated_at"`
+}
+
 type Workspace struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`

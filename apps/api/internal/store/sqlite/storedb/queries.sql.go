@@ -2074,6 +2074,51 @@ func (q *Queries) GetUserPasswordHash(ctx context.Context, userID string) (strin
 	return password_hash, err
 }
 
+const getWorkflowSnapshot = `-- name: GetWorkflowSnapshot :one
+SELECT id, workspace_id, channel_id, direct_conversation_id, producer_id, provider, session_id, run_id, revision, digest, snapshot_json, created_at, updated_at FROM workflow_run_snapshots
+WHERE workspace_id = ?1 AND channel_id = ?2 AND direct_conversation_id = ?3
+AND producer_id = ?4 AND provider = ?5 AND session_id = ?6 AND run_id = ?7
+`
+
+type GetWorkflowSnapshotParams struct {
+	WorkspaceID          string `json:"workspace_id"`
+	ChannelID            string `json:"channel_id"`
+	DirectConversationID string `json:"direct_conversation_id"`
+	ProducerID           string `json:"producer_id"`
+	Provider             string `json:"provider"`
+	SessionID            string `json:"session_id"`
+	RunID                string `json:"run_id"`
+}
+
+func (q *Queries) GetWorkflowSnapshot(ctx context.Context, arg GetWorkflowSnapshotParams) (WorkflowRunSnapshot, error) {
+	row := q.db.QueryRowContext(ctx, getWorkflowSnapshot,
+		arg.WorkspaceID,
+		arg.ChannelID,
+		arg.DirectConversationID,
+		arg.ProducerID,
+		arg.Provider,
+		arg.SessionID,
+		arg.RunID,
+	)
+	var i WorkflowRunSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ChannelID,
+		&i.DirectConversationID,
+		&i.ProducerID,
+		&i.Provider,
+		&i.SessionID,
+		&i.RunID,
+		&i.Revision,
+		&i.Digest,
+		&i.SnapshotJson,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getWorkspace = `-- name: GetWorkspace :one
 SELECT w.id, COALESCE(w.route_id, '') AS route_id, w.name, w.slug, w.icon_url, w.created_at, wm.role
 FROM workspaces w
@@ -4581,6 +4626,64 @@ func (q *Queries) ListUsersMissingAvatar(ctx context.Context) ([]ListUsersMissin
 	return items, nil
 }
 
+const listWorkflowSnapshots = `-- name: ListWorkflowSnapshots :many
+SELECT id, workspace_id, channel_id, direct_conversation_id, producer_id, provider, session_id, run_id, revision, digest, snapshot_json, created_at, updated_at FROM workflow_run_snapshots
+WHERE workspace_id = ?1 AND channel_id = ?2 AND direct_conversation_id = ?3
+AND (CAST(?4 AS TEXT) = '' OR id < ?4)
+ORDER BY id DESC LIMIT ?5
+`
+
+type ListWorkflowSnapshotsParams struct {
+	WorkspaceID          string `json:"workspace_id"`
+	ChannelID            string `json:"channel_id"`
+	DirectConversationID string `json:"direct_conversation_id"`
+	CursorID             string `json:"cursor_id"`
+	PageLimit            int64  `json:"page_limit"`
+}
+
+func (q *Queries) ListWorkflowSnapshots(ctx context.Context, arg ListWorkflowSnapshotsParams) ([]WorkflowRunSnapshot, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkflowSnapshots,
+		arg.WorkspaceID,
+		arg.ChannelID,
+		arg.DirectConversationID,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkflowRunSnapshot
+	for rows.Next() {
+		var i WorkflowRunSnapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ChannelID,
+			&i.DirectConversationID,
+			&i.ProducerID,
+			&i.Provider,
+			&i.SessionID,
+			&i.RunID,
+			&i.Revision,
+			&i.Digest,
+			&i.SnapshotJson,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkspaceActiveServiceBotIDs = `-- name: ListWorkspaceActiveServiceBotIDs :many
 SELECT DISTINCT u.id
 FROM users u
@@ -6552,6 +6655,52 @@ type UpsertUserPasswordParams struct {
 func (q *Queries) UpsertUserPassword(ctx context.Context, arg UpsertUserPasswordParams) error {
 	_, err := q.db.ExecContext(ctx, upsertUserPassword, arg.UserID, arg.PasswordHash, arg.UpdatedAt)
 	return err
+}
+
+const upsertWorkflowSnapshot = `-- name: UpsertWorkflowSnapshot :execrows
+INSERT INTO workflow_run_snapshots (id, workspace_id, channel_id, direct_conversation_id, producer_id, provider, session_id, run_id, revision, digest, snapshot_json, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+ON CONFLICT (workspace_id, channel_id, direct_conversation_id, producer_id, provider, session_id, run_id)
+DO UPDATE SET revision = excluded.revision, digest = excluded.digest, snapshot_json = excluded.snapshot_json, updated_at = excluded.updated_at
+WHERE excluded.revision > workflow_run_snapshots.revision
+`
+
+type UpsertWorkflowSnapshotParams struct {
+	ID                   string `json:"id"`
+	WorkspaceID          string `json:"workspace_id"`
+	ChannelID            string `json:"channel_id"`
+	DirectConversationID string `json:"direct_conversation_id"`
+	ProducerID           string `json:"producer_id"`
+	Provider             string `json:"provider"`
+	SessionID            string `json:"session_id"`
+	RunID                string `json:"run_id"`
+	Revision             int64  `json:"revision"`
+	Digest               string `json:"digest"`
+	SnapshotJson         string `json:"snapshot_json"`
+	CreatedAt            string `json:"created_at"`
+	UpdatedAt            string `json:"updated_at"`
+}
+
+func (q *Queries) UpsertWorkflowSnapshot(ctx context.Context, arg UpsertWorkflowSnapshotParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, upsertWorkflowSnapshot,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.ChannelID,
+		arg.DirectConversationID,
+		arg.ProducerID,
+		arg.Provider,
+		arg.SessionID,
+		arg.RunID,
+		arg.Revision,
+		arg.Digest,
+		arg.SnapshotJson,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const userHasNonGuestMembership = `-- name: UserHasNonGuestMembership :one

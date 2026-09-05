@@ -1886,3 +1886,21 @@ FROM sessions
 WHERE user_id = sqlc.arg(user_id)
   AND token_hash = sqlc.arg(token_hash)
   AND revoked_at IS NULL;
+
+-- name: UpsertWorkflowSnapshot :execrows
+INSERT INTO workflow_run_snapshots (id, workspace_id, channel_id, direct_conversation_id, producer_id, provider, session_id, run_id, revision, digest, snapshot_json, created_at, updated_at)
+VALUES (sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(direct_conversation_id), sqlc.arg(producer_id), sqlc.arg(provider), sqlc.arg(session_id), sqlc.arg(run_id), sqlc.arg(revision), sqlc.arg(digest), sqlc.arg(snapshot_json), sqlc.arg(created_at), sqlc.arg(updated_at))
+ON CONFLICT (workspace_id, channel_id, direct_conversation_id, producer_id, provider, session_id, run_id)
+DO UPDATE SET revision = excluded.revision, digest = excluded.digest, snapshot_json = excluded.snapshot_json, updated_at = excluded.updated_at
+WHERE excluded.revision > workflow_run_snapshots.revision;
+
+-- name: GetWorkflowSnapshot :one
+SELECT * FROM workflow_run_snapshots
+WHERE workspace_id = sqlc.arg(workspace_id) AND channel_id = sqlc.arg(channel_id) AND direct_conversation_id = sqlc.arg(direct_conversation_id)
+AND producer_id = sqlc.arg(producer_id) AND provider = sqlc.arg(provider) AND session_id = sqlc.arg(session_id) AND run_id = sqlc.arg(run_id);
+
+-- name: ListWorkflowSnapshots :many
+SELECT * FROM workflow_run_snapshots
+WHERE workspace_id = sqlc.arg(workspace_id) AND channel_id = sqlc.arg(channel_id) AND direct_conversation_id = sqlc.arg(direct_conversation_id)
+AND (CAST(sqlc.arg(cursor_id) AS TEXT) = '' OR id < sqlc.arg(cursor_id))
+ORDER BY id DESC LIMIT sqlc.arg(page_limit);

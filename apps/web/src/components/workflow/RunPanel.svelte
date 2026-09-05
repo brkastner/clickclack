@@ -14,8 +14,8 @@
   // here. A second presenter answering the host directly would be a conflict the
   // host is right to reject.
   //
-  // Run frames are ephemeral: there is no replay after a reload, and no history.
-  // The empty state says so rather than implying nothing is running.
+  // Both live-only reports and durable host snapshots use this read-only detail.
+  // Neither is proof of an active decision claim.
 
   let {
     run,
@@ -49,8 +49,7 @@
     <div class="run-empty">
       <strong>No run reported</strong>
       <span>
-        A workflow running here reports its state live. Nothing is shown after a
-        reload until the next update arrives.
+        No host state is available to display. This does not imply completion.
       </span>
     </div>
   {:else}
@@ -63,7 +62,7 @@
         <p class="run-reason">{run.reason}</p>
       {/if}
       {#if waiting}
-        <p class="run-hint">Answer it on the prompt in the conversation.</p>
+        <p class="run-hint">For an active decision, use its prompt in the conversation.</p>
       {/if}
       {#if run.possiblyInterrupted}
         <p class="run-warning" role="status">
@@ -88,7 +87,7 @@
       {:else}
         {#if hiddenSteps > 0}
           <p class="run-steps__window">
-            Showing the latest {run.steps.length} of {run.stepTotal}.
+            Showing {run.steps.length} of {run.stepTotal} recorded attempts.
           </p>
         {/if}
         <ol>

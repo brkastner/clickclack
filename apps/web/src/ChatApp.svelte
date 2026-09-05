@@ -129,7 +129,7 @@
     readWorkflowRunFrame,
     type WorkflowRun,
   } from "./lib/chat/workflow-run";
-  import RunPanel from "./components/workflow/RunPanel.svelte";
+  import WorkflowHistoryPanel from "./components/workflow/WorkflowHistoryPanel.svelte";
   import {
     isDecisionEvent,
     playDecisionSound,
@@ -209,6 +209,7 @@
   // after a reload, so this starts empty and fills from the next frame.
   let workflowRuns: ReadonlyMap<string, WorkflowRun> = new Map();
   let runPanelOpen = false;
+  let workflowHistoryRefresh = 0;
   let pinnedMessages: Message[] = [];
   let pinnedMessagesLoading = false;
   let pinnedMessagesError = "";
@@ -605,10 +606,9 @@
   // The run being reported for the conversation in view, if any.
   $: activeConversationKeyForRuns = selectedDirectID || selectedChannelID || "";
   $: activeWorkflowRun = workflowRuns.get(activeConversationKeyForRuns) ?? null;
-  $: runPanelAvailable = activeWorkflowRun !== null;
+  $: runPanelAvailable = activeConversationKeyForRuns !== "";
   $: runWaiting = activeWorkflowRun !== null && isRunWaiting(activeWorkflowRun);
-  // A run panel open in a conversation that stops reporting closes itself: the
-  // pane would otherwise hold an empty state the operator never asked for.
+  // Durable history remains available even after a live pointer is cleared.
   $: if (runPanelOpen && !runPanelAvailable) runPanelOpen = false;
   $: sidePanelOpen = pinnedPanelOpen || runPanelOpen || $threadView.selection !== null || selectedProfile !== null || selectedArtifact !== null;
   // The shared right-pane slot renders search or thread, never both.
@@ -4095,6 +4095,7 @@
       },
       onStatusChange: (next) => {
         connected = next;
+        if (next) workflowHistoryRefresh += 1;
       },
     });
   }
@@ -4176,6 +4177,12 @@
     }
     if (event.type === "agent.progress") {
       handleAgentProgressEvent(event);
+      return;
+    }
+    if (event.type === "workflow.snapshot") {
+      if (event.workspace_id === selectedWorkspaceID && realtimeConversationID(event) === activeConversationKeyForRuns) {
+        workflowHistoryRefresh += 1;
+      }
       return;
     }
     if (event.type === "workflow.run") {
@@ -5605,8 +5612,11 @@
     aria-label={runPanelOpen ? "Workflow run pane" : pinnedPanelOpen ? "Pinned messages pane" : selectedProfile ? "Profile pane" : "Thread pane"}
   >
     {#if runPanelOpen}
-      <RunPanel
-        run={activeWorkflowRun}
+      <WorkflowHistoryPanel
+        channelID={selectedChannelID}
+        directID={selectedDirectID}
+        liveRun={activeWorkflowRun}
+        refreshVersion={workflowHistoryRefresh}
         conversationLabel={selectedChannel
           ? `#${selectedChannel.name}`
           : selectedDirect

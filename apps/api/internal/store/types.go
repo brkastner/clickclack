@@ -1278,6 +1278,8 @@ type UpdateMemberModerationInput struct {
 }
 
 type Store interface {
+	PublishWorkflowSnapshot(ctx context.Context, input PublishWorkflowSnapshotInput) (WorkflowRunRecord, bool, error)
+	ListWorkflowSnapshots(ctx context.Context, workspaceID, channelID, directConversationID, requesterID, cursor string, limit int) (WorkflowRunPage, error)
 	Close() error
 	Ping(ctx context.Context) error
 	Migrate(ctx context.Context) error

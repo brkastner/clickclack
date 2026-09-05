@@ -7,6 +7,79 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
+  /api/workflow-runs:
+    post:
+      operationId: publishWorkflowSnapshot
+      summary: Publish a durable conversation workflow snapshot (bot, messages:write and agent_activity:write; DMs also dms:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishWorkflowSnapshotRequest'
+      responses:
+        '200':
+          description: PublishWorkflowSnapshotResponse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishWorkflowSnapshotResponse'
+        '400':
+          description: Invalid snapshot
+        '403':
+          description: Producer or target not authorized
+        '409':
+          description: Equal revision with different content
+  /api/channels/{channel_id}/workflow-runs:
+    get:
+      operationId: listChannelWorkflowSnapshots
+      summary: Read durable workflow history with current conversation access
+      parameters:
+      - $ref: '#/components/parameters/channel_id'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 10
+      - name: cursor
+        in: query
+        description: Opaque next_cursor from previous page; descending first-publication order.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: WorkflowRunPage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunPage'
+  /api/dms/{conversation_id}/workflow-runs:
+    get:
+      operationId: listDirectWorkflowSnapshots
+      summary: Read durable workflow history with current conversation access
+      parameters:
+      - $ref: '#/components/parameters/conversation_id'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 10
+      - name: cursor
+        in: query
+        description: Opaque next_cursor from previous page; descending first-publication order.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: WorkflowRunPage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunPage'
   /healthz:
     get:
       operationId: getHealth
@@ -1941,6 +2014,306 @@ components:
         type: string
         pattern: "^([CDM][A-Z0-9]{16}|(chn|dm|msg)_[A-Za-z0-9-]+)$"
   schemas:
+    WorkflowSource:
+      type: object
+      additionalProperties: false
+      required:
+      - provider
+      - sessionId
+      - runId
+      - revision
+      properties:
+        provider:
+          type: string
+          const: pi-workflows
+        sessionId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        runId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+    WorkflowSummary:
+      type: object
+      additionalProperties: false
+      required:
+      - workflowName
+      - status
+      - reason
+      - possiblyInterrupted
+      - startedAt
+      - finishedAt
+      - stepTotal
+      - stepsComplete
+      properties:
+        workflowName:
+          type: string
+          minLength: 1
+          maxLength: 256
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - waiting
+          - paused
+          - completed
+          - failed
+          - timed_out
+          - cancelled
+          - ambiguous
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 4096
+          - type: 'null'
+        possiblyInterrupted:
+          type: boolean
+        startedAt:
+          anyOf:
+          - type: string
+            format: date-time
+            maxLength: 256
+          - type: 'null'
+        finishedAt:
+          anyOf:
+          - type: string
+            format: date-time
+            maxLength: 256
+          - type: 'null'
+        stepTotal:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        stepsComplete:
+          type: boolean
+    WorkflowAttempt:
+      type: object
+      additionalProperties: false
+      required:
+      - attemptId
+      - nodeId
+      - nodeType
+      - outcome
+      - startedAt
+      - finishedAt
+      properties:
+        attemptId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        nodeId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        nodeType:
+          type: string
+          minLength: 1
+          maxLength: 256
+        outcome:
+          type: string
+          enum:
+          - ok
+          - timed_out
+          - failed
+          - cancelled
+        startedAt:
+          type: string
+          format: date-time
+          maxLength: 256
+        finishedAt:
+          type: string
+          format: date-time
+          maxLength: 256
+    WorkflowFile:
+      type: object
+      additionalProperties: false
+      required:
+      - path
+      - change
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        change:
+          type: string
+          enum:
+          - added
+          - modified
+          - deleted
+          - renamed
+          - copied
+          - type_changed
+          - unmerged
+          - untracked
+        oldPath:
+          type: string
+          minLength: 1
+          maxLength: 1024
+    WorkflowFiles:
+      type: object
+      additionalProperties: false
+      required:
+      - source
+      - basis
+      - baseRevision
+      - attribution
+      - complete
+      - truncated
+      - entries
+      properties:
+        source:
+          type: string
+          const: host-git
+        basis:
+          type: string
+          const: cumulative-since-base
+        baseRevision:
+          type: string
+          minLength: 1
+          maxLength: 256
+        attribution:
+          type: string
+          enum:
+          - clean-baseline
+          - includes-preexisting-changes
+        complete:
+          type: boolean
+        truncated:
+          type: boolean
+        entries:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/WorkflowFile'
+      description: Cumulative host Git evidence. complete and truncated cannot both be true. Paths reject absolute roots, traversal,
+        backslashes, colons and controls.
+    WorkflowSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+      - schema
+      - source
+      - run
+      - steps
+      - files
+      properties:
+        schema:
+          type: string
+          const: clickclack.workflow-snapshot.v1
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        run:
+          $ref: '#/components/schemas/WorkflowSummary'
+        steps:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/WorkflowAttempt'
+        files:
+          anyOf:
+          - $ref: '#/components/schemas/WorkflowFiles'
+          - type: 'null'
+      description: Host-authored bounded projection, at most 512 KiB serialized. Equal revisions with different canonical typed
+        content conflict. files:null means unavailable. Only safe relative file paths; never tool prose or file contents.
+    WorkflowRunRecord:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - workspace_id
+      - producer_id
+      - snapshot
+      - updated_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        workspace_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        producer_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        snapshot:
+          $ref: '#/components/schemas/WorkflowSnapshot'
+        updated_at:
+          type: string
+          format: date-time
+        channel_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        direct_conversation_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+    WorkflowRunPage:
+      type: object
+      additionalProperties: false
+      required:
+      - runs
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunRecord'
+        next_cursor:
+          type: string
+          minLength: 1
+          maxLength: 256
+    PublishWorkflowSnapshotRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - workspace_id
+      - snapshot
+      properties:
+        workspace_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        snapshot:
+          $ref: '#/components/schemas/WorkflowSnapshot'
+        channel_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        direct_conversation_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+      oneOf:
+      - required:
+        - channel_id
+        not:
+          required:
+          - direct_conversation_id
+      - required:
+        - direct_conversation_id
+        not:
+          required:
+          - channel_id
+    PublishWorkflowSnapshotResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - record
+      - changed
+      properties:
+        record:
+          $ref: '#/components/schemas/WorkflowRunRecord'
+        changed:
+          type: boolean
     HomeLink:
       type: object
       required: [url, label]

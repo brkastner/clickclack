@@ -2,6 +2,15 @@ import type { components } from "./generated/openapi";
 
 export type { components, paths } from "./generated/openapi";
 
+export type WorkflowSnapshot = components["schemas"]["WorkflowSnapshot"];
+export type WorkflowFiles = components["schemas"]["WorkflowFiles"];
+export type WorkflowRunRecord = components["schemas"]["WorkflowRunRecord"];
+export type WorkflowRunPage = components["schemas"]["WorkflowRunPage"];
+export type PublishWorkflowSnapshotRequest =
+  components["schemas"]["PublishWorkflowSnapshotRequest"];
+export type PublishWorkflowSnapshotResponse =
+  components["schemas"]["PublishWorkflowSnapshotResponse"];
+
 export type HomeLink = components["schemas"]["HomeLink"];
 
 export type User = components["schemas"]["User"];
@@ -1055,6 +1064,29 @@ export class ClickClackClient {
         body: JSON.stringify({ seq }),
       });
       return data.receipt;
+    },
+  };
+
+  workflowRuns = {
+    publish: (input: PublishWorkflowSnapshotRequest): Promise<PublishWorkflowSnapshotResponse> =>
+      this.request("/api/workflow-runs", { method: "POST", body: JSON.stringify(input) }),
+    listChannel: (
+      channelId: string,
+      options: { cursor?: string; limit?: number } = {},
+    ): Promise<WorkflowRunPage> => {
+      const params = new URLSearchParams();
+      if (options.cursor) params.set("cursor", options.cursor);
+      if (options.limit !== undefined) params.set("limit", String(options.limit));
+      return this.request(`/api/channels/${encodeURIComponent(channelId)}/workflow-runs?${params}`);
+    },
+    listDirect: (
+      conversationId: string,
+      options: { cursor?: string; limit?: number } = {},
+    ): Promise<WorkflowRunPage> => {
+      const params = new URLSearchParams();
+      if (options.cursor) params.set("cursor", options.cursor);
+      if (options.limit !== undefined) params.set("limit", String(options.limit));
+      return this.request(`/api/dms/${encodeURIComponent(conversationId)}/workflow-runs?${params}`);
     },
   };
 

@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+  "/api/workflow-runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Publish a durable conversation workflow snapshot (bot, messages:write and agent_activity:write; DMs also dms:write) */
+    post: operations["publishWorkflowSnapshot"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/channels/{channel_id}/workflow-runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read durable workflow history with current conversation access */
+    get: operations["listChannelWorkflowSnapshots"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dms/{conversation_id}/workflow-runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read durable workflow history with current conversation access */
+    get: operations["listDirectWorkflowSnapshots"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/healthz": {
     parameters: {
       query?: never;
@@ -1274,6 +1325,104 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    WorkflowSource: {
+      /** @constant */
+      provider: "pi-workflows";
+      sessionId: string;
+      runId: string;
+      revision: number;
+    };
+    WorkflowSummary: {
+      workflowName: string;
+      /** @enum {string} */
+      status:
+        | "queued"
+        | "running"
+        | "waiting"
+        | "paused"
+        | "completed"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "ambiguous";
+      reason: string | null;
+      possiblyInterrupted: boolean;
+      startedAt: string | null;
+      finishedAt: string | null;
+      stepTotal: number;
+      stepsComplete: boolean;
+    };
+    WorkflowAttempt: {
+      attemptId: string;
+      nodeId: string;
+      nodeType: string;
+      /** @enum {string} */
+      outcome: "ok" | "timed_out" | "failed" | "cancelled";
+      /** Format: date-time */
+      startedAt: string;
+      /** Format: date-time */
+      finishedAt: string;
+    };
+    WorkflowFile: {
+      path: string;
+      /** @enum {string} */
+      change:
+        | "added"
+        | "modified"
+        | "deleted"
+        | "renamed"
+        | "copied"
+        | "type_changed"
+        | "unmerged"
+        | "untracked";
+      oldPath?: string;
+    };
+    /** @description Cumulative host Git evidence. complete and truncated cannot both be true. Paths reject absolute roots, traversal, backslashes, colons and controls. */
+    WorkflowFiles: {
+      /** @constant */
+      source: "host-git";
+      /** @constant */
+      basis: "cumulative-since-base";
+      baseRevision: string;
+      /** @enum {string} */
+      attribution: "clean-baseline" | "includes-preexisting-changes";
+      complete: boolean;
+      truncated: boolean;
+      entries: components["schemas"]["WorkflowFile"][];
+    };
+    /** @description Host-authored bounded projection, at most 512 KiB serialized. Equal revisions with different canonical typed content conflict. files:null means unavailable. Only safe relative file paths; never tool prose or file contents. */
+    WorkflowSnapshot: {
+      /** @constant */
+      schema: "clickclack.workflow-snapshot.v1";
+      source: components["schemas"]["WorkflowSource"];
+      run: components["schemas"]["WorkflowSummary"];
+      steps: components["schemas"]["WorkflowAttempt"][];
+      files: components["schemas"]["WorkflowFiles"] | null;
+    };
+    WorkflowRunRecord: {
+      id: string;
+      workspace_id: string;
+      producer_id: string;
+      snapshot: components["schemas"]["WorkflowSnapshot"];
+      /** Format: date-time */
+      updated_at: string;
+      channel_id?: string;
+      direct_conversation_id?: string;
+    };
+    WorkflowRunPage: {
+      runs: components["schemas"]["WorkflowRunRecord"][];
+      next_cursor?: string;
+    };
+    PublishWorkflowSnapshotRequest: {
+      workspace_id: string;
+      snapshot: components["schemas"]["WorkflowSnapshot"];
+      channel_id?: string;
+      direct_conversation_id?: string;
+    } & (unknown | unknown);
+    PublishWorkflowSnapshotResponse: {
+      record: components["schemas"]["WorkflowRunRecord"];
+      changed: boolean;
+    };
     HomeLink: {
       /**
        * @description Absolute HTTP(S) URL without credentials, or a path starting with a single slash on the frontend origin. Control characters, backslashes, and protocol-relative URLs are forbidden. Query strings and fragments are allowed.
@@ -2292,6 +2441,103 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  publishWorkflowSnapshot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublishWorkflowSnapshotRequest"];
+      };
+    };
+    responses: {
+      /** @description PublishWorkflowSnapshotResponse */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PublishWorkflowSnapshotResponse"];
+        };
+      };
+      /** @description Invalid snapshot */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Producer or target not authorized */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Equal revision with different content */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  listChannelWorkflowSnapshots: {
+    parameters: {
+      query?: {
+        limit?: number;
+        /** @description Opaque next_cursor from previous page; descending first-publication order. */
+        cursor?: string;
+      };
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description WorkflowRunPage */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowRunPage"];
+        };
+      };
+    };
+  };
+  listDirectWorkflowSnapshots: {
+    parameters: {
+      query?: {
+        limit?: number;
+        /** @description Opaque next_cursor from previous page; descending first-publication order. */
+        cursor?: string;
+      };
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description WorkflowRunPage */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowRunPage"];
+        };
+      };
+    };
+  };
   getHealth: {
     parameters: {
       query?: never;
