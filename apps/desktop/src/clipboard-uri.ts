@@ -108,8 +108,12 @@ async function readClipboardImageFile(
   remainingBytes: number,
   fileSystem: ClipboardFileSystem,
 ): Promise<DesktopClipboardFile | null> {
-  const type = IMAGE_TYPES.get(path.extname(filePath).toLowerCase());
-  if (!type) return null;
+  // The extension decides only whether a clipboard entry is worth opening. The
+  // type sent to the server comes from the bytes, because saved images are
+  // routinely misnamed: a site that serves WebP and a downloader that keeps the
+  // requested ".jpg" produce a file whose extension and contents disagree.
+  // Trusting the extension here dropped every such file with no error shown.
+  if (!IMAGE_TYPES.has(path.extname(filePath).toLowerCase())) return null;
 
   try {
     const metadata = await fileSystem.lstat(filePath);
@@ -145,11 +149,12 @@ async function readClipboardImageFile(
         offset += bytesRead;
       }
       const finalMetadata = await handle.stat();
+      const type = detectImageType(bytes);
       if (
         finalMetadata.dev !== openedMetadata.dev ||
         finalMetadata.ino !== openedMetadata.ino ||
         finalMetadata.size !== openedMetadata.size ||
-        !hasImageSignature(bytes, type)
+        !type
       ) {
         return null;
       }
@@ -160,6 +165,16 @@ async function readClipboardImageFile(
   } catch {
     return null;
   }
+}
+
+// Returns the image type the bytes actually are, or null when they are not one
+// of the types the composer accepts. The signatures are mutually exclusive, so
+// the order of the scan does not matter.
+export function detectImageType(bytes: Uint8Array): string | null {
+  for (const type of new Set(IMAGE_TYPES.values())) {
+    if (hasImageSignature(bytes, type)) return type;
+  }
+  return null;
 }
 
 export function hasImageSignature(bytes: Uint8Array, type: string): boolean {

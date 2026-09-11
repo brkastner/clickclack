@@ -16,6 +16,7 @@ import {
 
 const PNG = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 0]);
 const JPEG = Uint8Array.from([255, 216, 255, 224, 0]);
+const WEBP = Uint8Array.from([82, 73, 70, 70, 8, 0, 0, 0, 87, 69, 66, 80, 0]);
 
 async function fixtureDirectory() {
   return mkdtemp(path.join(os.tmpdir(), "clickclack-uri-paste-"));
@@ -234,3 +235,35 @@ function fakeFileSystem(input: {
     },
   };
 }
+
+// Instagram serves WebP; a downloader that keeps the requested ".jpg" writes a
+// file whose extension lies about its contents. Ten such files pasted from yazi
+// produced exactly one attachment, the only true JPEG in the selection.
+test("types a misnamed image by its contents rather than its extension", async (t) => {
+  const directory = await fixtureDirectory();
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const webpAsJPG = path.join(directory, "gothzara_3707058252146698794.jpg");
+  const realJPEG = path.join(directory, "goddx__3954264718374130647_1.jpg");
+  await writeFile(webpAsJPG, WEBP);
+  await writeFile(realJPEG, JPEG);
+
+  const files = await readClipboardImageFiles(
+    [pathToFileURL(realJPEG).toString(), pathToFileURL(webpAsJPG).toString()].join("\n"),
+  );
+
+  assert.deepEqual(
+    files.map((file) => [file.name, file.type]),
+    [
+      ["goddx__3954264718374130647_1.jpg", "image/jpeg"],
+      ["gothzara_3707058252146698794.jpg", "image/webp"],
+    ],
+  );
+});
+
+test("still rejects a non-image hiding behind an image extension", async (t) => {
+  const directory = await fixtureDirectory();
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const notAnImage = path.join(directory, "notes.png");
+  await writeFile(notAnImage, Uint8Array.from([37, 80, 68, 70, 45, 49, 46, 55]));
+  assert.deepEqual(await readClipboardImageFiles(pathToFileURL(notAnImage).toString()), []);
+});
