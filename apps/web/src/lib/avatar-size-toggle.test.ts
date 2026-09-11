@@ -90,10 +90,11 @@ test("persona headers use each avatar as the full clipped hero background", () =
   assert.match(channelList, /class="persona-name"/u);
   assert.doesNotMatch(channelList, /class="channel-profile-avatar"/u);
 
-  assert.match(
-    styles,
-    /\.sidebar-profile-groups \.persona-band img\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;[\s\S]*?object-fit:\s*cover;[\s\S]*?object-position:\s*50% 20%;/u,
-  );
+  assert.match(channelList, /class="persona-band"\s+hero=\{true\}/u);
+  const heroRule =
+    styles.match(/\.sidebar-profile-groups \.persona-band img\s*\{([^}]+)\}/u)?.[1] ?? "";
+  assert.doesNotMatch(heroRule, /object-fit:\s*cover|width:\s*100%|height:\s*100%/u);
+  assert.match(styles, /opacity: 0\.9;/u);
   assert.doesNotMatch(styles, /profile-cover\.webp/u);
   assert.doesNotMatch(styles, /\.sidebar-profile-groups \.channel-profile-avatar/u);
 });
@@ -108,7 +109,10 @@ test("persona hero crop controls preview and persist per-bot positions", () => {
 
   assert.match(avatar, /style:object-position=\{imagePosition\}/u);
   assert.match(avatar, /style:transform-origin=\{imageTransformOrigin\}/u);
-  assert.match(avatar, /translate3d\(\$\{imageOffsetX\}%, 0, 0\) scale\(\$\{imageScale\}\)/u);
+  assert.match(avatar, /hero \? "none" : `translate3d/u);
+  assert.match(avatar, /heroImageGeometry/u);
+  assert.match(avatar, /new ResizeObserver/u);
+  assert.match(editor, /class="profile-editor__hero-preview"\s+hero=\{true\}/u);
   assert.match(channelList, /\$personaHeroPositions\[group\.profile\.bot_user_id\]/u);
   assert.match(
     channelList,

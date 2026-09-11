@@ -110,9 +110,31 @@ try {
     input.value = "150";
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await expect
-    .poll(() => hero.evaluate((image) => image.style.transform))
-    .toBe("translate3d(-2%, 0px, 0px) scale(1.5)");
+  await expect(hero).toHaveCSS("transform", "none");
+  await expect.poll(() => hero.evaluate((image) => image.getBoundingClientRect().width / image.parentElement.clientWidth)).toBeCloseTo(1.5);
+  // A marked portrait source makes the previously clipped area measurable.
+  await page.route("**/hero-test.svg", (route) => route.fulfill({
+    contentType: "image/svg+xml",
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="800"><rect width="400" height="800" fill="teal"/><path d="M0 200H400M0 400H400M0 600H400" stroke="white" stroke-width="8"/></svg>',
+  }));
+  await editor.getByRole("textbox", { name: "Light mode avatar URL" }).fill("/hero-test.svg");
+  await expect.poll(() => hero.evaluate((image) => image.naturalHeight)).toBe(800);
+  const visibleSourceHeights = [];
+  for (const zoom of [100, 50, 25]) {
+    await editor.getByRole("slider", { name: "Sidebar hero zoom" }).evaluate((input, zoom) => {
+      input.value = String(zoom);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, zoom);
+    await expect.poll(() => hero.evaluate((image) => image.getBoundingClientRect().width / image.parentElement.clientWidth)).toBeCloseTo(zoom / 100);
+    visibleSourceHeights.push(await hero.evaluate((image) => {
+      const box = image.getBoundingClientRect();
+      const viewport = image.parentElement.getBoundingClientRect();
+      return Math.max(0, Math.min(box.bottom, viewport.bottom) - Math.max(box.top, viewport.top)) * image.naturalHeight / box.height;
+    }));
+  }
+  assert.ok(visibleSourceHeights[1] > visibleSourceHeights[0], "50% zoom reveals more portrait content");
+  assert.ok(visibleSourceHeights[2] > visibleSourceHeights[1], "25% zoom reveals more portrait content");
+  await editor.getByRole("textbox", { name: "Light mode avatar URL" }).fill("/edited-light.png");
   await expect(hero).toHaveAttribute("src", "/edited-light.png");
   await expect(botImage).toHaveAttribute("src", assigned);
   await expect(page.getByTestId("profile").locator("img")).toHaveAttribute("src", assigned);

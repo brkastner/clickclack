@@ -200,6 +200,7 @@
           <Avatar
             isBot={false}
             class="profile-editor__hero-preview"
+          hero={true}
             id={profile.id}
             name={displayName || profile.display_name}
             src={avatarURL}

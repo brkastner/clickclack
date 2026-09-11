@@ -157,4 +157,6 @@ test("ProfileEditor identity and crop previews bypass packs while retaining edit
   assert.match(previews[1], /imagePosition=\{`50% \$\{heroPosition.y\}%`\}/u);
   assert.match(previews[1], /imageOffsetX=\{50 - heroPosition.x\}/u);
   assert.match(previews[1], /imageScale=\{heroPosition.zoom \/ 100\}/u);
+  assert.match(previews[1], /hero=\{true\}/u);
+  assert.doesNotMatch(previews[0], /hero=\{true\}/u);
 });

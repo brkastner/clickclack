@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { heroImageGeometry } from "../../lib/hero-image";
   import { botAvatarCandidates, botAvatarFiles, loadBotAvatarPacks, nextAvatarSource } from "../../lib/bot-avatar-packs";
   import { resolvedColorMode } from "../../lib/appearance";
   import { avatarImageSource, avatarURLForColorMode } from "../../lib/chat/avatars";
@@ -23,6 +24,7 @@
     imageTransformOrigin?: string;
     imageOffsetX?: number;
     imageScale?: number;
+    hero?: boolean;
     onclick?: (event: MouseEvent) => void;
   };
 
@@ -41,6 +43,7 @@
     imageTransformOrigin = "50% 50%",
     imageOffsetX = 0,
     imageScale = 1,
+    hero = false,
     onclick,
   }: Props = $props();
 
@@ -59,6 +62,40 @@
   const showImage = $derived(source !== "");
   const hue = $derived(avatarHue(id || name || source || "avatar"));
   const initial = $derived(avatarInitial(name));
+
+  let viewport = $state({ width: 0, height: 0 });
+  let natural = $state({ source: "", width: 0, height: 0 });
+  const geometry = $derived(hero && natural.source === source ? heroImageGeometry({
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+    naturalWidth: natural.width,
+    naturalHeight: natural.height,
+    scale: imageScale,
+    positionX: Number.parseFloat(imagePosition.split(" ")[0]) / 100,
+    positionY: Number.parseFloat(imagePosition.split(" ")[1]) / 100,
+    originX: Number.parseFloat(imageTransformOrigin.split(" ")[0]) / 100,
+    originY: Number.parseFloat(imageTransformOrigin.split(" ")[1]) / 100,
+    offsetX: imageOffsetX,
+  }) : null);
+  const heroStyle = $derived(hero ? `position:absolute;max-width:none;max-height:none;visibility:${geometry ? "visible" : "hidden"};width:${geometry?.width ?? 0}px;height:${geometry?.height ?? 0}px;left:${geometry?.left ?? 0}px;top:${geometry?.top ?? 0}px;` : undefined);
+
+  // Measure the viewport, not the cropped image element. Ordinary avatars need no observer.
+  function measureHero(node: HTMLImageElement) {
+    if (!hero || !node.parentElement) return;
+    const parent = node.parentElement;
+    const measure = () => {
+      viewport = { width: parent.clientWidth, height: parent.clientHeight };
+    };
+    const loaded = () => {
+      if (node.naturalWidth > 0) natural = { source, width: node.naturalWidth, height: node.naturalHeight };
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(parent);
+    node.addEventListener("load", loaded);
+    measure();
+    if (node.complete) loaded();
+    return { destroy() { observer.disconnect(); node.removeEventListener("load", loaded); } };
+  }
 
   function onImageError() {
     failures = {
@@ -84,7 +121,9 @@
         height={size}
         style:object-position={imagePosition}
         style:transform-origin={imageTransformOrigin}
-        style:transform={`translate3d(${imageOffsetX}%, 0, 0) scale(${imageScale})`}
+        style={heroStyle}
+        style:transform={hero ? "none" : `translate3d(${imageOffsetX}%, 0, 0) scale(${imageScale})`}
+        use:measureHero
         {loading}
         decoding="async"
         fetchpriority={fetchPriority}
@@ -104,7 +143,9 @@
         height={size}
         style:object-position={imagePosition}
         style:transform-origin={imageTransformOrigin}
-        style:transform={`translate3d(${imageOffsetX}%, 0, 0) scale(${imageScale})`}
+        style={heroStyle}
+        style:transform={hero ? "none" : `translate3d(${imageOffsetX}%, 0, 0) scale(${imageScale})`}
+        use:measureHero
         {loading}
         decoding="async"
         fetchpriority={fetchPriority}

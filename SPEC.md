@@ -189,6 +189,33 @@ Frontend responsibilities:
 
 Frontend should not own durable chat truth.
 
+### Sidebar hero rendering correction
+
+**Status: Selected for implementation; not implemented or deployed by this documentation change.**
+
+Sidebar hero zoom must reveal previously cropped source content when reduced below
+100%, rather than shrink an already cropped strip. An opt-in hero mode in `Avatar`
+will size the actual image using its natural aspect ratio and the viewport's cover
+scale multiplied by zoom, clipping only at the hero viewport. The sidebar and
+profile editor will share this geometry and respond to image load, source changes,
+and viewport resizing. Ordinary avatars will keep their existing rendering.
+
+Preserve the current 100% crop, horizontal pan convention, vertical positioning,
+transform origin, saved x/y/zoom values, default 118% zoom, and 25–250% range.
+Below the cover scale, uncovered viewport space is allowed; do not stretch the
+image or re-clamp zoom to fill it.
+
+Make sidebar hero images less faded by increasing resting image opacity from
+0.72 to approximately 0.9 and reducing the scrim's panel mixing from
+78/48/22/56% to approximately 55/25/10/35%. Preserve label shadows and
+unread/active indicators. Tune only for readable labels in light and dark themes,
+and retain subtle edge fading without masking source content before zoom.
+
+The [selected implementation plan](docs/drafts/sidebar-hero-rendering.md) records
+exact implementation steps, regression coverage, build commands, and later
+Electron verification. Deployment and live verification remain separate workflow
+stages; this specification does not claim either has passed.
+
 ## API
 
 Contract: OpenAPI first.
