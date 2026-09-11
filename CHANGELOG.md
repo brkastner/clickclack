@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Split per-user workspace upload quotas into two tiers so posting attachments no longer exhausts a budget that never refilled. Uploads referenced by a live message are released from the tight orphan tier and counted only against a much larger total tier, and deleting a message returns its upload to the orphan tier. Previously the quota counted every upload a user had ever made, so accounts that post attachments regularly, bots in particular, were permanently blocked once they reached the limit. Configure the new ceiling with `CLICKCLACK_UPLOAD_TOTAL_QUOTA_BYTES` and `CLICKCLACK_UPLOAD_TOTAL_QUOTA_COUNT`. Profile avatars and workspace icons reference their upload by URL rather than through a message attachment, and are excluded from the orphan tier for as long as they remain in use.
 - Updated pnpm to 11.25.0, Node.js types, Oxc tooling, Wrangler, and the Pages/AWS credential actions; aligned both Docker builders with the source toolchains while preserving runtime minimums and the dependency release-age gate.
 - Updated the server build toolchain to Go 1.27.1, SQLite driver to 1.58.0, and Go cryptography dependency to 0.56.0 while retaining the Go 1.26.6 minimum and existing database and password formats.
 

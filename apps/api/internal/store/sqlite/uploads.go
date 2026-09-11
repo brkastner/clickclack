@@ -13,6 +13,30 @@ import (
 
 const uploadQuotaReservationTTL = 15 * time.Minute
 
+// uploadIsOrphanSQL matches rows of `uploads u` that nothing currently
+// references. It is the orphan tier's membership test, and mirrors every way an
+// upload can be in use: message attachments (uploadHasLiveAttachmentsTx),
+// profile avatars (profileAvatarUploadVisibleTx), and workspace icons
+// (workspaceIconUploadVisibleTx). Avatars and icons point at an upload by URL
+// rather than through message_attachments, so omitting them would charge a
+// picture that is on screen right now against the orphan budget.
+//
+// Note bot_setup_requests also carries avatar columns. Those are deliberately
+// not counted as in use: a setup request is pending until claimed, and its
+// avatar is copied onto the bot user at that point.
+const uploadIsOrphanSQL = `
+	NOT EXISTS (
+		SELECT 1 FROM message_attachments ma
+		JOIN messages m ON m.id = ma.message_id
+		WHERE ma.upload_id = u.id AND m.deleted_at IS NULL)
+	AND NOT EXISTS (
+		SELECT 1 FROM users au
+		WHERE au.avatar_url = '/api/uploads/' || u.id
+			OR au.avatar_url_light = '/api/uploads/' || u.id)
+	AND NOT EXISTS (
+		SELECT 1 FROM workspaces iw
+		WHERE iw.icon_url = '/api/uploads/' || u.id)`
+
 func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID, nonce string, byteSize int64) (store.UploadQuotaReservation, error) {
 	normalizedNonce, err := normalizeClientNonce(nonce)
 	if err != nil {
@@ -77,7 +101,7 @@ func (s *Store) ReserveUploadQuota(ctx context.Context, workspaceID, userID, non
 		WorkspaceID: workspaceID,
 		OwnerID:     userID,
 		Nonce:       normalizedNonce,
-		ByteSize:    min(byteSize, quota.RemainingBytes),
+		ByteSize:    quota.FitBytes(byteSize),
 		CreatedAt:   uploadReservationTime(reservationNow),
 		ExpiresAt:   uploadReservationTime(reservationNow.Add(uploadQuotaReservationTTL)),
 	}
@@ -193,22 +217,35 @@ func (s *Store) UploadQuota(ctx context.Context, workspaceID, userID string) (st
 
 func uploadQuotaTx(ctx context.Context, tx *sql.Tx, workspaceID, userID string) (store.UploadQuota, error) {
 	quota := store.UploadQuota{
-		MaxBytes: store.UploadQuotaBytesPerUserWorkspace,
-		MaxCount: store.UploadQuotaCountPerUserWorkspace,
+		MaxBytes:      store.UploadQuotaBytesPerUserWorkspace,
+		MaxCount:      store.UploadQuotaCountPerUserWorkspace,
+		MaxTotalBytes: store.UploadTotalQuotaBytesPerUserWorkspace,
+		MaxTotalCount: store.UploadTotalQuotaCountPerUserWorkspace,
 	}
+	reservationNow := uploadReservationTime(time.Now().UTC())
 	if err := tx.QueryRowContext(ctx, `
 		SELECT
+			(SELECT COUNT(*) FROM uploads u
+				WHERE u.workspace_id = ? AND u.owner_id = ? AND `+uploadIsOrphanSQL+`)
+				+ (SELECT COUNT(*) FROM upload_quota_reservations WHERE workspace_id = ? AND owner_id = ? AND expires_at > ?),
+			(SELECT COALESCE(SUM(u.byte_size), 0) FROM uploads u
+				WHERE u.workspace_id = ? AND u.owner_id = ? AND `+uploadIsOrphanSQL+`)
+				+ (SELECT COALESCE(SUM(byte_size), 0) FROM upload_quota_reservations WHERE workspace_id = ? AND owner_id = ? AND expires_at > ?),
 			(SELECT COUNT(*) FROM uploads WHERE workspace_id = ? AND owner_id = ?)
 				+ (SELECT COUNT(*) FROM upload_quota_reservations WHERE workspace_id = ? AND owner_id = ? AND expires_at > ?),
 			(SELECT COALESCE(SUM(byte_size), 0) FROM uploads WHERE workspace_id = ? AND owner_id = ?)
 				+ (SELECT COALESCE(SUM(byte_size), 0) FROM upload_quota_reservations WHERE workspace_id = ? AND owner_id = ? AND expires_at > ?)`,
-		workspaceID, userID, workspaceID, userID, uploadReservationTime(time.Now().UTC()),
-		workspaceID, userID, workspaceID, userID, uploadReservationTime(time.Now().UTC()),
-	).Scan(&quota.UsedCount, &quota.UsedBytes); err != nil {
+		workspaceID, userID, workspaceID, userID, reservationNow,
+		workspaceID, userID, workspaceID, userID, reservationNow,
+		workspaceID, userID, workspaceID, userID, reservationNow,
+		workspaceID, userID, workspaceID, userID, reservationNow,
+	).Scan(&quota.UsedCount, &quota.UsedBytes, &quota.UsedTotalCount, &quota.UsedTotalBytes); err != nil {
 		return store.UploadQuota{}, err
 	}
 	quota.RemainingCount = max(quota.MaxCount-quota.UsedCount, 0)
 	quota.RemainingBytes = max(quota.MaxBytes-quota.UsedBytes, 0)
+	quota.RemainingTotalCount = max(quota.MaxTotalCount-quota.UsedTotalCount, 0)
+	quota.RemainingTotalBytes = max(quota.MaxTotalBytes-quota.UsedTotalBytes, 0)
 	return quota, nil
 }
 

@@ -195,9 +195,22 @@ const (
 	MaxDirectConversationMembers = 32
 )
 
+// Upload quotas are two-tiered, both scoped per user per workspace.
+//
+// The orphan tier bounds uploads that are not referenced by any live message,
+// which is the abuse vector the quota was originally added for: uploading
+// without ever attaching grows storage without bound. Attaching an upload to a
+// message releases it from this tier, and deleting that message returns it.
+//
+// The total tier bounds every upload regardless of attachment. It exists so
+// storage stays bounded even though attached uploads escape the orphan tier,
+// and is set high enough that ordinary use never reaches it.
 var (
 	UploadQuotaBytesPerUserWorkspace = positiveInt64Env("CLICKCLACK_UPLOAD_QUOTA_BYTES", 512<<20)
 	UploadQuotaCountPerUserWorkspace = positiveInt64Env("CLICKCLACK_UPLOAD_QUOTA_COUNT", 64)
+
+	UploadTotalQuotaBytesPerUserWorkspace = positiveInt64Env("CLICKCLACK_UPLOAD_TOTAL_QUOTA_BYTES", 100<<30)
+	UploadTotalQuotaCountPerUserWorkspace = positiveInt64Env("CLICKCLACK_UPLOAD_TOTAL_QUOTA_COUNT", 100_000)
 )
 
 func positiveInt64Env(name string, fallback int64) int64 {
@@ -1038,6 +1051,10 @@ type CreateUploadInput struct {
 	StoragePath string
 }
 
+// UploadQuota reports both quota tiers. The unsuffixed fields describe the
+// orphan tier and count only uploads with no live attachment; the Total fields
+// describe the total tier and count every upload. Pending reservations count
+// toward both, since a reservation may become either.
 type UploadQuota struct {
 	MaxBytes       int64
 	UsedBytes      int64
@@ -1045,13 +1062,28 @@ type UploadQuota struct {
 	MaxCount       int64
 	UsedCount      int64
 	RemainingCount int64
+
+	MaxTotalBytes       int64
+	UsedTotalBytes      int64
+	RemainingTotalBytes int64
+	MaxTotalCount       int64
+	UsedTotalCount      int64
+	RemainingTotalCount int64
 }
 
 func (q UploadQuota) CanFit(byteSize int64) error {
 	if q.RemainingCount <= 0 || byteSize > q.RemainingBytes {
 		return ErrUploadQuotaExceeded
 	}
+	if q.RemainingTotalCount <= 0 || byteSize > q.RemainingTotalBytes {
+		return ErrUploadQuotaExceeded
+	}
 	return nil
+}
+
+// FitBytes clamps a requested reservation to what both tiers allow.
+func (q UploadQuota) FitBytes(byteSize int64) int64 {
+	return min(byteSize, q.RemainingBytes, q.RemainingTotalBytes)
 }
 
 type UploadQuotaReservation struct {
