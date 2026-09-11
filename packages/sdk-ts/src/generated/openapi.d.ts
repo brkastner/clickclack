@@ -2086,7 +2086,13 @@ export interface components {
       nonce?: string;
       /** @description Optional topic id. Channel-scoped topics can only be used in their channel. */
       topic_id?: string;
-      /** @description Number of uploads the client will attach after message creation. */
+      /**
+       * @description Total final number of attachments, including upload_id when supplied.
+       *     Consumers must wait until the message has this many attachments before
+       *     processing it. For one atomic upload plus one later upload, send 2.
+       *     Legacy clients without upload_id declare the same total before linking
+       *     their uploads after creation.
+       */
       expected_attachment_count?: number;
       /**
        * @description Optional first upload to attach atomically before message.created is

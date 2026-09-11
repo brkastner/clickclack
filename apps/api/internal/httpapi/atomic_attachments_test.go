@@ -71,7 +71,19 @@ func TestAtomicMessageReplayPreservesAttachments(t *testing.T) {
 					if !ok || fields["expected_attachment_count"] != "2" {
 						t.Fatalf("multi-upload completion boundary missing from create event: %#v", created.Event.Payload)
 					}
-					postJSON[struct{}](t, server.URL+"/api/messages/"+created.Message.ID+"/attachments", map[string]string{"upload_id": second.ID})
+					// A failed second link must leave the declared completion boundary
+					// above the hydrated count. Retrying create must not emit a new turn.
+					attachmentURL := server.URL + "/api/messages/" + created.Message.ID + "/attachments"
+					expectStatus(t, http.MethodPost, attachmentURL, strings.NewReader(`{"upload_id":"upl_missing"}`), http.StatusForbidden)
+					partial := postJSON[response](t, server.URL+target.path, payload)
+					if partial.Message.ID != created.Message.ID || len(partial.Message.Attachments) != 1 || partial.Event.ID != "" {
+						t.Fatalf("partial replay changed completion or emitted a duplicate create: %#v", partial)
+					}
+					postJSON[struct{}](t, attachmentURL, map[string]string{"upload_id": second.ID})
+					duplicate := postJSON[response](t, attachmentURL, map[string]string{"upload_id": second.ID})
+					if duplicate.Event.ID != "" {
+						t.Fatalf("duplicate attachment emitted another event: %#v", duplicate)
+					}
 					replayed, status := postJSONWithStatus[response](t, server.URL+target.path, payload)
 					if status != http.StatusOK || replayed.Message.ID != created.Message.ID || replayed.Event.ID != "" {
 						t.Fatalf("unexpected replay: status=%d response=%#v", status, replayed)
@@ -85,6 +97,10 @@ func TestAtomicMessageReplayPreservesAttachments(t *testing.T) {
 					stored := getJSON[response](t, server.URL+"/api/messages/"+created.Message.ID)
 					if len(stored.Message.Attachments) != 2 {
 						t.Fatalf("conflicting replay changed attachments: %#v", stored.Message.Attachments)
+					}
+					single := postJSON[response](t, server.URL+target.path, map[string]any{"body": "single atomic", "nonce": target.kind + "-single", "upload_id": unlinked.ID, "expected_attachment_count": 1})
+					if len(single.Message.Attachments) != 1 || single.Message.Attachments[0].ID != unlinked.ID {
+						t.Fatalf("single atomic attachment missing: %#v", single)
 					}
 					zero := postJSON[response](t, server.URL+target.path, map[string]any{"body": "no attachments", "nonce": target.kind + "-zero", "expected_attachment_count": 0})
 					if len(zero.Message.Attachments) != 0 {

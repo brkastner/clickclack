@@ -38,19 +38,27 @@ POST /api/messages/{message_id}/attachments        # { upload_id }
 
 ## Attaching to a message
 
-The web composer keeps a ready attachment when switching channels within the
-same workspace. Switching workspaces abandons it and cancels pending uploads,
-including metadata probing. Selecting another file supersedes the older
-request; sending the visible draft or removing its attachment also cancels a
-pending replacement. Upload failures appear in the composer and can be retried
-with the same file.
+The web composer supports up to ten attachments and keeps ready attachments
+when switching channels within the same workspace. Switching workspaces cancels
+pending uploads, including metadata probing. Upload failures appear in the
+composer and can be retried with the same file.
 
 The channel and direct-message create endpoints accept an optional `upload_id`.
-The web composer uses this field so the attachment is linked in the same
-transaction before `message.created` is published. Consumers that react to the
-creation event therefore see the complete message on their first read. A
-failed atomic create leaves neither the message nor the attachment link behind,
-and retrying the same message nonce with the same upload remains idempotent.
+The web composer uses this field to link the first attachment in the message
+transaction before `message.created` is published. Single-attachment messages
+are complete on the first read. For multiple attachments, the composer also
+sends `expected_attachment_count` as the final total, including `upload_id`,
+and links the remaining uploads after creation. Event consumers such as the pi
+bridge must wait for that total before processing the message. A failed atomic
+create leaves neither the message nor the attachment link behind. Retrying the
+same nonce returns the original message with all attachments linked so far.
+
+If a later attachment fails, the composer retains the committed message receipt
+and offers retry or discard. Retry links only missing attachments to that same
+message, without resending its text or publishing a second creation event.
+Discard does not erase an already-committed message. The bridge uses a bounded
+hydration wait and reports incomplete delivery rather than processing a partial
+prompt. After that wait expires, resend as a new message.
 
 `POST /api/messages/{message_id}/attachments` records a row in
 `message_attachments`. The store hydrates attachments on

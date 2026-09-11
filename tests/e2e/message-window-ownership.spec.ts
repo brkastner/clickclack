@@ -738,23 +738,36 @@ for (const kind of ["channel", "dm"] as const) {
       await page.locator(".search-result").filter({ hasText: "windowtarget Bravo" }).click();
       await expectInTimeline(page, messages[130]);
       if (failure === "attachment") {
-        await page.getByLabel("Upload file", { exact: true }).setInputFiles({
-          name: "history-attachment.txt",
-          mimeType: "text/plain",
-          buffer: Buffer.from("Attachment sent before selecting history"),
-        });
-        await expect(page.locator(".attachment-name")).toContainText("history-attachment.txt");
+        await page.getByLabel("Upload file", { exact: true }).setInputFiles([
+          {
+            name: "history-first.txt",
+            mimeType: "text/plain",
+            buffer: Buffer.from("First attachment commits atomically"),
+          },
+          {
+            name: "history-attachment.txt",
+            mimeType: "text/plain",
+            buffer: Buffer.from("Attachment sent before selecting history"),
+          },
+        ]);
+        await expect(page.locator(".attachment-name")).toHaveText([
+          "history-first.txt",
+          "history-attachment.txt",
+        ]);
       }
       const entered = deferred(),
         release = deferred(),
         delivered = deferred();
-      await page.route(`**${path}/messages`, async (route) => {
-        if (route.request().method() !== "POST") return route.continue();
-        entered.resolve();
-        await release.promise;
-        await route.fulfill({ status: 503, json: { error: "Submission unavailable" } });
-        delivered.resolve();
-      });
+      await page.route(
+        failure === "attachment" ? "**/api/messages/*/attachments" : `**${path}/messages`,
+        async (route) => {
+          if (route.request().method() !== "POST") return route.continue();
+          entered.resolve();
+          await release.promise;
+          await route.fulfill({ status: 503, json: { error: "Submission unavailable" } });
+          delivered.resolve();
+        },
+      );
       try {
         await page.getByLabel("Message body", { exact: true }).fill("A delayed failed draft");
         await page.getByRole("button", { name: "Send", exact: true }).click();
