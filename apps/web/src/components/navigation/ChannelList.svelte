@@ -312,6 +312,7 @@
               <Avatar
                 isBot={true}
                 class="persona-band"
+                hero={true}
                 id={group.profile.id}
                 name={group.profile.display_name}
                 src={group.profile.avatar_url}

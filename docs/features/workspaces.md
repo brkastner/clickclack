@@ -128,6 +128,15 @@ dragging the header's move handle onto another profile, or by focusing the handl
 and pressing Arrow Up or Arrow Down. The browser stores persona order separately
 for each user and workspace, so it is not shared and needs no server state.
 
+**Pending hero rendering correction:** The selected change will make zoom below
+100% reveal more source image instead of shrinking a pre-cropped strip, and make
+hero images less faded while keeping labels readable. The editor and sidebar
+will share hero-only geometry without changing ordinary avatars or stored crop
+settings. See the [specification](../../SPEC.md#sidebar-hero-rendering-correction)
+and [implementation plan](../drafts/sidebar-hero-rendering.md) for the complete
+compatibility boundaries and validation. This documentation change does not
+implement or deploy the correction.
+
 Guest workspace members are waiting-room users. They can only see `#guest`, can
 post three messages per day, and cannot create rooms or DMs. Moderators and
 owners can promote them to `member`, time them out, or block them. See
