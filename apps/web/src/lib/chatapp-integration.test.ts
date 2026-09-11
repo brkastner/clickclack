@@ -35,6 +35,8 @@ test("ChatApp retains multi-upload receipts and failed-link metadata", () => {
     chat.indexOf("function retryFailedMessage"),
   );
   assert.match(dispatch, /outgoing\.receipt \|\|/);
+  assert.match(dispatch, /if \(draft\.uploads\[0\]\) payload\.upload_id = draft\.uploads\[0\]\.id/);
+  assert.match(dispatch, /expected_attachment_count: draft\.uploads\.length/);
   assert.match(dispatch, /uploadsMissingAttachments\(draft\.uploads, attachedUploadIDs\)/);
   assert.match(dispatch, /delivery_failure: "attachments"/);
   assert.match(dispatch, /draft\.attachedUploadIDs = \[\.\.\.attachedUploadIDs\]/);

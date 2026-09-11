@@ -977,6 +977,7 @@ type CreateMessageInput struct {
 	QuotedMessageID         *string
 	Nonce                   string
 	TopicID                 string
+	UploadID                string
 	BotCommandID            string
 	BotCommandOwnerUserID   string
 	ExpectedAttachmentCount int
@@ -1168,6 +1169,7 @@ type CreateDirectMessageInput struct {
 	Body                    string
 	QuotedMessageID         *string
 	Nonce                   string
+	UploadID                string
 	Kind                    string
 	TurnID                  string
 	ExpectedAttachmentCount int

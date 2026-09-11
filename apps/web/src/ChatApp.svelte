@@ -3280,6 +3280,7 @@
     };
     if (draft.quotedMessageID) payload.quoted_message_id = draft.quotedMessageID;
     if (draft.topicID) payload.topic_id = draft.topicID;
+    if (draft.uploads[0]) payload.upload_id = draft.uploads[0].id;
     if (draft.botCommandID) payload.bot_command_id = draft.botCommandID;
     try {
       let message = outgoing.receipt || (await api<{ message: Message }>(path, {

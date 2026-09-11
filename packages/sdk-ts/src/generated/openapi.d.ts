@@ -2089,6 +2089,12 @@ export interface components {
       /** @description Number of uploads the client will attach after message creation. */
       expected_attachment_count?: number;
       /**
+       * @description Optional first upload to attach atomically before message.created is
+       *     published. Additional uploads remain linked after creation; clients
+       *     use expected_attachment_count to declare their completion boundary.
+       */
+      upload_id?: string;
+      /**
        * @description Optional bot-declared command ID for an ordinary unquoted channel
        *     message. The API validates that the command belongs to the channel
        *     workspace and matches the leading command token in `body`, then

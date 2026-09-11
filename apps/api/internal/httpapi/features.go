@@ -1561,6 +1561,7 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 		Body                    string `json:"body"`
 		QuotedMessageID         string `json:"quoted_message_id"`
 		Nonce                   string `json:"nonce"`
+		UploadID                string `json:"upload_id"`
 		Kind                    string `json:"kind"`
 		TurnID                  string `json:"turn_id"`
 		ExpectedAttachmentCount int    `json:"expected_attachment_count"`
@@ -1584,7 +1585,10 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 	if !s.requireBotDirectWorkspace(w, r, act, chi.URLParam(r, "conversation_id")) {
 		return
 	}
-	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, Kind: kind, TurnID: turnID, ExpectedAttachmentCount: body.ExpectedAttachmentCount})
+	if !s.requireCreateUpload(w, r, act, body.UploadID, body.Nonce, "", chi.URLParam(r, "conversation_id")) {
+		return
+	}
+	message, event, err := s.store.CreateDirectMessage(r.Context(), store.CreateDirectMessageInput{ConversationID: chi.URLParam(r, "conversation_id"), AuthorID: act.user.ID, Body: body.Body, QuotedMessageID: optionalString(body.QuotedMessageID), Nonce: body.Nonce, UploadID: body.UploadID, Kind: kind, TurnID: turnID, ExpectedAttachmentCount: body.ExpectedAttachmentCount})
 	if err == nil && event.ID != "" {
 		s.publishEvent(r.Context(), event)
 		if !store.IsActivityMessageKind(message.Kind) {

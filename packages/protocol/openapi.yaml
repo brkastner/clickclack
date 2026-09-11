@@ -3512,6 +3512,12 @@ components:
           minimum: 0
           maximum: 10
           description: Number of uploads the client will attach after message creation.
+        upload_id:
+          type: string
+          description: |
+            Optional first upload to attach atomically before message.created is
+            published. Additional uploads remain linked after creation; clients
+            use expected_attachment_count to declare their completion boundary.
         bot_command_id:
           type: string
           description: |
