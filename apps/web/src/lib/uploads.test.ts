@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { uploadWorkspaceFile } from "./uploads.ts";
+import { fileUploadNonce, uploadWorkspaceFile } from "./uploads.ts";
 
 test("uploadWorkspaceFile does not post an upload after its owner is cancelled", async (t) => {
   const controller = new AbortController();
@@ -54,4 +54,38 @@ test("uploadWorkspaceFile passes cancellation through while keeping its retry no
   assert.equal(file.name, "draft.txt");
   controller.abort();
   await rejected;
+});
+
+test("fileUploadNonce is stable across separate composer entries for one file", async () => {
+  const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+  const first = new File([bytes], "shot.png", { type: "image/png" });
+  const second = new File([bytes], "shot.png", { type: "image/png" });
+  assert.equal(
+    await fileUploadNonce("workspace", first),
+    await fileUploadNonce("workspace", second),
+  );
+});
+
+test("fileUploadNonce separates different content", async () => {
+  const first = new File([new Uint8Array([1, 2, 3])], "a.png", { type: "image/png" });
+  const second = new File([new Uint8Array([1, 2, 4])], "a.png", { type: "image/png" });
+  assert.notEqual(
+    await fileUploadNonce("workspace", first),
+    await fileUploadNonce("workspace", second),
+  );
+});
+
+// The server answers a nonce whose upload belongs to another workspace with an
+// upload nonce conflict, so one file posted in two workspaces needs two nonces.
+test("fileUploadNonce separates workspaces for identical content", async () => {
+  const bytes = new Uint8Array([9, 8, 7]);
+  assert.notEqual(
+    await fileUploadNonce("workspace-one", new File([bytes], "x.png", { type: "image/png" })),
+    await fileUploadNonce("workspace-two", new File([bytes], "x.png", { type: "image/png" })),
+  );
+});
+
+test("fileUploadNonce fits the server nonce length limit", async () => {
+  const nonce = await fileUploadNonce("workspace", new File(["x"], "x.png", { type: "image/png" }));
+  assert.match(nonce, /^[0-9a-f]{64}$/);
 });

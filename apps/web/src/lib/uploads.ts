@@ -22,6 +22,33 @@ export function newUploadNonce(): string {
   throw new Error("Secure random values are unavailable");
 }
 
+function hexDigest(digest: ArrayBuffer): string {
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// The upload nonce is the server's idempotency key: POST /api/uploads returns the
+// upload it already holds for this owner and nonce instead of storing the bytes a
+// second time. Deriving the nonce from the file's content means the same file
+// enqueued twice resolves to the one upload, so a composer entry that is re-added
+// rather than retried no longer strands a row that nothing ever attaches.
+//
+// The digest is scoped to the workspace because the server rejects a nonce whose
+// upload lives in a different workspace. Without the scope, posting one file in
+// two workspaces would fail the second time with an upload nonce conflict.
+export async function fileUploadNonce(workspaceID: string, file: File): Promise<string> {
+  const subtle = typeof crypto === "undefined" ? undefined : crypto.subtle;
+  if (!subtle) return newUploadNonce();
+  try {
+    const content = hexDigest(await subtle.digest("SHA-256", await file.arrayBuffer()));
+    const scoped = new TextEncoder().encode(`${workspaceID}:${content}`);
+    return hexDigest(await subtle.digest("SHA-256", scoped));
+  } catch {
+    // SubtleCrypto is unavailable outside a secure context. A random nonce keeps
+    // uploads working with the old semantics, where only a retry deduplicates.
+    return newUploadNonce();
+  }
+}
+
 export async function uploadWorkspaceFile(
   workspaceID: string,
   file: File,

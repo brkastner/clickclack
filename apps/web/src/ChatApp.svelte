@@ -45,6 +45,7 @@
     markdownImageViewerURL,
   } from "./lib/actions/markdown";
   import {
+    fileUploadNonce,
     imageViewerItems,
     uploadWorkspaceFile,
     type ImageViewerItem,
@@ -3839,7 +3840,11 @@
       error: undefined,
     }));
     try {
-      const upload = await uploadWorkspaceFile(pending.workspaceID, pending.file, pending.key, controller.signal);
+      // pending.key identifies the composer entry and is minted fresh per entry,
+      // so it can only deduplicate a retry of that entry. The upload nonce has to
+      // survive the entry being removed and re-added, so it comes from the file.
+      const nonce = await fileUploadNonce(pending.workspaceID, pending.file);
+      const upload = await uploadWorkspaceFile(pending.workspaceID, pending.file, nonce, controller.signal);
       if (!isCurrent()) return;
       updatePendingAttachment(key, (attachment) => ({
         ...withoutPendingAttachmentPreview(attachment),
