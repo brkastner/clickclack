@@ -10,6 +10,7 @@
     userHandle,
   } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
+  import { haptic } from "../../lib/native";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
   import type { ReactionController } from "../../lib/reactions.svelte";
@@ -232,6 +233,8 @@
     const startY = event.clientY;
     longPressTimer = window.setTimeout(() => {
       longPressTimer = undefined;
+      // A long press has no visible "it took" moment until the sheet animates in.
+      haptic("medium");
       openActionSheet(message);
     }, LONG_PRESS_MS);
     const onMove = (moveEvent: PointerEvent) => {

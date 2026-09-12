@@ -11,6 +11,7 @@
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
   import MessageActionSheet from "./MessageActionSheet.svelte";
   import CopyLinkFallback from "./CopyLinkFallback.svelte";
+  import { haptic } from "../../lib/native";
   import { shouldOpenUpward } from "../../lib/popover";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, Topic, Upload, User } from "../../lib/types";
@@ -442,6 +443,8 @@
     longPressTimer = window.setTimeout(() => {
       longPressTimer = undefined;
       suppressRowClick = true;
+      // A long press has no visible "it took" moment until the sheet animates in.
+      haptic("medium");
       openActionSheet();
     }, LONG_PRESS_MS);
     const onMove = (moveEvent: PointerEvent) => {

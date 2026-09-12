@@ -45,6 +45,7 @@ hook in `cmd/clickclack/main.go`.
 | —                     | `CLICKCLACK_GITHUB_ALLOWED_ORG`  | unset       | Optional GitHub org login gate. Requires `read:org` scope. |
 | —                     | `CLICKCLACK_GITHUB_MODERATOR_ORG`| unset       | Optional GitHub org whose members become guest-workspace moderators. Requires `read:org` scope. |
 | —                     | `CLICKCLACK_PUSHOVER_API_TOKEN`  | unset       | Pushover application API token. Users still opt in with their own Pushover user key in account settings. |
+| —                     | `CLICKCLACK_APP_LINK_MODE`       | `app`       | Link carried by push notifications: `app` for `clickclack://` deep links into the desktop and mobile clients, `web` for `https` links to the public URL, or `off` for none. |
 | —                     | `CLICKCLACK_R2_ACCOUNT_ID`       | unset       | Cloudflare account ID for `r2://` uploads. |
 | —                     | `CLICKCLACK_R2_ACCESS_KEY_ID`    | unset       | R2 API token access key ID. |
 | —                     | `CLICKCLACK_R2_SECRET_ACCESS_KEY`| unset       | R2 API token secret access key. |
@@ -72,6 +73,7 @@ hook in `cmd/clickclack/main.go`.
   "github_allowed_org": "openclaw",
   "github_moderator_org": "openclaw",
   "pushover_api_token": "azGDORePK8gMaC0QOYAMyEEuzJnyUi",
+  "app_link_mode": "app",
   "r2_account_id": "91b59577e757131d68d55a471fe32aca",
   "r2_access_key_id": "...",
   "r2_secret_access_key": "..."

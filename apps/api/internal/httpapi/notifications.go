@@ -13,7 +13,14 @@ type PushNotification struct {
 	RecipientKey string
 	Title        string
 	Message      string
+	// URL deep-links the notification at the conversation it came from, so
+	// tapping it opens ClickClack on the message rather than the app's home.
+	URL      string
+	URLTitle string
 }
+
+// pushNotificationURLTitle labels the deep link inside the push notification.
+const pushNotificationURLTitle = "Open in ClickClack"
 
 type PushNotifier interface {
 	Notify(ctx context.Context, notification PushNotification) error
@@ -28,6 +35,7 @@ func (s *Server) notifyMessageCreated(ctx context.Context, message store.Message
 		log.Printf("push notification recipient lookup failed: %v", err)
 		return
 	}
+	link := appDeepLink(s.appLinkMode, s.frontendURL, messageAppRoute(message))
 	for _, recipient := range recipients {
 		if !s.canNotifyMessageRecipient(ctx, message, recipient.UserID) {
 			continue
@@ -36,6 +44,10 @@ func (s *Server) notifyMessageCreated(ctx context.Context, message store.Message
 			RecipientKey: recipient.PushoverUserKey,
 			Title:        notificationTitle(message),
 			Message:      notificationBody(message),
+			URL:          link,
+		}
+		if link != "" {
+			notification.URLTitle = pushNotificationURLTitle
 		}
 		if err := s.pushNotifier.Notify(ctx, notification); err != nil {
 			log.Printf("push notification failed for user %s: %v", recipient.UserID, err)

@@ -41,6 +41,14 @@ func (p *PushoverNotifier) Notify(ctx context.Context, notification PushNotifica
 	form.Set("user", user)
 	form.Set("title", notification.Title)
 	form.Set("message", notification.Message)
+	// Pushover shows the supplementary URL as a tappable link on the
+	// notification; a clickclack:// link hands the tap to the installed app.
+	if link := strings.TrimSpace(notification.URL); link != "" {
+		form.Set("url", link)
+		if title := strings.TrimSpace(notification.URLTitle); title != "" {
+			form.Set("url_title", title)
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, pushoverMessagesURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err

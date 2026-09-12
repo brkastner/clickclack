@@ -3,7 +3,9 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
+  import { deepLinkToRoute } from "./lib/applinks";
   import { desktop } from "./lib/desktop";
+  import { installNativeShell } from "./lib/native";
   import { probeMediaDimensions } from "./lib/media";
   import { gifLibrary } from "./lib/gifs";
   import { markdownImageViewerURL } from "./lib/actions/markdown";
@@ -379,11 +381,19 @@
       void goto(route, { keepFocus: true, noScroll: true });
     });
     const stopDesktopQuickCompose = desktop?.onQuickCompose(() => focusActiveComposer());
+    const stopNativeShell = installNativeShell({
+      dismissTopLayer,
+      onDeepLink: (url) => {
+        const route = deepLinkToRoute(url, [window.location.origin, frontendBaseURL()]);
+        if (route) void goto(route, { keepFocus: true, noScroll: true });
+      },
+    });
     mobileNavMedia.addEventListener("change", handleMobileNavBreakpoint);
     return () => {
       mobileNavMedia.removeEventListener("change", handleMobileNavBreakpoint);
       stopDesktopNavigate?.();
       stopDesktopQuickCompose?.();
+      stopNativeShell();
     };
   });
 
@@ -4050,6 +4060,35 @@
 
   function closeMobileNav() {
     mobileNavOpen = false;
+  }
+
+  /**
+   * Close the topmost dismissible layer, reporting whether there was one. The
+   * Android back button walks this in the same order Escape does, so back means
+   * "close this" until nothing is left to close and only then leaves the screen.
+   */
+  function dismissTopLayer(): boolean {
+    if (isModalOpen()) {
+      closeModal();
+      return true;
+    }
+    if (mobileNavOpen) {
+      closeMobileNav();
+      return true;
+    }
+    if (selectedArtifact || pinnedPanelOpen || selectedThread || searchThreadDetour) {
+      closeSidePanel();
+      return true;
+    }
+    if (searchPaneVisible) {
+      resetSearch();
+      return true;
+    }
+    if (replyTarget) {
+      clearReplyTarget();
+      return true;
+    }
+    return false;
   }
 
   function handleSidebarCollapse() {

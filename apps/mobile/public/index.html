@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>ClickClack</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        display: grid;
+        min-height: 100dvh;
+        place-items: center;
+        padding: 32px;
+        background: #131419;
+        color: #e7e9ee;
+        font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 20px;
+      }
+      p {
+        margin: 0 0 8px;
+        color: #a4a8b4;
+      }
+      code {
+        color: #e7e9ee;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>No ClickClack server configured</h1>
+      <p>This shell loads a ClickClack server; none was set when it was built.</p>
+      <p>Rebuild with <code>CLICKCLACK_SERVER_URL=https://chat.example.com</code>.</p>
+    </main>
+  </body>
+</html>

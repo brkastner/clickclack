@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added an iOS and Android app: a Capacitor shell in `apps/mobile` that loads the ClickClack web app from a configured server, registers the existing `clickclack://` deep-link scheme on both platforms, and reproduces its native projects from one idempotent script.
+- Added deep links to Pushover notifications, so tapping one opens the channel, DM, or thread the message arrived in. `CLICKCLACK_APP_LINK_MODE` chooses `app` deep links, `web` links to the public URL, or `off`.
+- Added native mobile behavior to the web app when it runs inside the shell: haptic feedback on the long press that opens a message's action sheet, an Android back button that closes the open modal, drawer, side pane, or pending reply before leaving the screen, a status bar that follows the active color mode, and long-press message actions that no longer compete with WebKit text selection.
 - Added "Sign in with OpenClaw ID" browser login through the first-party OIDC provider at id.openclaw.ai, reusing the existing OAuth transaction store, email-linked user provisioning, and session cookies alongside GitHub login.
 - Fixed browser API and slash-command requests hanging indefinitely when the API host stalls, while preserving unbounded streaming uploads.
 

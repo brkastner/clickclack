@@ -36,6 +36,7 @@ type Server struct {
 	openclawID            OpenClawIDConfig
 	access                *accessVerifier
 	frontendURL           string
+	appLinkMode           AppLinkMode
 	publicAPIURL          string
 	embedFrameAncestors   []string
 	cookies               authpolicy.CookieNames
@@ -90,6 +91,7 @@ type Options struct {
 	CookieNames         authpolicy.CookieNames
 	DisableDevAuth      bool
 	PushNotifier        PushNotifier
+	AppLinkMode         AppLinkMode
 	MetricsEnabled      bool
 	Environment         string
 	Version             string
@@ -123,6 +125,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		openclawID:            options.OpenClawID.withDefaults(),
 		access:                newAccessVerifier(options.Access),
 		frontendURL:           strings.TrimSpace(options.FrontendURL),
+		appLinkMode:           appLinkModeOrDefault(options.AppLinkMode),
 		publicAPIURL:          strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
 		embedFrameAncestors:   append([]string(nil), options.EmbedFrameAncestors...),
 		cookies:               cookieNames,
