@@ -172,12 +172,21 @@ and **not its port**, so on its own a second HTTPS service on the same hostname
 at another port would stay inside the web view where the bridge is injected. The
 Android project closes that gap: `apps/mobile/native/android/MainActivity.java`
 installs a web view client that compares the full origin — scheme, host, and
-port, with default ports resolved — for main-frame navigations and hands
-anything else to the system browser. It is tracked here and installed into the
+port, with default ports resolved. It is tracked here and installed into the
 generated project by `scripts/configure-native.mjs`, bound to the origin the
 build was configured with, so the native projects stay disposable.
 
-Subframes and same-origin navigations keep Capacitor's own policy, which plugins
+It guards two callbacks, because one is not enough. `shouldOverrideUrlLoading`
+is documented not to fire for POST requests, and Capacitor's local server only
+proxies GET, so a main-frame form POST to another port would otherwise load its
+HTML response in the web view without the URL check ever running.
+`shouldInterceptRequest` is therefore the fail-closed boundary: an off-origin
+main-frame request is refused with a 403 rather than deferred to WebView. It is
+refused rather than reopened externally, since replaying a submission's body as
+a browser GET would change what it means. `shouldOverrideUrlLoading`
+additionally hands ordinary off-origin link navigations to the system browser.
+
+Subframes and same-origin requests keep Capacitor's own policy, which plugins
 take part in, and the system-browser sign-in flow is unaffected because it never
 navigates the web view.
 
@@ -202,9 +211,15 @@ without a server URL shows a short page saying so. Sign in with OpenClaw ID is
 unavailable in the app until the server grows a native-client handoff for it.
 
 The Android origin guard is Java that only compiles as part of an Android build.
-Its rendering and placement are covered by tests, and a test asserts it still
-carries the port comparison it exists for, but the compiled behaviour is first
-exercised when you build the Android project. Notifications are delivered
+Its rendering, placement and idempotence are covered by tests, and tests assert
+that both document-loading callbacks stay origin-checked and that the request
+boundary fails closed — but the compiled behaviour is first exercised when you
+build the Android project. There is no instrumented WebView regression for it:
+that needs an emulator and two HTTPS origins with certificates WebView accepts.
+To check it by hand on a device, serve a page on the configured origin that
+same-window POSTs a form to another port on the same host; the submission
+should fail rather than render, while ordinary in-app links and same-origin
+navigation keep working. Notifications are delivered
 by Pushover rather than by APNs or FCM, so the app itself registers no push
 token and the operating system's own notification settings for ClickClack cover
 only what the app raises while running.

@@ -169,6 +169,24 @@ test("a template that lost its placeholders or package is rejected", () => {
   );
 });
 
+test("the shipped activity guards both document-loading callbacks", () => {
+  // shouldOverrideUrlLoading is not called for POST requests, and Capacitor's
+  // local server only proxies GET, so the URL-override callback alone leaves an
+  // off-origin main-frame POST able to become the page. Both callbacks must
+  // stay origin-checked, and the request boundary must fail closed rather than
+  // deferring to WebView.
+  assert.match(TEMPLATE, /public boolean shouldOverrideUrlLoading\(/);
+  assert.match(TEMPLATE, /public WebResourceResponse shouldInterceptRequest\(/);
+  const intercept = TEMPLATE.slice(TEMPLATE.indexOf("shouldInterceptRequest("));
+  const body = intercept.slice(0, intercept.indexOf("return super.shouldInterceptRequest"));
+  assert.match(body, /request\.isForMainFrame\(\) && !isAllowedOrigin\(request\.getUrl\(\)\)/);
+  assert.match(body, /return refuse\(\);/);
+  // Refusing must not replay the request elsewhere: re-sending a submission's
+  // body as a browser GET would change what it means.
+  assert.ok(!body.includes("openExternally"));
+  assert.match(TEMPLATE, /new WebResourceResponse\(\s*"text\/plain",\s*"utf-8",\s*403,/);
+});
+
 test("the shipped activity closes the port gap it exists for", () => {
   // Capacitor compares scheme and host only. If a future edit drops the port
   // comparison or stops scoping to the main frame, the guard is back to being
