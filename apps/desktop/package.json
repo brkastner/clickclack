@@ -11,6 +11,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "rebuild:native": "electron-builder install-app-deps",
+    "smoke:local-files": "pnpm run build && node scripts/smoke-local-file-links.mjs",
     "smoke:terminal": "pnpm run rebuild:native && node scripts/smoke-terminal.mjs",
     "smoke:terminal:isolation": "pnpm run build && node scripts/smoke-terminal-isolation.mjs",
     "smoke:terminal:packaged": "node scripts/smoke-terminal.mjs --packaged",

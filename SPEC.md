@@ -264,6 +264,52 @@ and sidebar sizes. Run web tests, typecheck, scoped lint, the canonical build to
 regenerate embedded assets, and the existing Electron hero regression. Do not
 use live conversations for these tests. Deployment remains a later stage.
 
+### Explicit desktop file access
+
+**Status: Implemented and fixture-tested in the task worktree under KAS-894. Not deployed; live owner verification remains pending.**
+
+ClickClack must handle supported desktop-local file references through an
+explicit, authorized Electron action instead of requesting a filesystem path
+from the HTTP server. Create the requested Linear ticket before implementation.
+First trace the reported link and verify that the intended video is accessible
+on the machine running Electron. The coding host's filesystem is not proof of
+that access. Replan if desktop-local access cannot solve the reported case.
+
+The default action reveals the confirmed file in the OS file manager. It does
+not provide in-app playback or automatically execute an associated application.
+Verify that reveal meets the intended interaction before implementing it; replan
+if it does not. An unavailable notice or a disabled link is not a successful fix.
+
+Only positively classified local references receive this action. Recover a
+malformed app-origin link only for the exact configured origin and verified
+filesystem syntax, without hardcoding the reported hostname or filename. Reject
+ambiguous encodings, credentials, network paths, and unsupported schemes.
+Preserve ordinary web URLs, app routes, OAuth, deep links, and authenticated
+attachments. Browser clients and older desktop versions must not receive a
+falsely working local-file action.
+
+Electron main owns authorization. Require a trusted main-frame caller, explicit
+user activation, native confirmation of the exact target, canonical-path
+validation, and regular-file checks. Keep confirmation bound to that target.
+Expose only a narrow typed action returning success, cancelled, unavailable, or
+denied, not file bytes or arbitrary filesystem metadata. Apply the same policy
+to alternative explicit link-opening paths; redirects cannot trigger local
+actions. Do not expose unrestricted filesystem methods or shell commands.
+
+No public HTTP API, database, or generated SQL changes are planned. Do not add
+arbitrary HTTP filesystem serving, a new service, broad filesystem browsing, or
+automatic uploads. OpenClaw, pi-clickclack, Tailscale, DNS, and sibling repositories
+remain outside scope. This plan neither asserts verified file availability nor
+grants broader filesystem permissions.
+
+The [selected implementation plan](docs/drafts/desktop-local-file-links.md)
+records the implementation locations, checks, regression tests, risks, and
+rollout boundaries. Verify the reported interaction in Electron and preserve
+existing navigation behavior. Report implemented and tested separately from live
+readiness, which requires the applicable deployment completion checks. Current
+security behavior in `docs/desktop.md` remains a description of shipped behavior,
+not a claim that this proposed capability already exists.
+
 ## API
 
 Contract: OpenAPI first.

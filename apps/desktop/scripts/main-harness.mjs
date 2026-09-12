@@ -60,6 +60,9 @@ export async function desktop(t) {
   const logs = [];
   const badges = [];
   const browserURLs = [];
+  const revealedFiles = [];
+  const confirmations = [];
+  const contextMenus = [];
   const requests = [];
   const handlers = new Map();
   const timers = new Map();
@@ -85,6 +88,9 @@ export async function desktop(t) {
     openExternal: async () => {},
     writeFile: fs.writeFile,
     rename: fs.rename,
+    realpath: fs.realpath,
+    stat: fs.stat,
+    confirm: async () => ({ response: 0 }),
   };
   let nextContentsID = 1;
   let focusedContents;
@@ -238,7 +244,10 @@ export async function desktop(t) {
     Tray,
     nativeTheme: new EventEmitter(),
     nativeImage: { createFromPath: () => nativeImage },
-    Menu: { buildFromTemplate: (value) => value, setApplicationMenu() {} },
+    Menu: {
+      buildFromTemplate: (value) => ({ popup: () => contextMenus.push(value) }),
+      setApplicationMenu() {},
+    },
     screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 3000, height: 2000 } }) },
     net: { fetch: (...args) => controls.probe(...args) },
     session: {
@@ -251,6 +260,7 @@ export async function desktop(t) {
         }),
     },
     shell: {
+      showItemInFolder: (file) => revealedFiles.push(file),
       openExternal: (url) => {
         browserURLs.push(url);
         return controls.openExternal(url);
@@ -258,7 +268,13 @@ export async function desktop(t) {
     },
     dialog: {
       showMessageBox: async (...args) => {
-        errors.push(args.at(-1).message);
+        const options = args.at(-1);
+        if (options.type === "question") {
+          confirmations.push(options);
+          return controls.confirm(options);
+        }
+        errors.push(options.message);
+        return { response: 0 };
       },
     },
   };
@@ -277,6 +293,8 @@ export async function desktop(t) {
           : name === "node:fs/promises"
             ? {
                 ...fs,
+                realpath: (...args) => trackIO(() => controls.realpath(...args)),
+                stat: (...args) => trackIO(() => controls.stat(...args)),
                 writeFile: (...args) => trackIO(() => controls.writeFile(...args)),
                 rename: (...args) => trackIO(() => controls.rename(...args)),
               }
@@ -304,7 +322,8 @@ export async function desktop(t) {
     sender: window.applicationContents,
     senderFrame: window.applicationContents.mainFrame,
   });
-  const invoke = (window, channel, input) => handlers.get(channel)(event(window), input);
+  const invoke = (window, channel, input, senderFrame = window.applicationContents.mainFrame) =>
+    handlers.get(channel)({ ...event(window), senderFrame }, input);
   const send = (window, channel, input) => ipcMain.emit(channel, event(window), input);
   send(windows[0], "desktop:open-settings");
   const settingsWindow = windows[1];
@@ -317,6 +336,10 @@ export async function desktop(t) {
     badges,
     requests,
     browserURLs,
+    revealedFiles,
+    confirmations,
+    contextMenus,
+    invoke,
     destination,
     idle,
     get main() {
