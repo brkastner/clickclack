@@ -134,6 +134,7 @@
   } from "./lib/chat/workflow-run";
   import WorkflowHistoryPanel from "./components/workflow/WorkflowHistoryPanel.svelte";
  import AgentNotepad from "./components/notepad/AgentNotepad.svelte";
+ import ChannelNotepadPreview from "./components/notepad/ChannelNotepadPreview.svelte";
   import {
     isDecisionEvent,
     playDecisionSound,
@@ -193,6 +194,7 @@
   let selectedChannelID = "";
   let selectedDirectID = "";
   let notepadAvailable = false;
+  let notepadPreviewTarget: { workspaceID: string; channelID: string; anchor: HTMLElement } | null = null;
   const notepadAvailability = createNotepadAvailability(
     { read: (path, signal) => api<{ available: boolean }>(path, { signal }) },
     (available) => (notepadAvailable = available),
@@ -404,6 +406,7 @@
     routeID?: string;
   };
 
+  $: if (notepadPreviewTarget?.workspaceID !== selectedWorkspaceID) notepadPreviewTarget = null;
   $: selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceID);
   $: currentWorkspaceRole = selectedWorkspace?.role || "";
   $: canDeleteAnyMessage = currentWorkspaceRole === "owner";
@@ -5343,6 +5346,7 @@
     hrefForChannel={(channelID) => appHref(selectedWorkspaceID, channelID)}
     hrefForDirect={(conversationID) => appHref(selectedWorkspaceID, conversationID)}
     onSelectChannel={(channelID) => void selectChannel(channelID)}
+    onNotepadHover={(channelID, anchor) => notepadPreviewTarget = channelID && anchor ? { workspaceID: selectedWorkspaceID, channelID, anchor } : null}
     onCreateChannel={(profile) => openCreateChannel(profile ?? null)}
     onAssignChannelProfile={(channelID, profile) =>
       void assignChannelProfile(channelID, profile)}
@@ -5382,6 +5386,8 @@
       ondblclick={resetSidebarWidth}
     ></div>
   {/if}
+
+  <ChannelNotepadPreview target={notepadPreviewTarget} />
 
   <main class="timeline" inert={mobileNavOpen}>
     {#if activePortraitUser && ((activePortraitUser.kind === "bot" && !activePortraitUser.deleted_at && $botAvatarFiles.length > 0) || activePortraitSource)}

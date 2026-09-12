@@ -34,6 +34,7 @@
     onAssignProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
     personaChannelPins: PersonaChannelPins;
     onPinPersonaChannel: (personaID: string, channelID: string) => void;
+    onNotepadHover?: (channelID: string, anchor: HTMLElement | null) => void;
   };
 
   let {
@@ -41,7 +42,7 @@
     workspaceID, currentUserID, onSelectDirect, onStartDirect, workingConversationIDs, hrefForChannel, onSelectChannel,
     personaExpansion = {}, onTogglePersona,
     onCreateChannel, onToggle, onReorder, onReorderProfiles, onAssignProfile, personaChannelPins,
-    onPinPersonaChannel,
+    onPinPersonaChannel, onNotepadHover,
   }: Props = $props();
 
   let moveMenuChannelID = $state("");
@@ -56,6 +57,17 @@
   let draggedPersonaID = $state("");
   let personaDropTargetID = $state("");
   let personaDropBefore = $state(true);
+  let notepadHoverTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function startNotepadHover(channelID: string, anchor: HTMLElement) {
+    clearTimeout(notepadHoverTimer);
+    notepadHoverTimer = setTimeout(() => onNotepadHover?.(channelID, anchor), 120);
+  }
+
+  function stopNotepadHover() {
+    clearTimeout(notepadHoverTimer);
+    onNotepadHover?.("", null);
+  }
 
   const activeChannels = $derived(channels.filter((channel) => !channel.archived_at));
   const archivedChannels = $derived(channels.filter((channel) => Boolean(channel.archived_at)));
@@ -221,6 +233,8 @@
   {@const index = scope.findIndex((candidate) => candidate.id === channel.id)}
   {@const assignment = assignmentFor(channel)}
   <div class="channel-row" class:subdued class:reorderable={expanded} role="listitem" class:drop-before={dropTargetID === channel.id && dropBefore} class:drop-after={dropTargetID === channel.id && !dropBefore}
+    onpointerenter={(event) => startNotepadHover(channel.id, event.currentTarget as HTMLElement)}
+    onpointerleave={stopNotepadHover}
     oncontextmenu={(event) => void openChannelContextMenu(event, channel)}
     ondragover={(event) => { if (!draggedChannelID || draggedGroupKey !== groupKey || draggedChannelID === channel.id) return; event.preventDefault(); dropTargetID = channel.id; dropBefore = event.clientY < (event.currentTarget as HTMLElement).getBoundingClientRect().top + (event.currentTarget as HTMLElement).offsetHeight / 2; }}
     ondrop={(event) => { if (draggedGroupKey !== groupKey) return; event.preventDefault(); event.stopPropagation(); moveChannel(draggedChannelID, channel.id, dropBefore); draggedChannelID = ""; dropTargetID = ""; }}>
@@ -256,6 +270,8 @@
       {/if}
     {/if}
     <a href={hrefForChannel(channel.id)} class="nav-item channel" class:active={channel.id === selectedChannelID && !selectedDirectID} class:has-unread={unread > 0 && channel.id !== selectedChannelID}
+      onfocus={(event) => { clearTimeout(notepadHoverTimer); onNotepadHover?.(channel.id, event.currentTarget.closest<HTMLElement>(".channel-row")); }}
+      onblur={stopNotepadHover}
       onclick={(event) => { if (!shouldHandleClientNavigation(event)) return; event.preventDefault(); onSelectChannel(channel.id); }}>
       <span class="hash">#</span><span class="nav-label">{channelDisplayTitle(channel)}</span>
       {#if workingConversationIDs.has(channel.id)}<span class="sidebar-working-indicator" role="status" aria-label={`Agent is working in #${channelDisplayTitle(channel)}`}></span>{/if}

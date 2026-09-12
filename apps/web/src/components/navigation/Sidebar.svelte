@@ -52,6 +52,7 @@
     onWorkspaceName: (value: string) => void;
     onCreateWorkspace: () => void;
     onOpenWorkspaceSettings: () => void;
+    onNotepadHover?: (channelID: string, anchor: HTMLElement | null) => void;
   };
 
   let {
@@ -92,7 +93,7 @@
     onToggleWorkspaceCreate,
     onWorkspaceName,
     onCreateWorkspace,
-    onOpenWorkspaceSettings,
+    onOpenWorkspaceSettings, onNotepadHover,
   }: Props = $props();
 
   // Shelf order: curated ids first (server preference), then any remaining
@@ -489,6 +490,7 @@
       onAssignProfile={onAssignChannelProfile}
       {personaChannelPins}
       onPinPersonaChannel={pinPersonaChannel}
+      {onNotepadHover}
     />
 
     <DirectMessageList
@@ -529,6 +531,7 @@
       onAssignProfile={onAssignChannelProfile}
       {personaChannelPins}
       onPinPersonaChannel={pinPersonaChannel}
+      {onNotepadHover}
     />
 
   </div>
