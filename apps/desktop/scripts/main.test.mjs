@@ -3,6 +3,149 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { A, B, C, deferred, desktop, settle, until } from "./main-harness.mjs";
 
+test("filesystem-shaped app links never navigate to HTTP or open a browser", async (t) => {
+  const d = await desktop(t);
+  const before = [...d.main.loads];
+  d.main.applicationContents.openWindow({ url: `${A}/home/example/video.mp4` });
+  await d.idle();
+  assert.deepEqual(d.main.loads, before);
+  assert.deepEqual(d.browserURLs, []);
+});
+
+for (const response of [0, 1]) {
+  test(`local reveal requires native confirmation (${response})`, async (t) => {
+    const d = await desktop(t);
+    const target = "/home/example/video.mp4";
+    d.controls.realpath = async () => target;
+    d.controls.stat = async () => ({ dev: 1, ino: 2, isFile: () => true });
+    d.controls.confirm = async () => ({ response });
+    const result = await d.invoke(d.main, "desktop:reveal-local-file", `${A}${target}`);
+    assert.equal(result, response === 1 ? "success" : "cancelled");
+    assert.deepEqual(d.revealedFiles, response === 1 ? [target] : []);
+    assert.match(d.confirmations[0].detail, /\/home\/example\/video.mp4/);
+    assert.equal(d.confirmations[0].defaultId, 0);
+    assert.deepEqual(d.browserURLs, []);
+  });
+}
+
+test("local reveal denies settings callers, changed targets and stale windows", async (t) => {
+  const d = await desktop(t);
+  const target = "/home/example/video.mp4";
+  d.controls.realpath = async () => target;
+  d.controls.stat = async () => ({ dev: 1, ino: 2, isFile: () => true });
+  assert.equal(await d.invoke(d.windows[1], "desktop:reveal-local-file", target), "denied");
+  assert.equal(d.confirmations.length, 0);
+  d.controls.confirm = async () => {
+    d.controls.realpath = async () => "/home/example/replacement.mp4";
+    return { response: 1 };
+  };
+  assert.equal(await d.invoke(d.main, "desktop:reveal-local-file", target), "denied");
+  d.controls.realpath = async () => target;
+  d.controls.confirm = async () => {
+    await d.save(B);
+    return { response: 1 };
+  };
+  const original = d.main;
+  assert.equal(await d.invoke(original, "desktop:reveal-local-file", target), "denied");
+  assert.deepEqual(d.revealedFiles, []);
+});
+
+test("local reveal reports missing files and rejects symlink escapes", async (t) => {
+  const d = await desktop(t);
+  const target = "/home/example/video.mp4";
+  d.controls.realpath = async () => {
+    throw new Error("ENOENT");
+  };
+  assert.equal(await d.invoke(d.main, "desktop:reveal-local-file", target), "unavailable");
+  assert.match(d.errors[0], /not available/);
+  d.controls.realpath = async () => "/etc/passwd";
+  assert.equal(await d.invoke(d.main, "desktop:reveal-local-file", target), "denied");
+  assert.equal(d.confirmations.length, 0);
+  assert.deepEqual(d.revealedFiles, []);
+});
+
+test("local reveal allows only one pending native confirmation", async (t) => {
+  const d = await desktop(t);
+  const target = "/home/example/video.mp4";
+  const answer = deferred();
+  d.controls.realpath = async () => target;
+  d.controls.stat = async () => ({ dev: 1, ino: 2, isFile: () => true });
+  d.controls.confirm = () => answer.promise;
+  const first = d.invoke(d.main, "desktop:reveal-local-file", target);
+  await until(() => d.confirmations.length === 1);
+  assert.equal(await d.invoke(d.main, "desktop:reveal-local-file", target), "denied");
+  answer.resolve({ response: 0 });
+  assert.equal(await first, "cancelled");
+  assert.equal(d.confirmations.length, 1);
+});
+
+test("local context-menu action confirms; redirects and subframes cannot reveal", async (t) => {
+  const d = await desktop(t);
+  const target = "/home/example/video.mp4";
+  d.controls.realpath = async () => target;
+  d.controls.stat = async () => ({ dev: 1, ino: 2, isFile: () => true });
+  d.controls.confirm = async () => ({ response: 1 });
+  assert.equal(
+    await d.invoke(d.main, "desktop:reveal-local-file", target, { url: A + "/app" }),
+    "denied",
+  );
+  let prevented = false;
+  d.main.applicationContents.emit(
+    "will-redirect",
+    {
+      preventDefault() {
+        prevented = true;
+      },
+    },
+    A + target,
+    false,
+    true,
+  );
+  assert.equal(prevented, true);
+  assert.equal(d.confirmations.length, 0);
+  d.main.applicationContents.emit(
+    "context-menu",
+    {},
+    {
+      linkURL: A + target,
+      frame: { url: A + "/app" },
+    },
+  );
+  assert.equal(d.contextMenus.length, 0);
+  assert.equal(d.confirmations.length, 0);
+  d.main.applicationContents.emit(
+    "context-menu",
+    {},
+    {
+      linkURL: A + target,
+      frame: d.main.applicationContents.mainFrame,
+    },
+  );
+  const action = d.contextMenus.at(-1).find((item) => item.label === "Show Local File in Folder…");
+  assert(action);
+  action.click();
+  await until(() => d.revealedFiles.length === 1);
+  assert.deepEqual(d.revealedFiles, [target]);
+  assert.equal(d.confirmations.length, 1);
+  assert.deepEqual(d.browserURLs, []);
+});
+
+test("local reveal rejects directories and replaced file identities", async (t) => {
+  const d = await desktop(t);
+  const target = "/home/example/video.mp4";
+  d.controls.realpath = async () => target;
+  d.controls.stat = async () => ({ dev: 1, ino: 2, isFile: () => false });
+  assert.equal(await d.invoke(d.main, "desktop:reveal-local-file", target), "unavailable");
+  assert.equal(d.confirmations.length, 0);
+  d.controls.stat = async () => ({ dev: 1, ino: 2, isFile: () => true });
+  d.controls.confirm = async () => {
+    d.controls.stat = async () => ({ dev: 1, ino: 3, isFile: () => true });
+    return { response: 1 };
+  };
+  assert.equal(await d.invoke(d.main, "desktop:reveal-local-file", target), "denied");
+  assert.deepEqual(d.revealedFiles, []);
+});
+
 for (const failure of ["write", "rename"]) {
   test(`failed settings ${failure} preserves server, route, window and sender authority`, async (t) => {
     const d = await desktop(t);

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { localFilePath, type LocalFileResult } from "./local-file-link";
 import {
   DESKTOP_SERVER_ORIGIN_ARG,
   DESKTOP_TITLEBAR_ARG,
@@ -187,7 +188,31 @@ const trustedOrigin = process.argv
   .find((argument) => argument.startsWith(DESKTOP_SERVER_ORIGIN_ARG))
   ?.slice(DESKTOP_SERVER_ORIGIN_ARG.length);
 
+function installLocalFileLinks(origin: string) {
+  const activate = (event: MouseEvent) => {
+    if (!event.isTrusted || (event.button !== 0 && event.button !== 1)) return;
+    const element = event.target instanceof Element ? event.target : null;
+    const anchor = element?.closest<HTMLAnchorElement>(".markdown a[href]");
+    const href = anchor?.getAttribute("href");
+    if (!href || !localFilePath(href, origin)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void ipcRenderer
+      .invoke("desktop:reveal-local-file", href)
+      .then((result: LocalFileResult) => {
+        if (result === "denied")
+          globalThis.alert("This local file action was denied. No file was opened.");
+      })
+      .catch(() => globalThis.alert("The local file action is unavailable. No file was opened."));
+  };
+  // Install once in the isolated preload, including for older compatible servers.
+  // The remote renderer receives no new callable filesystem capability.
+  globalThis.addEventListener("click", activate, true);
+  globalThis.addEventListener("auxclick", activate, true);
+}
+
 if (desktopBridgeAllowed(globalThis.location.origin, trustedOrigin)) {
+  installLocalFileLinks(trustedOrigin!);
   installDesktopClipboardHandling();
   contextBridge.exposeInMainWorld("clickclackDesktop", Object.freeze(bridge));
 }

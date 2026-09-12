@@ -20,10 +20,11 @@ import {
   type WebContents,
 } from "electron";
 import { createHash, randomBytes } from "node:crypto";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseURIList, readClipboardImageFiles } from "./clipboard-uri";
+import { localFilePath, type LocalFileResult } from "./local-file-link";
 import {
   appURL,
   clampUnreadCount,
@@ -78,6 +79,7 @@ let pendingDesktopAuth: DesktopAuthAttempt | null = null;
 let windowSaveTimer: NodeJS.Timeout | undefined;
 let saveQueue = Promise.resolve();
 let integratedTitleBar = false;
+let localFileRequestPending = false;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -371,6 +373,9 @@ function secureTerminalView(contents: WebContents, terminalSession: Session, ter
 
 function configureWebContents(window: BaseWindow, contents: WebContents) {
   contents.setWindowOpenHandler(({ url }) => {
+    // Local file actions require an explicit click or native menu confirmation,
+    // not window.open or redirects from remote content.
+    if (localFilePath(url, settings.serverUrl)) return { action: "deny" };
     if (isGitHubLoginStartURL(url)) {
       void beginDesktopOAuth();
     } else if (isAllowedMainWindowURL(url)) {
@@ -422,7 +427,18 @@ function configureWebContents(window: BaseWindow, contents: WebContents) {
         { role: "selectAll" },
       );
     }
-    if (params.linkURL && isExternalURL(params.linkURL)) {
+    const localLink = localFilePath(params.linkURL, settings.serverUrl);
+    if (localLink) {
+      // Context-menu data originates in a frame, so it needs the same
+      // main-frame authority check as the IPC local-file action.
+      if (params.frame === contents.mainFrame) {
+        if (template.length > 0) template.push({ type: "separator" });
+        template.push({
+          label: "Show Local File in Folder…",
+          click: () => void revealLocalFile(contents, params.linkURL),
+        });
+      }
+    } else if (params.linkURL && isExternalURL(params.linkURL)) {
       if (template.length > 0) template.push({ type: "separator" });
       template.push({
         label: "Open Link in Browser",
@@ -440,6 +456,10 @@ function guardMainFrameNavigation(
   isMainFrame: boolean,
 ) {
   if (!isMainFrame) return;
+  if (localFilePath(url, settings.serverUrl)) {
+    event.preventDefault();
+    return;
+  }
   if (isGitHubLoginStartURL(url)) {
     event.preventDefault();
     void beginDesktopOAuth();
@@ -491,7 +511,73 @@ function createSettingsWindow() {
   void window.loadFile(resourcePath("settings.html"));
 }
 
+async function revealLocalFile(contents: WebContents, input: unknown): Promise<LocalFileResult> {
+  const owner = mainWindow;
+  const origin = settings.serverUrl;
+  const current = () =>
+    Boolean(
+      owner &&
+      !owner.isDestroyed() &&
+      mainWindow === owner &&
+      applicationView?.webContents === contents &&
+      !contents.isDestroyed() &&
+      settings.serverUrl === origin &&
+      isSameServerURL(contents.getURL()),
+    );
+  const target = localFilePath(input, origin);
+  if (!owner || !current() || !target || localFileRequestPending) return "denied";
+  localFileRequestPending = true;
+  try {
+    const canonical = await realpath(target);
+    // Symlinks must not turn a home-file reference into an arbitrary system path.
+    if (!localFilePath(canonical, origin) || !current()) return "denied";
+    const before = await stat(canonical);
+    if (!before.isFile()) throw new Error("Not a regular file");
+    const answer = await dialog.showMessageBox(owner, {
+      type: "question",
+      title: "Show local file",
+      message: "Show this file in your file manager?",
+      detail: `This is a file on this computer, not a download from ClickClack. No file will be uploaded or executed.\n\n${canonical}`,
+      buttons: ["Cancel", "Show in Folder"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (!current()) return "denied";
+    if (answer.response !== 1) return "cancelled";
+    const afterPath = await realpath(target);
+    const after = await stat(canonical);
+    if (
+      !current() ||
+      afterPath !== canonical ||
+      !after.isFile() ||
+      after.dev !== before.dev ||
+      after.ino !== before.ino
+    )
+      return "denied";
+    shell.showItemInFolder(canonical);
+    return "success";
+  } catch {
+    if (current())
+      await dialog.showMessageBox(owner, {
+        type: "warning",
+        title: "Local file unavailable",
+        message: "This file is not available on this computer.",
+        detail:
+          "It may exist only on the sender's computer, or you may not have permission to access it. Ask the sender to attach the file.",
+        buttons: ["OK"],
+      });
+    return "unavailable";
+  } finally {
+    localFileRequestPending = false;
+  }
+}
+
 function registerIPC() {
+  ipcMain.handle("desktop:reveal-local-file", (event, input) => {
+    if (!isMainSender(event)) return "denied";
+    return revealLocalFile(event.sender, input);
+  });
   ipcMain.handle("desktop:notify", (event, input) => {
     if (!isMainSender(event)) return false;
     const payload = sanitizeNotification(input);
