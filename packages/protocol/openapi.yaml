@@ -7,6 +7,130 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
+  /api/channels/{channel_id}/notepad:
+    get:
+      operationId: getChannelNotepad
+      summary: Read the server-bound OpenClaw notepad
+      description: Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
+      parameters:
+        - in: path
+          name: channel_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Non-cacheable notepad result; ready with null card means no notepad yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotepadResult'
+        '401':
+          description: Authentication required
+        '403':
+          description: Conversation or scope access denied
+  /api/channels/{channel_id}/notepad/availability:
+    get:
+      operationId: getChannelNotepadAvailability
+      summary: Check whether a server-bound OpenClaw notepad is available
+      description: Requires messages:read and current conversation/workspace access. Returns only a binding boolean; gateway identities and credentials never cross this boundary.
+      parameters:
+        - in: path
+          name: channel_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Non-cacheable credential-free binding availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotepadAvailability'
+        '401':
+          description: Authentication required
+        '403':
+          description: Conversation or scope access denied
+  /api/channels/{channel_id}/notepad/watch:
+    get:
+      operationId: watchChannelNotepad
+      summary: Observe notepad invalidations on an authenticated WebSocket; closing unwatches
+      description: Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
+      parameters:
+        - in: path
+          name: channel_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '101':
+          description: WebSocket frames follow NotepadChanged. Authenticate by session cookie or clickclack.bearer.TOKEN subprotocol. Unwatch by closing; reconnect and refetch after every ready notice. Frames have no durable cursor and no card content.
+        '401':
+          description: Authentication required
+        '403':
+          description: Conversation or scope access denied
+  /api/dms/{conversation_id}/notepad:
+    get:
+      operationId: getDirectNotepad
+      summary: Read the server-bound OpenClaw notepad
+      description: Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Non-cacheable notepad result; ready with null card means no notepad yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotepadResult'
+        '401':
+          description: Authentication required
+        '403':
+          description: Conversation or scope access denied
+  /api/dms/{conversation_id}/notepad/availability:
+    get:
+      operationId: getDirectNotepadAvailability
+      summary: Check whether a server-bound OpenClaw notepad is available
+      description: Requires messages:read, dms:read and current conversation/workspace access. Returns only a binding boolean; gateway identities and credentials never cross this boundary.
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Non-cacheable credential-free binding availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotepadAvailability'
+        '401':
+          description: Authentication required
+        '403':
+          description: Conversation or scope access denied
+  /api/dms/{conversation_id}/notepad/watch:
+    get:
+      operationId: watchDirectNotepad
+      summary: Observe notepad invalidations on an authenticated WebSocket; closing unwatches
+      description: Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '101':
+          description: WebSocket frames follow NotepadChanged. Authenticate by session cookie or clickclack.bearer.TOKEN subprotocol. Unwatch by closing; reconnect and refetch after every ready notice. Frames have no durable cursor and no card content.
+        '401':
+          description: Authentication required
+        '403':
+          description: Conversation or scope access denied
   /api/workflow-runs:
     post:
       operationId: publishWorkflowSnapshot
@@ -2092,6 +2216,60 @@ components:
         type: string
         pattern: "^([CDM][A-Z0-9]{16}|(chn|dm|msg)_[A-Za-z0-9-]+)$"
   schemas:
+    NotepadStep:
+      type: object
+      required: [step, status]
+      properties:
+        step:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed]
+    NotepadCard:
+      type: object
+      required: [revision, updatedAt]
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        updatedAt:
+          type: integer
+          description: Unix timestamp in milliseconds
+        markdown:
+          type: string
+        steps:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/NotepadStep'
+    NotepadState:
+      type: string
+      enum: [ready, unmapped, unsupported, denied, unavailable]
+    NotepadResult:
+      type: object
+      required: [state, card]
+      properties:
+        state:
+          $ref: '#/components/schemas/NotepadState'
+        card:
+          oneOf:
+            - $ref: '#/components/schemas/NotepadCard'
+            - type: 'null'
+    NotepadAvailability:
+      type: object
+      required: [available]
+      properties:
+        available:
+          type: boolean
+    NotepadChanged:
+      type: object
+      required: [type, state]
+      properties:
+        type:
+          type: string
+          const: notepad.changed
+        state:
+          $ref: '#/components/schemas/NotepadState'
     WorkflowSource:
       type: object
       additionalProperties: false

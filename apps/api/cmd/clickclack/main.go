@@ -141,6 +141,7 @@ func serve(args []string) error {
 	}
 	log.Printf("ClickClack listening on %s", displayURL(cfg.Addr))
 	server := httpapi.New(st, realtime.NewHub(), httpapi.Options{
+		OpenClawNotepad:     cfg.OpenClawNotepad,
 		UploadStorage:       uploads,
 		AvatarPacksDir:      cfg.AvatarPacksPath(),
 		DisableDevAuth:      !cfg.DevBootstrap,

@@ -8,6 +8,7 @@
     type HomeLink,
   } from "./lib/home-link";
   import { APIError, api, apiResourceURL, apiURL, authMethods, frontendBaseURL, readableAPIError, voiceBaseURL } from "./lib/api";
+  import { createNotepadAvailability } from "./lib/chat/notepad-availability";
   import { requestCurrentUser } from "./lib/appearance";
   import { botAvatarFiles } from "./lib/bot-avatar-packs";
   import { avatarSize } from "./lib/avatar-size";
@@ -132,6 +133,7 @@
     type WorkflowRun,
   } from "./lib/chat/workflow-run";
   import WorkflowHistoryPanel from "./components/workflow/WorkflowHistoryPanel.svelte";
+ import AgentNotepad from "./components/notepad/AgentNotepad.svelte";
   import {
     isDecisionEvent,
     playDecisionSound,
@@ -190,6 +192,11 @@
   let selectedWorkspaceID = "";
   let selectedChannelID = "";
   let selectedDirectID = "";
+  let notepadAvailable = false;
+  const notepadAvailability = createNotepadAvailability(
+    { read: (path, signal) => api<{ available: boolean }>(path, { signal }) },
+    (available) => (notepadAvailable = available),
+  );
   const thread = new ThreadController(() => `${selectedWorkspaceID}:${currentConversationKey()}`, reconcileThread);
   // This legacy component consumes the rune-based owner through a reactive store.
   const threadView = toStore(() => ({
@@ -411,6 +418,13 @@
   $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
   $: void loadChannelNotifPreference(selectedChannelID, selectedDirectID);
   $: selectedDirect = directConversations.find((conversation) => conversation.id === selectedDirectID);
+  $: notepadAvailability.select(
+    selectedDirectID
+      ? `/api/dms/${encodeURIComponent(selectedDirectID)}/notepad/availability`
+      : selectedChannelID
+        ? `/api/channels/${encodeURIComponent(selectedChannelID)}/notepad/availability`
+        : null,
+  );
   $: activePortraitUser = selectedDirect
     ? dmAvatarUser(selectedDirect, user?.id)
     : selectedChannel?.bot_assignments?.length === 1
@@ -1016,6 +1030,7 @@
     remoteVoiceStream = null;
     clearPendingUpload();
     thread.close();
+    notepadAvailability.dispose();
     routeApplySerial += 1;
     messageLoadGeneration += 1;
     messageRequests.clear();
@@ -5411,6 +5426,12 @@
         onPinnedItems={togglePinnedPanel}
         onOpenChannelSettings={openChannelSettings}
       />
+    {/if}
+
+    {#if notepadAvailable && (selectedDirectID || selectedChannelID)}
+      {#key `${selectedWorkspaceID}:${selectedDirectID}:${selectedChannelID}`}
+        <AgentNotepad path={selectedDirectID ? `/api/dms/${encodeURIComponent(selectedDirectID)}/notepad` : `/api/channels/${encodeURIComponent(selectedChannelID)}/notepad`} />
+      {/key}
     {/if}
 
     {#if activeTopic}

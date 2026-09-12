@@ -27,9 +27,12 @@ export function parseSectionState(raw: string | null): SectionState {
       channels: candidate.channels,
       directMessages: candidate.directMessages,
       archived: typeof candidate.archived === "boolean" ? candidate.archived : true,
-      personas: personas && typeof personas === "object" && !Array.isArray(personas)
-        ? Object.fromEntries(Object.entries(personas).filter(([, value]) => typeof value === "boolean"))
-        : {},
+      personas:
+        personas && typeof personas === "object" && !Array.isArray(personas)
+          ? Object.fromEntries(
+              Object.entries(personas).filter(([, value]) => typeof value === "boolean"),
+            )
+          : {},
     };
   } catch {
     return defaultSections();

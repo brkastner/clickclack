@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
+	"github.com/openclaw/clickclack/apps/api/internal/config"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/uploadstore"
@@ -28,6 +29,7 @@ import (
 )
 
 type Server struct {
+	openclawNotepad       config.OpenClawNotepadConfig
 	avatarPacksDir        string
 	store                 store.Store
 	hub                   *realtime.Hub
@@ -109,6 +111,7 @@ type actor struct {
 }
 
 type Options struct {
+	OpenClawNotepad     config.OpenClawNotepadConfig
 	AvatarPacksDir      string
 	UploadDir           string
 	UploadStorage       uploadstore.Store
@@ -148,6 +151,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		callbackClient = newCallbackHTTPClient()
 	}
 	return &Server{
+		openclawNotepad:       options.OpenClawNotepad,
 		store:                 st,
 		avatarPacksDir:        options.AvatarPacksDir,
 		hub:                   hub,
@@ -284,6 +288,12 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/channels/{channel_id}/workflow-runs", s.listWorkflowSnapshots)
 		r.Get("/dms/{conversation_id}/workflow-runs", s.listWorkflowSnapshots)
 		r.Get("/realtime/ws", s.websocket)
+		r.Get("/channels/{channel_id}/notepad", s.getNotepad)
+		r.Get("/dms/{conversation_id}/notepad", s.getNotepad)
+		r.Get("/channels/{channel_id}/notepad/availability", s.getNotepadAvailability)
+		r.Get("/dms/{conversation_id}/notepad/availability", s.getNotepadAvailability)
+		r.Get("/channels/{channel_id}/notepad/watch", s.watchNotepad)
+		r.Get("/dms/{conversation_id}/notepad/watch", s.watchNotepad)
 		r.Get("/search", s.search)
 		r.Get("/avatar-packs", s.listAvatarPacks)
 		r.Get("/avatar-packs/{pack}", s.listAvatarPackFiles)

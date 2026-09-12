@@ -55,6 +55,7 @@ it for anything that isn't a local clone.
 | Iframe-ready standalone thread panels | [Embedded threads](features/embedding.md) |
 | Reactions on every message | [Reactions](features/reactions.md) |
 | Realtime over WebSocket with cursor recovery | [Realtime](features/realtime.md) |
+| Read-only OpenClaw agent notepads | [Agent notepad](features/agent-notepad.md) |
 | SQLite FTS5 full-text search | [Search](features/search.md) |
 | Local file uploads + message attachments | [Uploads](features/uploads.md) |
 | Workspace-scoped direct messages | [Direct messages](features/dms.md) |
