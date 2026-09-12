@@ -57,10 +57,10 @@ export function watchNotepad(
     let dirty = 0;
     let loading = false;
     let terminal = false;
-    const fail = (denied = false) => {
+    const fail = (state: "disconnected" | "unavailable" = "disconnected", denied = false) => {
       if (!current()) return;
       stopConnection();
-      emit(denied ? "denied" : "disconnected");
+      emit(denied ? "denied" : state);
       if (denied || terminal) return;
       const probeGeneration = epoch;
       const controller = new AbortController();
@@ -74,6 +74,8 @@ export function watchNotepad(
           if (["denied", "unsupported", "unmapped"].includes(result.state)) {
             clearTimeout(retry);
             emit(result.state);
+          } else if (result.state === "unavailable") {
+            emit("unavailable");
           }
         })
         .catch((error: unknown) => {
@@ -107,13 +109,13 @@ export function watchNotepad(
             failures = 0;
             emit("ready", result.card);
           } else {
-            fail();
+            fail(result.state === "unavailable" ? "unavailable" : "disconnected");
             return;
           }
         }
       } catch (error) {
         if (!current()) return;
-        fail(isDenied(error));
+        fail("disconnected", isDenied(error));
         return;
       } finally {
         loading = false;
@@ -143,6 +145,10 @@ export function watchNotepad(
         stopConnection();
         return;
       }
+      if (message.state === "unavailable") {
+        fail("unavailable");
+        return;
+      }
       if (message.state !== "ready") {
         fail();
         return;
@@ -152,7 +158,7 @@ export function watchNotepad(
       clearTimeout(coalesce);
       coalesce = setTimeout(() => void load(), 25);
     };
-    socket.onclose = (event) => fail(event.code === 1008);
+    socket.onclose = (event) => fail("disconnected", event.code === 1008);
     socket.onerror = () => fail();
   };
   connect();

@@ -24,6 +24,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/channels/{channel_id}/notepad/availability": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Check whether a server-bound OpenClaw notepad is available
+     * @description Requires messages:read and current conversation/workspace access. Returns only a binding boolean; gateway identities and credentials never cross this boundary.
+     */
+    get: operations["getChannelNotepadAvailability"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/channels/{channel_id}/notepad/watch": {
     parameters: {
       query?: never;
@@ -56,6 +76,26 @@ export interface paths {
      * @description Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
      */
     get: operations["getDirectNotepad"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dms/{conversation_id}/notepad/availability": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Check whether a server-bound OpenClaw notepad is available
+     * @description Requires messages:read, dms:read and current conversation/workspace access. Returns only a binding boolean; gateway identities and credentials never cross this boundary.
+     */
+    get: operations["getDirectNotepadAvailability"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1483,6 +1523,9 @@ export interface components {
       state: components["schemas"]["NotepadState"];
       card: components["schemas"]["NotepadCard"] | null;
     };
+    NotepadAvailability: {
+      available: boolean;
+    };
     NotepadChanged: {
       /** @constant */
       type: "notepad.changed";
@@ -2662,6 +2705,42 @@ export interface operations {
       };
     };
   };
+  getChannelNotepadAvailability: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Non-cacheable credential-free binding availability */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotepadAvailability"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   watchChannelNotepad: {
     parameters: {
       query?: never;
@@ -2714,6 +2793,42 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["NotepadResult"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getDirectNotepadAvailability: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Non-cacheable credential-free binding availability */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotepadAvailability"];
         };
       };
       /** @description Authentication required */

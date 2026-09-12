@@ -290,6 +290,8 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/realtime/ws", s.websocket)
 		r.Get("/channels/{channel_id}/notepad", s.getNotepad)
 		r.Get("/dms/{conversation_id}/notepad", s.getNotepad)
+		r.Get("/channels/{channel_id}/notepad/availability", s.getNotepadAvailability)
+		r.Get("/dms/{conversation_id}/notepad/availability", s.getNotepadAvailability)
 		r.Get("/channels/{channel_id}/notepad/watch", s.watchNotepad)
 		r.Get("/dms/{conversation_id}/notepad/watch", s.watchNotepad)
 		r.Get("/search", s.search)

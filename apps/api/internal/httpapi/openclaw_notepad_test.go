@@ -81,6 +81,31 @@ func TestNotepadConversationAuthorizationAndWatch(t *testing.T) {
 	}
 	channelPath := "/api/channels/" + ch.ID + "/notepad"
 	dmPath := "/api/dms/" + dm.ID + "/notepad"
+	availability := func(path, user string) string {
+		t.Helper()
+		req, _ := http.NewRequestWithContext(ctx, "GET", server.URL+path+"/availability", nil)
+		req.Header.Set("X-ClickClack-User", user)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK || resp.Header.Get("Cache-Control") != "no-store" {
+			t.Fatalf("%d %s", resp.StatusCode, body)
+		}
+		return string(body)
+	}
+	for _, path := range []string{channelPath, dmPath} {
+		body := availability(path, viewer.ID)
+		if body != "{\"available\":true}\n" || strings.Contains(body, "agent:") || strings.Contains(body, g.Config.Token) {
+			t.Fatal(body)
+		}
+	}
+	// Unbound and Pi-only conversations have no server binding and therefore no entry.
+	if body := availability("/api/channels/"+private.ID+"/notepad", owner.ID); body != "{\"available\":false}\n" {
+		t.Fatal(body)
+	}
 	body := read(channelPath, viewer.ID)
 	if !strings.Contains(body, "channel card") || strings.Contains(body, "agent:") || strings.Contains(body, g.Config.Token) {
 		t.Fatal(body)
@@ -93,6 +118,7 @@ func TestNotepadConversationAuthorizationAndWatch(t *testing.T) {
 	}
 	for _, path := range []string{channelPath, dmPath} {
 		expectStatusAsUser(t, outsider.ID, "GET", server.URL+path, nil, 403)
+		expectStatusAsUser(t, outsider.ID, "GET", server.URL+path+"/availability", nil, 403)
 		expectStatusAsUser(t, outsider.ID, "GET", server.URL+path+"/watch", nil, 403)
 	}
 	if err := st.AddWorkspaceMember(ctx, ws.ID, outsider.ID, store.WorkspaceRoleGuest); err != nil {

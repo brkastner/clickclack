@@ -77,6 +77,22 @@ func (s *Server) notepadBinding(workspaceID string, r *http.Request) (config.Ope
 	}
 	return config.OpenClawNotepadGateway{}, config.OpenClawNotepadBinding{}, false
 }
+func (s *Server) getNotepadAvailability(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, notepad.Denied)
+		return
+	}
+	workspaceID, err := s.notepadAccess(r, act)
+	if err != nil {
+		writeError(w, http.StatusForbidden, notepad.Denied)
+		return
+	}
+	_, _, available := s.notepadBinding(workspaceID, r)
+	writeJSON(w, http.StatusOK, map[string]bool{"available": available})
+}
+
 func (s *Server) getNotepad(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	act, err := s.currentActor(r)
