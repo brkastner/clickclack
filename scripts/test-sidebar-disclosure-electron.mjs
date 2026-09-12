@@ -42,8 +42,10 @@ try {
   await alpha.press("Space");
   await expect(list).toBeHidden();
   await beta.click();
-  await empty.click();
-  await expect(empty).toHaveAttribute("aria-expanded", "false");
+  await expect(empty).not.toHaveAttribute("aria-expanded");
+  await expect(empty).not.toHaveAttribute("aria-controls");
+  await expect(empty.locator('.persona-disclosure-caret')).toHaveCount(0);
+  await expect(page.locator('#sidebar-persona-wsp_one-bot_empty-channels')).toBeHidden();
   await expect(page.getByTestId("events")).toHaveText("[]");
   await expect(page.getByTestId("selection")).toHaveText(selection);
   assert.equal(await beta.locator('.persona-unread-stack').textContent(), unread);
@@ -83,6 +85,34 @@ try {
       await expect(page.getByRole('button', { name: 'Create channel for Alpha', exact: true })).toBeVisible();
     }
   }
+  // Empty headers navigate rather than toggling, without writing disclosure state.
+  await page.getByRole('button', { name: 'Clear events' }).click();
+  const beforeEmpty = await page.evaluate(key => localStorage.getItem(key), key);
+  await empty.click();
+  await expect(page.getByTestId('events')).toHaveText('["start:bot_empty"]');
+  await page.getByRole('button', { name: 'Clear events' }).click();
+  await empty.press('Enter');
+  await empty.press('Space');
+  await expect(page.getByTestId('events')).toHaveText('["start:bot_empty","start:bot_empty"]');
+  assert.equal(await page.evaluate(key => localStorage.getItem(key), key), beforeEmpty);
+  await page.getByRole('button', { name: 'Clear events' }).click();
+  await page.getByRole('button', { name: 'Create channel for Empty', exact: true }).click();
+  await expect(page.getByTestId('events')).toHaveText('["create:bot_empty"]');
+  // Archiving the last owned channel uses the existing DM and leaves no list gap.
+  await page.getByRole('button', { name: 'Toggle Alpha channel archive' }).click();
+  await expect(alpha).not.toHaveAttribute('aria-expanded');
+  await expect(alpha.locator('.persona-disclosure-caret')).toHaveCount(0);
+  await expect(list).toBeHidden();
+  assert.equal(await list.evaluate(el => el.getBoundingClientRect().height), 0);
+  const group = alpha.locator('xpath=../..');
+  const header = alpha.locator('xpath=..');
+  assert.equal(Math.round((await group.boundingBox()).height), Math.round((await header.boundingBox()).height));
+  await page.getByRole('button', { name: 'Clear events' }).click();
+  await alpha.click();
+  await expect(page.getByTestId('events')).toHaveText('["direct:dm_one"]');
+  await page.getByRole('button', { name: 'Toggle Alpha channel archive' }).click();
+  await expect(alpha).toHaveAttribute('aria-expanded', 'true');
+  await expect(list).toBeVisible();
   await page.evaluate(key => localStorage.setItem(key, JSON.stringify({ channels: false, directMessages: true })), key);
   await page.reload();
   await expect(alpha).toHaveAttribute('aria-expanded', 'true');
