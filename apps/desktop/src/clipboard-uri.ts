@@ -3,7 +3,7 @@ import { lstat, open, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const MAX_CLIPBOARD_IMAGE_FILES = 10;
+export const MAX_CLIPBOARD_IMAGE_FILES = 50;
 export const MAX_URI_LIST_LINES = 256;
 export const MAX_UPLOAD_BYTES = 64 << 20;
 // A paste may contain several valid uploads, but it should not retain hundreds

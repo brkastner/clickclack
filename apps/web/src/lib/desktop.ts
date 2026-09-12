@@ -1,3 +1,5 @@
+import { MAX_MESSAGE_ATTACHMENTS } from "./attachments.ts";
+
 export type DesktopNotification = {
   body: string;
   route?: string;
@@ -37,7 +39,7 @@ export const desktop: ClickClackDesktopBridge | undefined =
   typeof window === "undefined" ? undefined : window.clickclackDesktop;
 
 export function browserFilesFromDesktop(files: DesktopClipboardFile[]): File[] {
-  return files.slice(0, 10).flatMap((file) => {
+  return files.slice(0, MAX_MESSAGE_ATTACHMENTS).flatMap((file) => {
     if (
       !file ||
       typeof file.name !== "string" ||

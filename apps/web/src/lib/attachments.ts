@@ -1,6 +1,6 @@
 import type { Upload } from "./types";
 
-export const MAX_MESSAGE_ATTACHMENTS = 10;
+export const MAX_MESSAGE_ATTACHMENTS = 50;
 
 export type PendingAttachmentState = "uploading" | "ready" | "failed";
 

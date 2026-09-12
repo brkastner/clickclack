@@ -61,7 +61,7 @@ test("bounds the total URI-list lines processed", () => {
   assert.deepEqual(parseURIList(commentsBeforeFile), []);
 });
 
-test("reads one through ten supported images in memory without staging files", async (t) => {
+test("reads one through fifty supported images in memory without staging files", async (t) => {
   const directory = await fixtureDirectory();
   t.after(() => rm(directory, { force: true, recursive: true }));
   const paths: string[] = [];
@@ -87,6 +87,20 @@ test("reads one through ten supported images in memory without staging files", a
     assert.deepEqual([...files[0].bytes], [...PNG]);
   }
   assert.deepEqual(await readdir(directory), before);
+});
+
+test("accepts fifty clipboard images and stops before the fifty-first", async (t) => {
+  const directory = await fixtureDirectory();
+  t.after(() => rm(directory, { force: true, recursive: true }));
+  const uris: string[] = [];
+  for (let index = 0; index < 51; index += 1) {
+    const filePath = path.join(directory, `image-${index}.png`);
+    await writeFile(filePath, PNG);
+    uris.push(pathToFileURL(filePath).toString());
+  }
+  const files = await readClipboardImageFiles(uris.join("\n"));
+  assert.equal(files.length, 50);
+  assert.equal(files.at(-1)?.name, "image-49.png");
 });
 
 test("does not let unsupported entries consume the validated image limit", async (t) => {

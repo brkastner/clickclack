@@ -63,6 +63,18 @@ test("appends multiple files in selection order with stable local keys", () => {
   );
 });
 
+test("accepts fifty attachments and rejects the fifty-first", () => {
+  const result = appendPendingAttachments(
+    [],
+    Array.from({ length: 51 }, (_, index) => file(`${index}.txt`)),
+    "workspace-1",
+    () => crypto.randomUUID(),
+  );
+  assert.equal(result.attachments.length, 50);
+  assert.equal(result.attachments.at(-1)?.file.name, "49.txt");
+  assert.equal(result.rejectedCount, 1);
+});
+
 test("retains the existing queue and rejects files beyond the message limit", () => {
   const existing: PendingAttachment[] = Array.from(
     { length: MAX_MESSAGE_ATTACHMENTS - 1 },

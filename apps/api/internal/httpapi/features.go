@@ -1570,8 +1570,8 @@ func (s *Server) createDirectMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if body.ExpectedAttachmentCount < 0 || body.ExpectedAttachmentCount > 10 {
-		writeError(w, http.StatusBadRequest, errors.New("expected_attachment_count must be between 0 and 10"))
+	if body.ExpectedAttachmentCount < 0 || body.ExpectedAttachmentCount > 50 {
+		writeError(w, http.StatusBadRequest, errors.New("expected_attachment_count must be between 0 and 50"))
 		return
 	}
 	if err := act.requireScope("dms:write"); err != nil {

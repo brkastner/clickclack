@@ -24,8 +24,9 @@ test("converts desktop clipboard payloads without exposing local paths", async (
 
 test("bounds desktop clipboard file conversion", () => {
   const files = browserFilesFromDesktop([
-    ...Array.from({ length: 10 }, (_, index) => payload(`${index}.png`)),
+    ...Array.from({ length: 50 }, (_, index) => payload(`${index}.png`)),
     payload("extra.png"),
   ]);
-  assert.equal(files.length, 10);
+  assert.equal(files.length, 50);
+  assert.equal(files.at(-1)?.name, "49.png");
 });

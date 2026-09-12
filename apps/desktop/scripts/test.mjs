@@ -17,6 +17,7 @@ await build({
   bundle: true,
   entryPoints: [
     "src/contract.test.ts",
+    "src/clipboard-uri.test.ts",
     "src/local-file-link.test.ts",
     "src/terminal-dock.test.ts",
     "src/terminal-session.test.ts",
@@ -46,6 +47,7 @@ const result = spawnSync(
   [
     "--test",
     contractTest,
+    path.join(testOutputDirectory, "clipboard-uri.test.cjs"),
     path.join(testOutputDirectory, "local-file-link.test.cjs"),
     terminalDockTest,
     terminalSessionTest,
