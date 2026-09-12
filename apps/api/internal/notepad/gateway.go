@@ -130,11 +130,19 @@ func Dial(ctx context.Context, gateway config.OpenClawNotepadGateway, target con
 	hash := sha256.Sum256(public)
 	deviceID := hex.EncodeToString(hash[:])
 	signedAt := time.Now().UnixMilli()
-	signaturePayload := strings.Join([]string{"v3", deviceID, "gateway-client", "backend", "operator", "operator.read", strconv.FormatInt(signedAt, 10), gateway.Token, payload.Nonce, "server", ""}, "|")
+	auth := map[string]string{"token": gateway.Token}
+	signatureCredential := gateway.Token
+	if strings.TrimSpace(gateway.Password) != "" {
+		auth = map[string]string{"password": gateway.Password}
+		// Gateway v3 binds an auth token into the device signature. Password-mode
+		// sessions intentionally use an empty field rather than the password.
+		signatureCredential = ""
+	}
+	signaturePayload := strings.Join([]string{"v3", deviceID, "gateway-client", "backend", "operator", "operator.read", strconv.FormatInt(signedAt, 10), signatureCredential, payload.Nonce, "server", ""}, "|")
 	params := map[string]any{
 		"minProtocol": 4, "maxProtocol": 4,
 		"client": map[string]string{"id": "gateway-client", "displayName": "ClickClack notepad", "version": "1", "platform": "server", "mode": "backend"},
-		"caps":   []string{"session-scoped-events"}, "role": "operator", "scopes": []string{"operator.read"}, "auth": map[string]string{"token": gateway.Token},
+		"caps":   []string{"session-scoped-events"}, "role": "operator", "scopes": []string{"operator.read"}, "auth": auth,
 		"device": map[string]any{"id": deviceID, "publicKey": base64.RawURLEncoding.EncodeToString(public), "signature": base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, []byte(signaturePayload))), "signedAt": signedAt, "nonce": payload.Nonce},
 	}
 	raw, err := c.request(handshake, "connect", params)

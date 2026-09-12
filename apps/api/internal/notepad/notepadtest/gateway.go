@@ -82,7 +82,7 @@ func New(t *testing.T) *Gateway {
 					Client                   struct{ ID, Mode, Platform string }
 					Role                     string
 					Scopes                   []string
-					Auth                     struct{ Token string }
+					Auth                     map[string]string
 					Device                   struct {
 						ID, PublicKey, Signature, Nonce string
 						SignedAt                        int64
@@ -94,8 +94,14 @@ func New(t *testing.T) *Gateway {
 				public, _ := base64.RawURLEncoding.DecodeString(p.Device.PublicKey)
 				signature, _ := base64.RawURLEncoding.DecodeString(p.Device.Signature)
 				hash := sha256.Sum256(public)
-				signed := strings.Join([]string{"v3", p.Device.ID, p.Client.ID, p.Client.Mode, p.Role, strings.Join(p.Scopes, ","), strconv.FormatInt(p.Device.SignedAt, 10), p.Auth.Token, p.Device.Nonce, p.Client.Platform, ""}, "|")
-				valid := p.MinProtocol == 4 && p.MaxProtocol == 4 && p.Client.ID == "gateway-client" && p.Client.Mode == "backend" && p.Role == "operator" && strings.Join(p.Scopes, ",") == "operator.read" && p.Auth.Token == g.Config.Token && p.Device.ID == hex.EncodeToString(hash[:]) && p.Device.Nonce == "fixture-nonce" && len(public) == 32 && ed25519.Verify(public, []byte(signed), signature)
+				authCredential := g.Config.Token
+				wantAuth := map[string]string{"token": g.Config.Token}
+				if g.Config.Password != "" {
+					authCredential = ""
+					wantAuth = map[string]string{"password": g.Config.Password}
+				}
+				signed := strings.Join([]string{"v3", p.Device.ID, p.Client.ID, p.Client.Mode, p.Role, strings.Join(p.Scopes, ","), strconv.FormatInt(p.Device.SignedAt, 10), authCredential, p.Device.Nonce, p.Client.Platform, ""}, "|")
+				valid := p.MinProtocol == 4 && p.MaxProtocol == 4 && p.Client.ID == "gateway-client" && p.Client.Mode == "backend" && p.Role == "operator" && strings.Join(p.Scopes, ",") == "operator.read" && len(p.Auth) == 1 && p.Auth["token"] == wantAuth["token"] && p.Auth["password"] == wantAuth["password"] && p.Device.ID == hex.EncodeToString(hash[:]) && p.Device.Nonce == "fixture-nonce" && len(public) == 32 && ed25519.Verify(public, []byte(signed), signature)
 				if !valid {
 					t.Error("invalid signed v4 handshake")
 					return

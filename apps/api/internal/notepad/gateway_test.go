@@ -11,6 +11,31 @@ import (
 	"time"
 )
 
+func TestGatewayAuthenticatesWithTokenOrPassword(t *testing.T) {
+	for _, credential := range []struct {
+		name      string
+		configure func(*config.OpenClawNotepadGateway)
+	}{
+		{name: "token", configure: func(*config.OpenClawNotepadGateway) {}},
+		{name: "password", configure: func(gateway *config.OpenClawNotepadGateway) {
+			gateway.Token = ""
+			gateway.Password = "fixture-password-do-not-forward"
+		}},
+	} {
+		t.Run(credential.name, func(t *testing.T) {
+			g := notepadtest.New(t)
+			credential.configure(&g.Config)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			connection, err := Dial(ctx, g.Config, config.OpenClawNotepadBinding{AgentID: "alice", SessionKey: "global"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			connection.Close()
+		})
+	}
+}
+
 func TestGatewayIdentityLifecycle(t *testing.T) {
 	g := notepadtest.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

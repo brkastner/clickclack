@@ -15,18 +15,21 @@ func TestNormalizeOpenClawNotepadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, mutate := range map[string]func(*OpenClawNotepadConfig){
-		"unknown gateway":    func(c *OpenClawNotepadConfig) { c.Bindings[0].GatewayID = "other" },
-		"duplicate gateway":  func(c *OpenClawNotepadConfig) { c.Gateways = append(c.Gateways, c.Gateways[0]) },
-		"duplicate binding":  func(c *OpenClawNotepadConfig) { c.Bindings = append(c.Bindings, c.Bindings[0]) },
-		"ambiguous target":   func(c *OpenClawNotepadConfig) { c.Bindings[0].DirectConversationID = "d" },
-		"wrong owner":        func(c *OpenClawNotepadConfig) { c.Bindings[0].AgentID = "other" },
-		"invalid owner":      func(c *OpenClawNotepadConfig) { c.Bindings[0].AgentID = "agent:a" },
-		"empty target":       func(c *OpenClawNotepadConfig) { c.Bindings[0].SessionKey = "" },
-		"credentials in url": func(c *OpenClawNotepadConfig) { c.Gateways[0].URL = "wss://u:secret@example.test" },
-		"query secret":       func(c *OpenClawNotepadConfig) { c.Gateways[0].URL = "wss://example.test/?token=secret" },
-		"insecure transport": func(c *OpenClawNotepadConfig) { c.Gateways[0].URL = "ws://example.test" },
-		"missing token":      func(c *OpenClawNotepadConfig) { c.Gateways[0].Token = "" },
-		"relative key":       func(c *OpenClawNotepadConfig) { c.Gateways[0].PrivateKeyFile = "device.pem" },
+		"unknown gateway":     func(c *OpenClawNotepadConfig) { c.Bindings[0].GatewayID = "other" },
+		"duplicate gateway":   func(c *OpenClawNotepadConfig) { c.Gateways = append(c.Gateways, c.Gateways[0]) },
+		"duplicate binding":   func(c *OpenClawNotepadConfig) { c.Bindings = append(c.Bindings, c.Bindings[0]) },
+		"ambiguous target":    func(c *OpenClawNotepadConfig) { c.Bindings[0].DirectConversationID = "d" },
+		"wrong owner":         func(c *OpenClawNotepadConfig) { c.Bindings[0].AgentID = "other" },
+		"invalid owner":       func(c *OpenClawNotepadConfig) { c.Bindings[0].AgentID = "agent:a" },
+		"empty target":        func(c *OpenClawNotepadConfig) { c.Bindings[0].SessionKey = "" },
+		"credentials in url":  func(c *OpenClawNotepadConfig) { c.Gateways[0].URL = "wss://u:secret@example.test" },
+		"query secret":        func(c *OpenClawNotepadConfig) { c.Gateways[0].URL = "wss://example.test/?token=secret" },
+		"insecure transport":  func(c *OpenClawNotepadConfig) { c.Gateways[0].URL = "ws://example.test" },
+		"neither credential":  func(c *OpenClawNotepadConfig) { c.Gateways[0].Token = "" },
+		"both credentials":    func(c *OpenClawNotepadConfig) { c.Gateways[0].Password = "password" },
+		"whitespace token":    func(c *OpenClawNotepadConfig) { c.Gateways[0].Token = " \t" },
+		"whitespace password": func(c *OpenClawNotepadConfig) { c.Gateways[0].Token, c.Gateways[0].Password = "", "\n" },
+		"relative key":        func(c *OpenClawNotepadConfig) { c.Gateways[0].PrivateKeyFile = "device.pem" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := valid()
@@ -35,6 +38,11 @@ func TestNormalizeOpenClawNotepadConfig(t *testing.T) {
 				t.Fatal("accepted invalid config")
 			}
 		})
+	}
+	c = valid()
+	c.Gateways[0].Token, c.Gateways[0].Password = "", "password"
+	if err := normalizeOpenClawNotepadConfig(&c); err != nil {
+		t.Fatal(err)
 	}
 	c = valid()
 	c.Gateways[0].URL = "ws://127.0.0.1:1"

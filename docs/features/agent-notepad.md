@@ -2,7 +2,7 @@
 
 ClickClack can show an OpenClaw conversation's durable agent notepad in a collapsible, read-only panel above its messages. OpenClaw remains the source of truth. There is no Pi-side notepad, editing, history, Control UI embedding or database scraping.
 
-This implementation is not activated by default. It requires explicit server configuration, an existing paired gateway device and an exact conversation binding. No deployment or live configuration change was performed for KAS-893.
+This implementation is not activated by default. It requires explicit server configuration, a signed gateway device identity and an exact conversation binding. No deployment or live configuration change was performed for KAS-893.
 
 ## Server configuration
 
@@ -15,7 +15,7 @@ Pass the following optional `openclaw_notepad` section through ClickClack's exis
       {
         "id": "workstation",
         "url": "wss://gateway.example.test",
-        "token": "OPERATOR_PROVISIONED_GATEWAY_TOKEN",
+        "password": "OPERATOR_PROVISIONED_GATEWAY_PASSWORD",
         "private_key_file": "/absolute/private/clickclack-device.pem"
       }
     ],
@@ -32,9 +32,9 @@ Pass the following optional `openclaw_notepad` section through ClickClack's exis
 }
 ```
 
-The device key must be an existing operator-provisioned Ed25519 PKCS#8 PEM file with no group/other permissions. Provision and approve the device using OpenClaw's supported administration flow, independently of ClickClack. The key's SHA-256 raw public-key fingerprint identifies the device. ClickClack does not generate keys, approve pairings, persist returned device tokens, weaken device verification, or request admin scopes. It signs the nonce-bound v3 device payload and requests `operator.read` as `gateway-client`, mode `backend`, platform `server`. The gateway must authorize that paired device and its session participation. A shared gateway token alone is insufficient.
+The device key must be an existing operator-provisioned Ed25519 PKCS#8 PEM file with no group/other permissions. Each gateway requires exactly one nonblank `token` or `password`; replace the example `password` with `token` when using token authentication. ClickClack does not generate keys, approve pairings, persist returned device tokens, weaken device verification, or request admin scopes. It signs the nonce-bound v3 device payload and requests `operator.read` as `gateway-client`, mode `backend`, platform `server`. In password mode the v3 signature's token field is intentionally empty; the password is not signed. The gateway must authorize the signed device identity and session participation according to its own policy. A gateway that accepts a signed identity under shared-password policy need not issue or retain a device token; a gateway policy that requires pairing continues to be enforced.
 
-Use `wss://` outside exact loopback hosts (`localhost`, `127.0.0.1`, `::1`). TLS uses normal certificate verification. URL userinfo, query strings and fragments are rejected. The token belongs in the private configuration, not a URL. No gateway credentials, handshake snapshots, canonical session keys or upstream error messages are forwarded to browsers.
+Use `wss://` outside exact loopback hosts (`localhost`, `127.0.0.1`, `::1`). TLS uses normal certificate verification. URL userinfo, query strings and fragments are rejected. The credential belongs in the private configuration, not a URL. No gateway credentials, handshake snapshots, canonical session keys or upstream error messages are forwarded to browsers.
 
 Each gateway ID must be unique. Each binding must reference a configured gateway and identify exactly one channel or DM. For DMs, replace `channel_id` with `direct_conversation_id`. Bindings are unique by workspace and conversation. Agent IDs must use the gateway's normalized spelling; owner-qualified session keys must agree with the configured agent ID. Missing or ambiguous mappings fail closed.
 
@@ -65,9 +65,9 @@ The adapter implements the inspected OpenClaw Gateway **v4** contract, not an in
 - `packages/gateway-client/src/device-auth.ts` and the client connect assembly.
 - `src/gateway/server-methods/progress-card.ts`, `sessions-subscriptions.ts`, `session-observer-model.ts`, `session-method-policy.ts`, and `server-broadcast.ts`.
 
-The signed gateway fixture verifies the handshake, target separation, interleaved events, authorization errors, remote clearing, reconnect and in-flight invalidations. It does not prove a deployed gateway has the same version, advertised features, paired device or session permissions.
+The signed gateway fixture verifies token and password handshakes, target separation, interleaved events, authorization errors, remote clearing, reconnect and in-flight invalidations. It does not prove a deployed gateway has the same version, advertised features, signed-identity policy or session permissions.
 
-Before activation, independently verify the deployed gateway version, advertised methods/events, authentication, paired device and exact mapped session access using a read only. Do not edit a user's live notepad for testing. If no authorized mapping and device are available, retain the fixture evidence and report live qualification as pending. No live credentials or mapping were supplied to this implementation run, so no live read or gateway mutation was attempted.
+Before activation, independently verify the deployed gateway version, advertised methods/events, authentication policy and exact mapped session access using a read only. Do not edit a user's live notepad for testing. If no authorized mapping and device identity are available, retain the fixture evidence and report live qualification as pending. No live credentials or mapping were supplied to this implementation run, so no live read or gateway mutation was attempted.
 
 ## Verification
 

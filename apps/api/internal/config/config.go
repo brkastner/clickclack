@@ -30,12 +30,14 @@ type OpenClawNotepadConfig struct {
 	Bindings []OpenClawNotepadBinding `json:"bindings"`
 }
 
-// Credentials belong to a separately provisioned, paired operator.read device.
-// ClickClack never creates pairings or returns these fields to clients.
+// Credentials belong to a separately provisioned operator.read device identity.
+// Exactly one of Token or Password is required. ClickClack never returns either
+// credential to clients, creates pairings, or weakens gateway policy.
 type OpenClawNotepadGateway struct {
 	ID             string `json:"id"`
 	URL            string `json:"url"`
 	Token          string `json:"token"`
+	Password       string `json:"password"`
 	PrivateKeyFile string `json:"private_key_file"`
 }
 

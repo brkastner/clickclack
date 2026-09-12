@@ -23,8 +23,10 @@ func normalizeOpenClawNotepadConfig(c *OpenClawNotepadConfig) error {
 		if u.Scheme == "ws" && !isLoopbackHost(u.Hostname()) {
 			return fmt.Errorf("openclaw_notepad.gateways[%d]: require wss outside loopback", i)
 		}
-		if strings.TrimSpace(g.Token) == "" || !filepath.IsAbs(g.PrivateKeyFile) {
-			return fmt.Errorf("openclaw_notepad.gateways[%d]: token and absolute private_key_file required", i)
+		hasToken := strings.TrimSpace(g.Token) != ""
+		hasPassword := strings.TrimSpace(g.Password) != ""
+		if hasToken == hasPassword || !filepath.IsAbs(g.PrivateKeyFile) {
+			return fmt.Errorf("openclaw_notepad.gateways[%d]: exactly one nonblank token or password and an absolute private_key_file required", i)
 		}
 		gateways[g.ID] = true
 	}
