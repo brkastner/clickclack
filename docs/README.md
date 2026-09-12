@@ -63,6 +63,7 @@ it for anything that isn't a local clone.
 | Profile settings, handles, avatars | [Profiles](features/profiles.md) |
 | Magic-link auth, GitHub OAuth, dev fallback | [Auth](features/auth.md) |
 | Native macOS, Windows, and Linux clients | [Desktop apps](desktop.md) |
+| Native iOS and Android clients | [Mobile app](mobile.md) |
 | Guest waiting-room roles, approvals, timeouts, blocks | [Moderation](features/moderation.md) |
 | Mattermost-shaped webhooks and slash commands | [Integrations](features/integrations.md) |
 | TypeScript SDK + bot example | [SDK](sdk.md) |
@@ -80,6 +81,7 @@ it for anything that isn't a local clone.
   tokens into OpenClaw or SDK runtimes.
 - [Development](development.md) — pnpm scripts, monorepo layout, gates.
 - [Desktop apps](desktop.md) — native behavior, self-hosted connections, builds, and security.
+- [Mobile app](mobile.md) — the iOS/Android shell, deep links, notification routing, and builds.
 - [Releasing](releasing.md) — GoReleaser targets, artifacts, and tag flow.
 
 ## Look under the hood

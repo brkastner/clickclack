@@ -34,6 +34,7 @@ type Config struct {
 	AccessTeamDomain       string   `json:"access_team_domain"`
 	AccessAUD              string   `json:"access_aud"`
 	PushoverAPIToken       string   `json:"pushover_api_token"`
+	AppLinkMode            string   `json:"app_link_mode"`
 	R2AccountID            string   `json:"r2_account_id"`
 	R2AccessKeyID          string   `json:"r2_access_key_id"`
 	R2SecretAccessKey      string   `json:"r2_secret_access_key"`
@@ -131,6 +132,9 @@ func Load(path string) (Config, error) {
 	}
 	if env := os.Getenv("CLICKCLACK_PUSHOVER_API_TOKEN"); env != "" {
 		cfg.PushoverAPIToken = env
+	}
+	if env := os.Getenv("CLICKCLACK_APP_LINK_MODE"); env != "" {
+		cfg.AppLinkMode = env
 	}
 	if env := os.Getenv("CLICKCLACK_R2_ACCOUNT_ID"); env != "" {
 		cfg.R2AccountID = env

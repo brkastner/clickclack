@@ -1,0 +1,36 @@
+/* ---------- NATIVE MOBILE SHELL ---------- */
+
+/*
+ * These rules apply only inside the Capacitor shell, which stamps
+ * data-native-platform on <html> (see lib/native.ts). Browsers — mobile
+ * browsers included — keep the behavior they have today.
+ */
+
+html[data-native-platform] {
+  /* No rubber-band on the document; the panes scroll themselves. */
+  overscroll-behavior: none;
+}
+
+html[data-native-platform] body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Long-press on a message opens ClickClack's action sheet. In an app that
+ * gesture must not also start WebKit's text selection or raise its link
+ * callout; the sheet carries Copy and Copy link for the text itself.
+ */
+html[data-native-platform] [data-message-id] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Editing a message puts real text fields inside the row. */
+html[data-native-platform] [data-message-id] input,
+html[data-native-platform] [data-message-id] textarea,
+html[data-native-platform] [data-message-id] [contenteditable="true"] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}

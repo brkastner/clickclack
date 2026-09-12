@@ -11,6 +11,8 @@
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
   import MessageActionSheet from "./MessageActionSheet.svelte";
   import CopyLinkFallback from "./CopyLinkFallback.svelte";
+  import { registerDismissLayer } from "../../lib/dismissal";
+  import { haptic } from "../../lib/native";
   import { shouldOpenUpward } from "../../lib/popover";
   import type { ReactionController } from "../../lib/reactions.svelte";
   import type { Message, Topic, Upload, User } from "../../lib/types";
@@ -442,6 +444,8 @@
     longPressTimer = window.setTimeout(() => {
       longPressTimer = undefined;
       suppressRowClick = true;
+      // A long press has no visible "it took" moment until the sheet animates in.
+      haptic("medium");
       openActionSheet();
     }, LONG_PRESS_MS);
     const onMove = (moveEvent: PointerEvent) => {
@@ -469,6 +473,16 @@
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
   }
+
+  // While the sheet is open it is the topmost layer, so a platform back gesture
+  // has to close it before anything else considers panes, history, or exit.
+  $effect(() => {
+    if (!showActionSheet) return;
+    return registerDismissLayer(() => {
+      closeActionSheet();
+      return true;
+    });
+  });
 
   function handleRowContextMenu(event: MouseEvent) {
     // Long-press must not additionally pop the native context menu on touch.
