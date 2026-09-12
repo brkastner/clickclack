@@ -102,7 +102,7 @@
   } from "./components/messages/MessageList.svelte";
   import DeleteMessageModal from "./components/messages/DeleteMessageModal.svelte";
   import TypingIndicator, { TYPING_TTL_MS, type TypingEntry } from "./components/messages/TypingIndicator.svelte";
-  import AgentProgress, { AGENT_PROGRESS_TTL_MS, type AgentProgressTurn } from "./components/messages/AgentProgress.svelte";
+  import { AGENT_PROGRESS_TTL_MS, type AgentProgressTurn } from "./components/messages/AgentProgress.svelte";
   import AgentResponding from "./components/messages/AgentResponding.svelte";
   import CreateChannelModal from "./components/navigation/CreateChannelModal.svelte";
   import CreateDirectModal from "./components/navigation/CreateDirectModal.svelte";
@@ -5501,8 +5501,6 @@
       {topics}
       onSelectTopic={(topicID) => void setTopicFilter(topicID)}
     />
-
-    <AgentProgress turns={agentProgressTurns} />
 
     <TypingIndicator entries={typingEntries} currentUserID={user?.id} />
 

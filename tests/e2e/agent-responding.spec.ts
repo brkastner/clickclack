@@ -101,6 +101,8 @@ test("names concurrent responding agents beside channel and thread composers", a
   await expect(page.locator("main .agent-responding .typing-indicator__label")).toHaveText(
     expectedLabel,
   );
+  await expect(page.locator(".agent-progress")).toHaveCount(0);
+  await expect(page.getByText("Working on the response", { exact: true })).toBeHidden();
 
   const rootRow = page.locator(`[data-message-id="${root.message.id}"]`);
   await rootRow.hover();
