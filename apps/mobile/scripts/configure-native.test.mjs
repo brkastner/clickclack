@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   androidManifestHasDeepLink,
+  withAndroidAuthIntentFilter,
+  withIOSURLSchemes,
   withAndroidCustomURLScheme,
   withAndroidDeepLinkIntentFilter,
   withIOSURLScheme,
@@ -108,4 +110,27 @@ test("ios plists with an existing scheme array gain only the new scheme", () => 
 
 test("ios patch helper rejects a plist it does not understand", () => {
   assert.throws(() => withIOSURLScheme("<plist />"), /root <dict>/);
+});
+
+test("ios registers both the content and sign-in callback schemes", () => {
+  const patched = withIOSURLSchemes(PLIST);
+  assert.match(patched, /<string>clickclack<\/string>/);
+  assert.match(patched, /<string>chat\.clickclack\.desktop<\/string>/);
+  // One CFBundleURLTypes block, with both schemes inside it.
+  assert.equal((patched.match(/<key>CFBundleURLTypes<\/key>/g) ?? []).length, 1);
+  assert.equal(withIOSURLSchemes(patched), patched);
+});
+
+test("android gains a filter for the sign-in callback scheme", () => {
+  const patched = withAndroidAuthIntentFilter(MANIFEST);
+  assert.match(patched, /<data android:scheme="chat\.clickclack\.desktop" \/>/);
+  assert.equal(withAndroidAuthIntentFilter(patched), patched);
+});
+
+test("the content and auth filters coexist without duplicating either", () => {
+  const patched = withAndroidAuthIntentFilter(withAndroidDeepLinkIntentFilter(MANIFEST));
+  assert.match(patched, /<data android:scheme="clickclack" \/>/);
+  assert.match(patched, /<data android:scheme="chat\.clickclack\.desktop" \/>/);
+  assert.equal((patched.match(/android.intent.action.VIEW/g) ?? []).length, 2);
+  assert.equal(withAndroidAuthIntentFilter(withAndroidDeepLinkIntentFilter(patched)), patched);
 });

@@ -113,6 +113,12 @@ jobs:
       - name: Test FakeCo AWS owner
         run: pnpm test:fakeco-aws
 
+      - name: Test web modules
+        run: pnpm --filter @clickclack/web test
+
+      - name: Test mobile shell
+        run: pnpm test:mobile
+
       - name: Typecheck root tests
         run: pnpm typecheck
 

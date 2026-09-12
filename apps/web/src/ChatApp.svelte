@@ -3,9 +3,14 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { APIError, api, apiResourceURL, apiURL, frontendBaseURL, readableAPIError } from "./lib/api";
   import { requestCurrentUser } from "./lib/appearance";
-  import { deepLinkToRoute } from "./lib/applinks";
   import { desktop } from "./lib/desktop";
-  import { installNativeShell } from "./lib/native";
+  import { registerDismissLayer } from "./lib/dismissal";
+  import { isNativeMobile } from "./lib/native";
+  import {
+    beginNativeGitHubSignIn,
+    onNativeSignInStatus,
+    type NativeSignInStatus,
+  } from "./lib/native-signin";
   import { probeMediaDimensions } from "./lib/media";
   import { gifLibrary } from "./lib/gifs";
   import { markdownImageViewerURL } from "./lib/actions/markdown";
@@ -163,6 +168,8 @@
   let status = "loading";
   let authRequired = false;
   let desktopAuthStatus = "";
+  let nativeShell = false;
+  let nativeAuthStatus = "";
   let connected = false;
   let realtimeError = "";
   let realtimeInitializedWorkspaceID = "";
@@ -381,19 +388,21 @@
       void goto(route, { keepFocus: true, noScroll: true });
     });
     const stopDesktopQuickCompose = desktop?.onQuickCompose(() => focusActiveComposer());
-    const stopNativeShell = installNativeShell({
-      dismissTopLayer,
-      onDeepLink: (url) => {
-        const route = deepLinkToRoute(url, [window.location.origin, frontendBaseURL()]);
-        if (route) void goto(route, { keepFocus: true, noScroll: true });
-      },
+    // The native shell lives in the root layout so deep links survive routes
+    // that do not render chat; this only contributes chat's own layers to the
+    // shared back-gesture stack.
+    const releaseDismissLayer = registerDismissLayer(dismissChatLayer);
+    nativeShell = isNativeMobile();
+    const stopNativeSignInStatus = onNativeSignInStatus((status) => {
+      nativeAuthStatus = nativeSignInMessage(status);
     });
     mobileNavMedia.addEventListener("change", handleMobileNavBreakpoint);
     return () => {
       mobileNavMedia.removeEventListener("change", handleMobileNavBreakpoint);
       stopDesktopNavigate?.();
       stopDesktopQuickCompose?.();
-      stopNativeShell();
+      releaseDismissLayer();
+      stopNativeSignInStatus();
     };
   });
 
@@ -404,7 +413,29 @@
     });
   }
 
+  function nativeSignInMessage(status: NativeSignInStatus): string {
+    switch (status.kind) {
+      case "opening":
+        return "Opening GitHub in your browser…";
+      case "waiting":
+        return "Finish signing in in your browser. ClickClack will complete here automatically.";
+      case "completing":
+        return "Finishing sign-in…";
+      case "failed":
+        return status.message;
+      default:
+        return "";
+    }
+  }
+
   async function signInWithGitHub(event: MouseEvent) {
+    if (nativeShell) {
+      // In the app the provider flow has to run in the system browser and hand
+      // a one-time grant back over the deep-link scheme; see lib/native-auth.ts.
+      event.preventDefault();
+      await beginNativeGitHubSignIn();
+      return;
+    }
     if (!desktop) return;
     event.preventDefault();
     desktopAuthStatus = "Opening GitHub in your browser…";
@@ -4063,11 +4094,12 @@
   }
 
   /**
-   * Close the topmost dismissible layer, reporting whether there was one. The
-   * Android back button walks this in the same order Escape does, so back means
-   * "close this" until nothing is left to close and only then leaves the screen.
+   * Close chat's topmost dismissible layer, reporting whether there was one.
+   * This is chat's contribution to the shared back-gesture stack and unwinds in
+   * the same order Escape does. Overlays owned by a message row or thread reply
+   * register themselves, so they are already closed before this runs.
    */
-  function dismissTopLayer(): boolean {
+  function dismissChatLayer(): boolean {
     if (isModalOpen()) {
       closeModal();
       return true;
@@ -4129,7 +4161,10 @@
         </svg>
         Continue with GitHub
       </a>
-      {#if !desktop}
+      <!-- OpenClaw ID has no native-client handoff yet, so the app hides it the
+           same way the desktop client does rather than offering a flow that
+           cannot complete outside a browser. -->
+      {#if !desktop && !nativeShell}
         <a class="openclaw-login" href={apiURL("/api/auth/openclaw/start")}>
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path
@@ -4140,7 +4175,7 @@
           Sign in with OpenClaw ID
         </a>
       {/if}
-      <p class="auth-foot">{desktopAuthStatus || "Any GitHub account can join."}</p>
+      <p class="auth-foot">{desktopAuthStatus || nativeAuthStatus || "Any GitHub account can join."}</p>
     </section>
   </main>
 {:else}

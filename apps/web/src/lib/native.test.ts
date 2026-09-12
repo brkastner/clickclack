@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  installNativeShell,
+  resetLaunchURLClaimForTests,
   haptic,
   invokeNative,
   isNativeMobile,
@@ -160,4 +162,123 @@ test("back closes the top layer first, then history, and only then leaves", () =
   assert.equal(resolveBackAction(true, false), "dismissed");
   assert.equal(resolveBackAction(false, true), "back");
   assert.equal(resolveBackAction(false, false), "exit");
+});
+
+/** The narrow slice of DOM installNativeShell touches. */
+function installFakeDOM(bridge: NativeBridge) {
+  const attributes = new Map<string, string>();
+  const root = {
+    getAttribute: (name: string) => attributes.get(name) ?? null,
+    setAttribute: (name: string, value: string) => void attributes.set(name, value),
+    removeAttribute: (name: string) => void attributes.delete(name),
+  };
+  Object.assign(globalThis, {
+    document: { documentElement: root },
+    MutationObserver: class {
+      observe() {}
+      disconnect() {}
+    },
+    window: {
+      Capacitor: bridge,
+      history: { back: () => {} },
+      matchMedia: () => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    },
+  });
+  return { attributes };
+}
+
+function shellBridge(launchURL?: string) {
+  const listeners: Record<string, (payload: unknown) => void> = {};
+  let resolveLaunch: ((value: { url?: string }) => void) | undefined;
+  const bridge: NativeBridge = {
+    getPlatform: () => "android",
+    isNativePlatform: () => true,
+    Plugins: {
+      App: {
+        addListener: (event: string, handler: (payload: unknown) => void) => {
+          listeners[event] = handler;
+          return Promise.resolve({ remove: () => delete listeners[event] });
+        },
+        exitApp: () => {},
+        getLaunchUrl: () =>
+          new Promise<{ url?: string }>((resolve) => {
+            resolveLaunch = resolve;
+          }),
+      },
+      Keyboard: { setAccessoryBarVisible: () => {} },
+      StatusBar: { setStyle: () => {}, setBackgroundColor: () => {} },
+    },
+  };
+  return { bridge, listeners, settleLaunch: () => resolveLaunch?.({ url: launchURL }) };
+}
+
+test("a notification launch link is routed once, not again on every reinstall", async () => {
+  resetLaunchURLClaimForTests();
+  const link = "clickclack://app/W1/C1";
+  const routed: string[] = [];
+  const first = shellBridge(link);
+  installFakeDOM(first.bridge);
+
+  // Install, let the launch lookup settle, then tear down — the shell's owner
+  // unmounting is what happens when the settings route replaces the chat page.
+  const stopFirst = installNativeShell({
+    dismissTopLayer: () => false,
+    onDeepLink: (url) => routed.push(url),
+  });
+  first.settleLaunch();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  stopFirst();
+  assert.deepEqual(routed, [link]);
+
+  // Coming back to chat installs a fresh shell. getLaunchUrl would still report
+  // the same link, so routing it again would yank the person back to channel A.
+  const second = shellBridge(link);
+  installFakeDOM(second.bridge);
+  const stopSecond = installNativeShell({
+    dismissTopLayer: () => false,
+    onDeepLink: (url) => routed.push(url),
+  });
+  second.settleLaunch();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  stopSecond();
+  assert.deepEqual(routed, [link]);
+});
+
+test("a launch lookup that settles after teardown does not navigate", async () => {
+  resetLaunchURLClaimForTests();
+  const routed: string[] = [];
+  const shell = shellBridge("clickclack://app/W1/C1");
+  installFakeDOM(shell.bridge);
+  const stop = installNativeShell({
+    dismissTopLayer: () => false,
+    onDeepLink: (url) => routed.push(url),
+  });
+  // Tear down first, then let the pending lookup resolve.
+  stop();
+  shell.settleLaunch();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(routed, []);
+});
+
+test("deep links arriving after teardown do not navigate", async () => {
+  resetLaunchURLClaimForTests();
+  const routed: string[] = [];
+  const shell = shellBridge();
+  installFakeDOM(shell.bridge);
+  const stop = installNativeShell({
+    dismissTopLayer: () => false,
+    onDeepLink: (url) => routed.push(url),
+  });
+  await Promise.resolve();
+  const deliver = shell.listeners.appUrlOpen;
+  shell.listeners.appUrlOpen?.({ url: "clickclack://app/W1/C1" });
+  assert.deepEqual(routed, ["clickclack://app/W1/C1"]);
+  stop();
+  // A retained event delivered to a stale listener must be inert.
+  deliver?.({ url: "clickclack://app/W2/C2" });
+  assert.deepEqual(routed, ["clickclack://app/W1/C1"]);
 });

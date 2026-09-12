@@ -77,9 +77,36 @@ CLICKCLACK_SERVER_URL=https://chat.example.com pnpm mobile:sync
 
 `apps/mobile/ios` and `apps/mobile/android` are generated, not tracked. Both
 `mobile:ios`/`mobile:android` and `mobile:sync` run
-`scripts/configure-native.mjs`, which registers `clickclack://` in the iOS
-`Info.plist` and the Android manifest. It is idempotent, so the native projects
-stay disposable: delete them and regenerate at any time.
+`scripts/configure-native.mjs`, which registers the app's URL schemes in the iOS
+`Info.plist` and the Android manifest — `clickclack://` for conversation links
+and `chat.clickclack.desktop:` for the sign-in callback. It is idempotent, so
+the native projects stay disposable: delete them and regenerate at any time.
+
+## Sign in
+
+Sign-in runs in the system browser, not in the app's web view, and the app
+receives the result over a URL scheme.
+
+It has to work this way. Hitting `/api/auth/github/start` from the web view
+would set the provider's browser-binding cookie there and then redirect to
+GitHub, which the shell hands to the system browser; the callback would arrive
+without that cookie and be rejected, and any session it did establish would
+belong to the browser rather than to the app. So the app instead starts the
+whole flow in the browser with a PKCE challenge, the callback hands back a
+single-use grant over `chat.clickclack.desktop:/auth/callback`, and the app
+redeems that grant from the web view — which is what installs the session where
+the app can use it.
+
+These are the same server endpoints the desktop client uses
+(`/api/auth/github/desktop/start` and `/api/auth/github/desktop/consume`), so a
+server needs no extra configuration beyond having GitHub OAuth set up. The grant
+is single-use, expires quickly, and is only redeemable with the verifier held by
+the app that started the flow.
+
+**Sign in with OpenClaw ID is not offered in the app.** It has no native-client
+handoff on the server yet, so the app hides it rather than presenting a flow
+that cannot finish — the same thing the desktop client does. Use GitHub sign-in,
+or reach the workspace in a mobile browser.
 
 ## Deep links
 
@@ -135,10 +162,18 @@ signing-certificate fingerprint in the native projects.
 
 ## Security model
 
-The shell loads one origin: the server it was built for. Everything else, every
-other scheme included, is handed to the system browser instead of being rendered
-in the app's web view, so remote content cannot navigate the app somewhere it
-would still look like ClickClack.
+The shell loads the server it was built for, and adds no navigation allowlist of
+its own. Other sites, and links carrying another scheme, are handed to the system
+browser instead of being rendered in the app's web view, so remote content cannot
+navigate the app somewhere that would still look like ClickClack.
+
+One limit of that boundary is worth stating precisely, because it is the
+platform's and not something the shell's configuration can tighten: Capacitor
+decides in-app navigation by **host**, not by full origin. A second HTTPS service
+on the same hostname at a different port would therefore also stay inside the web
+view, where the Capacitor bridge is injected. If you host ClickClack on a name
+you also use for other services on other ports, give ClickClack its own
+hostname.
 
 The shell exposes no bridge of its own. The only native surfaces the web app can
 reach are the Capacitor plugins the app declares — app lifecycle and deep links,
@@ -153,7 +188,8 @@ configured origin, exactly as they do in a browser.
 ## Limits
 
 The shell requires a reachable server; there is no offline mode, and a build
-without a server URL shows a short page saying so. Notifications are delivered
+without a server URL shows a short page saying so. Sign in with OpenClaw ID is
+unavailable in the app until the server grows a native-client handoff for it. Notifications are delivered
 by Pushover rather than by APNs or FCM, so the app itself registers no push
 token and the operating system's own notification settings for ClickClack cover
 only what the app raises while running.

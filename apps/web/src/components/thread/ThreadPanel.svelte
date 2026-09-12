@@ -10,6 +10,7 @@
     userHandle,
   } from "../../lib/chat/people";
   import { markdown, time } from "../../lib/format";
+  import { registerDismissLayer } from "../../lib/dismissal";
   import { haptic } from "../../lib/native";
   import type { MessageEditController } from "../../lib/messageEditing.svelte";
   import { uploadURL } from "../../lib/uploads";
@@ -262,6 +263,15 @@
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
   }
+
+  // The open sheet outranks the thread beneath it for a platform back gesture.
+  $effect(() => {
+    if (!actionMessage) return;
+    return registerDismissLayer(() => {
+      closeActionSheet();
+      return true;
+    });
+  });
 
   function handleMessageContextMenu(event: MouseEvent) {
     if (actionMessage || longPressTimer !== undefined) event.preventDefault();

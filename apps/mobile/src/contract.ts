@@ -18,6 +18,17 @@ export const APP_NAME = "ClickClack";
  */
 export const APP_URL_SCHEME = "clickclack";
 
+/**
+ * The scheme the server redirects sign-in grants to. It reads as a desktop
+ * identifier because the mobile shell reuses the desktop client's native OAuth
+ * endpoints rather than duplicating them; registering it is what lets sign-in
+ * finish in the app. See apps/web/src/lib/native-auth.ts.
+ */
+export const AUTH_URL_SCHEME = "chat.clickclack.desktop";
+
+/** Every scheme the native projects must claim. */
+export const APP_URL_SCHEMES = [APP_URL_SCHEME, AUTH_URL_SCHEME] as const;
+
 export const DEFAULT_SERVER_URL = "https://app.clickclack.chat";
 export const DEFAULT_APP_ROUTE = "/app";
 export const SERVER_URL_ENV = "CLICKCLACK_SERVER_URL";
@@ -57,23 +68,22 @@ export function normalizeServerURL(input: string): string {
 }
 
 export type MobileServerConfig = {
-  allowNavigation: string[];
   cleartext?: boolean;
   url: string;
 };
 
 /**
- * Resolve the origin the shell should load and the hosts it may navigate to
- * in-app. Anything outside `allowNavigation` is handed to the system browser,
- * which is both the native-feeling behavior and the safe one.
+ * Resolve the origin the shell loads. No `allowNavigation` entry is added: it
+ * would only widen what stays inside the web view, and Capacitor already keeps
+ * the server's own host in-app. Note that the platform check is host-based, not
+ * origin-based, so a second service on the same hostname at another port would
+ * also stay in the web view; docs/mobile.md states that boundary honestly
+ * rather than promising origin isolation.
  */
 export function mobileServerConfig(serverURL: string): MobileServerConfig {
   const origin = normalizeServerURL(serverURL);
   const parsed = new URL(origin);
-  const config: MobileServerConfig = {
-    allowNavigation: [parsed.hostname],
-    url: `${origin}${DEFAULT_APP_ROUTE}`,
-  };
+  const config: MobileServerConfig = { url: `${origin}${DEFAULT_APP_ROUTE}` };
   if (parsed.protocol === "http:") config.cleartext = true;
   return config;
 }

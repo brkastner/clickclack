@@ -25,6 +25,20 @@ type ListenerHandle = { remove?: () => unknown };
 /** Status bar and splash colors; these track --bg in styles/base.css. */
 const STATUS_BAR_BACKGROUND = { dark: "#131419", light: "#f7f3ed" };
 
+/**
+ * Whether the launch URL has been claimed. Capacitor's getLaunchUrl() is a
+ * getter, not a queue: it keeps returning the URL the app was opened with for
+ * the whole process lifetime. Routing it more than once would drag a person
+ * back to the notification's conversation every time the shell is reinstalled,
+ * so it is claimed exactly once per web view.
+ */
+let launchURLClaimed = false;
+
+/** Test seam: forget that the launch URL was claimed. */
+export function resetLaunchURLClaimForTests(): void {
+  launchURLClaimed = false;
+}
+
 export function nativeBridge(): NativeBridge | undefined {
   return typeof window === "undefined" ? undefined : window.Capacitor;
 }
@@ -179,7 +193,9 @@ export function installNativeShell(options: NativeShellOptions): () => void {
   const root = document.documentElement;
   root.setAttribute("data-native-platform", platform);
 
+  let disposed = false;
   const route = (link: unknown) => {
+    if (disposed) return;
     if (typeof link === "string" && link) options.onDeepLink(link);
   };
 
@@ -213,9 +229,12 @@ export function installNativeShell(options: NativeShellOptions): () => void {
     bridge,
   );
 
-  // A cold start from a notification has already consumed its appUrlOpen.
-  const launchURL = pluginMethod(bridge, "App", "getLaunchUrl");
+  // A cold start from a notification has already spent its appUrlOpen event, so
+  // the launch URL is the only way to reach that conversation — but only the
+  // first time, and only while this shell is still the owner.
+  const launchURL = launchURLClaimed ? undefined : pluginMethod(bridge, "App", "getLaunchUrl");
   if (launchURL) {
+    launchURLClaimed = true;
     try {
       void Promise.resolve(launchURL() as Promise<{ url?: unknown } | undefined>)
         .then((result) => route(result?.url))
@@ -226,6 +245,7 @@ export function installNativeShell(options: NativeShellOptions): () => void {
   }
 
   return () => {
+    disposed = true;
     media.removeEventListener("change", syncStatusBar);
     colorModeObserver.disconnect();
     stopDeepLinks();

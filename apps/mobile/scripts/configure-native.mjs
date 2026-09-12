@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { APP_ID, APP_URL_SCHEME } from "../src/contract.ts";
+import { APP_ID, APP_URL_SCHEME, APP_URL_SCHEMES, AUTH_URL_SCHEME } from "../src/contract.ts";
 
 const IOS_URL_NAME = `${APP_ID}.deeplink`;
 
@@ -64,7 +64,20 @@ export function withAndroidDeepLinkIntentFilter(manifestXML, scheme = APP_URL_SC
   return `${head}${filter}${manifestXML.slice(closing)}`;
 }
 
+/**
+ * Register the sign-in callback scheme on Android. The template's filter carries
+ * a single `@string/custom_url_scheme`, so the callback needs a filter of its
+ * own; without it a grant redirect has nothing to open and sign-in dead-ends.
+ */
+export function withAndroidAuthIntentFilter(manifestXML, scheme = AUTH_URL_SCHEME) {
+  return withAndroidDeepLinkIntentFilter(manifestXML, scheme);
+}
+
 /** Add CFBundleURLTypes to the iOS Info.plist, which the template omits. */
+export function withIOSURLSchemes(plistXML, schemes = APP_URL_SCHEMES) {
+  return schemes.reduce((xml, scheme) => withIOSURLScheme(xml, scheme), plistXML);
+}
+
 export function withIOSURLScheme(plistXML, scheme = APP_URL_SCHEME, name = IOS_URL_NAME) {
   if (plistXML.includes(`<string>${scheme}</string>`)) return plistXML;
   const schemesKey = plistXML.indexOf("<key>CFBundleURLSchemes</key>");
@@ -100,11 +113,11 @@ function patch(file, transform, label) {
   const before = fs.readFileSync(file, "utf8");
   const after = transform(before);
   if (after === before) {
-    console.log(`${label}: already registers ${APP_URL_SCHEME}://`);
+    console.log(`${label}: already registers ${APP_URL_SCHEMES.join(", ")}`);
     return true;
   }
   fs.writeFileSync(file, after);
-  console.log(`${label}: registered ${APP_URL_SCHEME}://`);
+  console.log(`${label}: registered ${APP_URL_SCHEMES.join(", ")}`);
   return true;
 }
 
@@ -118,13 +131,13 @@ function main() {
   if (android) {
     patch(
       path.join(root, "android/app/src/main/AndroidManifest.xml"),
-      (xml) => withAndroidDeepLinkIntentFilter(xml),
+      (xml) => withAndroidAuthIntentFilter(withAndroidDeepLinkIntentFilter(xml)),
       "android AndroidManifest.xml",
     );
   }
   const ios = patch(
     path.join(root, "ios/App/App/Info.plist"),
-    (xml) => withIOSURLScheme(xml),
+    (xml) => withIOSURLSchemes(xml),
     "ios Info.plist",
   );
   if (!android && !ios) {

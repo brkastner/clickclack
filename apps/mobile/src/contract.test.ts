@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  APP_URL_SCHEMES,
+  AUTH_URL_SCHEME,
   DEFAULT_SERVER_URL,
   mobileServerConfig,
   normalizeServerURL,
@@ -26,11 +28,17 @@ test("remote servers must use HTTPS, and credentials or extra paths are refused"
   assert.throws(() => normalizeServerURL("   "), /Enter a ClickClack server URL/);
 });
 
-test("the shell opens the chat app and keeps only the server host in-app", () => {
+test("the shell opens the chat app and widens nothing beyond it", () => {
   const config = mobileServerConfig("https://chat.example.com");
   assert.equal(config.url, "https://chat.example.com/app");
-  assert.deepEqual(config.allowNavigation, ["chat.example.com"]);
   assert.equal(config.cleartext, undefined);
+  // An allowNavigation entry would only add hosts that stay inside the web view.
+  assert.ok(!("allowNavigation" in config));
+});
+
+test("both URL schemes are claimed: content deep links and the sign-in callback", () => {
+  assert.deepEqual([...APP_URL_SCHEMES], ["clickclack", "chat.clickclack.desktop"]);
+  assert.equal(AUTH_URL_SCHEME, "chat.clickclack.desktop");
 });
 
 test("loopback development servers opt into cleartext", () => {
