@@ -866,6 +866,23 @@
 
 .channel-subgroup-toggle.profile-source-link {
   text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.channel-subgroup-toggle.profile-source-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.persona-disclosure-caret {
+  position: absolute;
+  right: 36px;
+  bottom: 8px;
+  z-index: 2;
+  color: var(--text-strong);
+  text-shadow: 0 1px 3px var(--panel);
+  pointer-events: none;
 }
 
 .channel-subgroup-toggle.profile-source-link.active {

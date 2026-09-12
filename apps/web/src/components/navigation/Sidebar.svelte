@@ -1,6 +1,7 @@
 <script lang="ts">
   import { DEFAULT_HOME_LINK, type HomeLink } from "../../lib/home-link";
   import Avatar from "../avatar/Avatar.svelte";
+  import { defaultSections, parseSectionState, sectionStorageKey, type SectionState } from "../../lib/sidebar-sections";
   import { directConversationForUser, handleLabel, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
   import { botShelfPreferences, DEFAULT_BOT_SHELF_LIMIT, setBotShelfLimit, setBotShelfOrder } from "../../lib/appearance";
   import { parsePersonaChannelPins, pinnedPersonaChannel, type PersonaChannelPins } from "../../lib/personaNavigation";
@@ -150,48 +151,36 @@
     closeShelfMenu();
   }
 
-  type SectionState = { channels: boolean; directMessages: boolean; archived: boolean };
-  const SECTION_STORAGE_PREFIX = "clickclack:sidebar-sections:v1:";
-  const DEFAULT_SECTION_STATE: SectionState = {
-    channels: true,
-    directMessages: true,
-    archived: true,
-  };
-  let sections = $state<SectionState>({ ...DEFAULT_SECTION_STATE });
-
-  function parseSectionState(value: unknown): SectionState | undefined {
-    if (!value || typeof value !== "object") return undefined;
-    const candidate = value as Record<string, unknown>;
-    if (
-      typeof candidate.channels !== "boolean"
-      || typeof candidate.directMessages !== "boolean"
-    ) return undefined;
-    return {
-      channels: candidate.channels,
-      directMessages: candidate.directMessages,
-      archived: typeof candidate.archived === "boolean" ? candidate.archived : true,
-    };
-  }
+  let sections = $state<SectionState>(defaultSections());
 
   function loadSections(id: string): SectionState {
-    if (!id) return { ...DEFAULT_SECTION_STATE };
+    if (!id) return defaultSections();
     try {
-      const raw = window.localStorage.getItem(`${SECTION_STORAGE_PREFIX}${id}`);
-      if (!raw) return { ...DEFAULT_SECTION_STATE };
-      return parseSectionState(JSON.parse(raw)) ?? { ...DEFAULT_SECTION_STATE };
+      return parseSectionState(window.localStorage.getItem(sectionStorageKey(id)));
     } catch {
-      return { ...DEFAULT_SECTION_STATE };
+      return defaultSections();
     }
   }
 
-  function toggleSection(section: keyof SectionState) {
-    sections = { ...sections, [section]: !sections[section] };
+  function saveSections(next: SectionState) {
+    sections = next;
     if (!workspaceID) return;
     try {
-      window.localStorage.setItem(`${SECTION_STORAGE_PREFIX}${workspaceID}`, JSON.stringify(sections));
+      window.localStorage.setItem(sectionStorageKey(workspaceID), JSON.stringify(next));
     } catch {
       // Storage is an enhancement; disclosures still work when it is unavailable.
     }
+  }
+
+  function toggleSection(section: "channels" | "directMessages" | "archived") {
+    saveSections({ ...sections, [section]: !sections[section] });
+  }
+
+  function togglePersona(personaID: string) {
+    saveSections({
+      ...sections,
+      personas: { ...sections.personas, [personaID]: !(sections.personas[personaID] ?? true) },
+    });
   }
 
   $effect(() => {
@@ -479,6 +468,8 @@
     <ChannelList
       {workspaceID}
       expanded={sections.channels}
+      personaExpansion={sections.personas}
+      onTogglePersona={togglePersona}
       channels={orderedChannels}
       profiles={orderedProfileShortcuts}
       onReorderProfiles={savePersonaOrder}
@@ -488,10 +479,7 @@
       {selectedDirectID}
       {workingConversationIDs}
       {hrefForChannel}
-      {hrefForDirect}
       {onSelectChannel}
-      {onSelectDirect}
-      {onStartDirect}
       {onCreateChannel}
       onToggle={() => toggleSection("channels")}
       onReorder={saveChannelOrder}
@@ -528,10 +516,7 @@
       {selectedDirectID}
       {workingConversationIDs}
       {hrefForChannel}
-      {hrefForDirect}
       {onSelectChannel}
-      {onSelectDirect}
-      {onStartDirect}
       {onCreateChannel}
       onToggle={() => toggleSection("archived")}
       onReorder={saveChannelOrder}

@@ -216,6 +216,54 @@ exact implementation steps, regression coverage, build commands, and later
 Electron verification. Deployment and live verification remain separate workflow
 stages; this specification does not claim either has passed.
 
+### Sidebar hero header disclosure (KAS-890)
+
+**Status: Selected for implementation. This documentation change does not implement or deploy it.**
+
+Persona hero headers must independently expand or collapse their owned channel
+lists instead of navigating to or starting a persona DM. Replace only the header
+link with a native `type="button"` disclosure, with a visible caret,
+`aria-expanded`, and `aria-controls` targeting a stable per-persona list ID.
+Mouse, Enter, and Space must toggle it. Collapsing hides the entire owned list,
+including selected and unread rows, and removes hidden rows from the tab order.
+It must not change the selected conversation, mark messages read, or invoke DM
+selection or creation. Empty sections remain toggleable. This is distinct from
+the existing top-level Channels/DM priority-row disclosure behavior, which stays
+unchanged.
+
+Extend `Sidebar.svelte`'s workspace-scoped `clickclack:sidebar-sections:v1`
+persistence with an optional expansion map keyed by `bot_user_id`. Preserve the
+existing channels/directMessages/archived flags and old stored values. Missing
+persona entries default to expanded. Malformed storage falls back safely, and
+storage failures must not prevent disclosure. Pass the map and toggle callback
+to the active `ChannelList`. Preferences must survive reloads and reordering by
+stable persona identity and remain isolated by workspace.
+
+Keep the sibling `+` action separate: it creates a named channel assigned to the
+correct profile without toggling disclosure. Named channel rows keep their
+navigation. Preserve unread summary badges, channel counts, hero geometry and
+scrim, the drag handle, ordering, assignment drop targets, other DM entry points,
+and existing channel pinning. Remove only `ChannelList` props/callbacks made
+unused by replacing the header navigation. Limit CSS changes to button reset,
+focus, and caret placement. The previous hero zoom/fading fix is deployed and
+owner accepted; preserve it. The preceding rendering plan is a separate record,
+not work to repeat for this request.
+
+Scope is ClickClack only. Do not delete or migrate DMs, remove other DM entry
+points, or change backend ownership/routing. KAS-891 section context-menu pinning
+and KAS-892 section sorting by latest owned-channel message remain backlog work.
+
+The [selected implementation plan](docs/drafts/sidebar-hero-disclosure.md)
+preserves the exact implementation steps and validation. Add focused persistence
+tests and isolated Electron coverage mounting the real Sidebar with synthetic
+data and callback instrumentation. Cover keyboard and mouse disclosure, hidden
+row focus, existing/no DM callbacks, empty groups, persistence and storage
+failures, workspace switching, reordering, separate creation, navigation, and
+preserved DM/pinning paths. Check caret, focus, images and controls in both themes
+and sidebar sizes. Run web tests, typecheck, scoped lint, the canonical build to
+regenerate embedded assets, and the existing Electron hero regression. Do not
+use live conversations for these tests. Deployment remains a later stage.
+
 ## API
 
 Contract: OpenAPI first.
