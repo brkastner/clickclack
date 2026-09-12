@@ -4,9 +4,11 @@
  * the shell, and the UI.
  */
 
-import { api, readableAPIError } from "./api";
-import { invokeNative, isNativeMobile } from "./native";
-import { createPKCEPair, nativeOAuthGrantCode, nativeOAuthStartPath } from "./native-auth";
+// Explicit extensions keep this module resolvable by `node --test`, so the
+// coordinator itself is covered and not just its pure helpers.
+import { api, apiURL, readableAPIError } from "./api.ts";
+import { invokeNative, isNativeMobile, requireNative } from "./native.ts";
+import { createPKCEPair, nativeOAuthGrantCode, nativeOAuthStartPath } from "./native-auth.ts";
 
 export type NativeSignInStatus =
   | { kind: "idle" }
@@ -49,8 +51,10 @@ export async function beginNativeGitHubSignIn(): Promise<void> {
   try {
     const { challenge, verifier } = await createPKCEPair();
     pendingVerifier = verifier;
-    const url = new URL(nativeOAuthStartPath(challenge), window.location.origin).toString();
-    invokeNative("Browser", "open", { presentationStyle: "popover", url });
+    // Resolve through apiURL: a deployment may serve its API from another
+    // origin or under a base path, and sign-in has to start at that server.
+    const url = new URL(apiURL(nativeOAuthStartPath(challenge)), window.location.origin).toString();
+    await requireNative("Browser", "open", { presentationStyle: "popover", url });
     publish({ kind: "waiting" });
   } catch (error) {
     pendingVerifier = null;

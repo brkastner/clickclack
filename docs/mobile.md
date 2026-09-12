@@ -167,13 +167,23 @@ its own. Other sites, and links carrying another scheme, are handed to the syste
 browser instead of being rendered in the app's web view, so remote content cannot
 navigate the app somewhere that would still look like ClickClack.
 
-One limit of that boundary is worth stating precisely, because it is the
-platform's and not something the shell's configuration can tighten: Capacitor
-decides in-app navigation by **host**, not by full origin. A second HTTPS service
-on the same hostname at a different port would therefore also stay inside the web
-view, where the Capacitor bridge is injected. If you host ClickClack on a name
-you also use for other services on other ports, give ClickClack its own
-hostname.
+Capacitor decides in-app navigation by comparing the app URL's scheme and host
+and **not its port**, so on its own a second HTTPS service on the same hostname
+at another port would stay inside the web view where the bridge is injected. The
+Android project closes that gap: `apps/mobile/native/android/MainActivity.java`
+installs a web view client that compares the full origin — scheme, host, and
+port, with default ports resolved — for main-frame navigations and hands
+anything else to the system browser. It is tracked here and installed into the
+generated project by `scripts/configure-native.mjs`, bound to the origin the
+build was configured with, so the native projects stay disposable.
+
+Subframes and same-origin navigations keep Capacitor's own policy, which plugins
+take part in, and the system-browser sign-in flow is unaffected because it never
+navigates the web view.
+
+The guard is Android-specific by design: it addresses the host comparison in
+Capacitor's Android `Bridge.launchIntent`, and iOS decides differently. Do not
+assume the same reasoning transfers.
 
 The shell exposes no bridge of its own. The only native surfaces the web app can
 reach are the Capacitor plugins the app declares — app lifecycle and deep links,
@@ -189,7 +199,12 @@ configured origin, exactly as they do in a browser.
 
 The shell requires a reachable server; there is no offline mode, and a build
 without a server URL shows a short page saying so. Sign in with OpenClaw ID is
-unavailable in the app until the server grows a native-client handoff for it. Notifications are delivered
+unavailable in the app until the server grows a native-client handoff for it.
+
+The Android origin guard is Java that only compiles as part of an Android build.
+Its rendering and placement are covered by tests, and a test asserts it still
+carries the port comparison it exists for, but the compiled behaviour is first
+exercised when you build the Android project. Notifications are delivered
 by Pushover rather than by APNs or FCM, so the app itself registers no push
 token and the operating system's own notification settings for ClickClack cover
 only what the app raises while running.

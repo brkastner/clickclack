@@ -83,6 +83,23 @@ export function invokeNative(
   }
 }
 
+/**
+ * Call a plugin method and surface whatever goes wrong. Use this for native
+ * operations the app genuinely depends on: sign-in cannot quietly degrade to
+ * "best effort" and still tell someone to finish in a browser that never
+ * opened. `invokeNative` stays the right call for decoration.
+ */
+export async function requireNative(
+  plugin: string,
+  method: string,
+  options?: Record<string, unknown>,
+  bridge = nativeBridge(),
+): Promise<unknown> {
+  const fn = pluginMethod(bridge, plugin, method);
+  if (!fn) throw new Error(`${plugin}.${method} is not available in this app`);
+  return await fn(options);
+}
+
 /** Subscribe to a plugin event and return an unsubscribe that is always safe to call. */
 export function listenNative(
   plugin: string,

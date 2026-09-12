@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+  androidActivityPath,
   androidManifestHasDeepLink,
+  renderAndroidActivity,
   withAndroidAuthIntentFilter,
   withIOSURLSchemes,
   withAndroidCustomURLScheme,
@@ -133,4 +138,45 @@ test("the content and auth filters coexist without duplicating either", () => {
   assert.match(patched, /<data android:scheme="chat\.clickclack\.desktop" \/>/);
   assert.equal((patched.match(/android.intent.action.VIEW/g) ?? []).length, 2);
   assert.equal(withAndroidAuthIntentFilter(withAndroidDeepLinkIntentFilter(patched)), patched);
+});
+
+const TEMPLATE = fs.readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "../native/android/MainActivity.java"),
+  "utf8",
+);
+
+test("the activity path follows the app id", () => {
+  assert.equal(
+    androidActivityPath("chat.clickclack.mobile"),
+    "android/app/src/main/java/chat/clickclack/mobile/MainActivity.java",
+  );
+});
+
+test("rendering binds the activity to one package and origin", () => {
+  const rendered = renderAndroidActivity(TEMPLATE, "https://chat.example.com:8443");
+  assert.match(rendered, /^package chat\.clickclack\.mobile;$/m);
+  assert.match(rendered, /ALLOWED_ORIGIN = "https:\/\/chat\.example\.com:8443"/);
+  assert.ok(!rendered.includes("__PACKAGE__"));
+  assert.ok(!rendered.includes("__ALLOWED_ORIGIN__"));
+  // Rendering is pure, so reinstalling the same origin is a no-op.
+  assert.equal(renderAndroidActivity(TEMPLATE, "https://chat.example.com:8443"), rendered);
+});
+
+test("a template that lost its placeholders or package is rejected", () => {
+  assert.throws(
+    () => renderAndroidActivity("class MainActivity {}", "https://chat.example.com"),
+    /package declaration/,
+  );
+});
+
+test("the shipped activity closes the port gap it exists for", () => {
+  // Capacitor compares scheme and host only. If a future edit drops the port
+  // comparison or stops scoping to the main frame, the guard is back to being
+  // the upstream behaviour it was written to tighten.
+  assert.match(TEMPLATE, /effectivePort\(url\) == effectivePort\(allowed\)/);
+  assert.match(TEMPLATE, /request\.isForMainFrame\(\)/);
+  assert.match(TEMPLATE, /equalsIgnoreCase\(allowed\.getScheme\(\)\)/);
+  assert.match(TEMPLATE, /equalsIgnoreCase\(allowed\.getHost\(\)\)/);
+  // Default ports must resolve so https://host and https://host:443 agree.
+  assert.match(TEMPLATE, /"http"\.equalsIgnoreCase\(url\.getScheme\(\)\) \? 80 : 443/);
 });

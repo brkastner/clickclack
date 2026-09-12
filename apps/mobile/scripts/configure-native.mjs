@@ -11,7 +11,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { APP_ID, APP_URL_SCHEME, APP_URL_SCHEMES, AUTH_URL_SCHEME } from "../src/contract.ts";
+import {
+  APP_ID,
+  APP_URL_SCHEME,
+  APP_URL_SCHEMES,
+  AUTH_URL_SCHEME,
+  normalizeServerURL,
+  serverURLFromEnv,
+} from "../src/contract.ts";
 
 const IOS_URL_NAME = `${APP_ID}.deeplink`;
 
@@ -108,6 +115,29 @@ export function withIOSURLScheme(plistXML, scheme = APP_URL_SCHEME, name = IOS_U
   return `${plistXML.slice(0, closing)}${block}${plistXML.slice(closing)}`;
 }
 
+/** Where the generated project keeps the activity, derived from the app id. */
+export function androidActivityPath(appID = APP_ID) {
+  return `android/app/src/main/java/${appID.split(".").join("/")}/MainActivity.java`;
+}
+
+/**
+ * Render the tracked activity for one server origin. Capacitor compares only
+ * scheme and host when deciding what stays in the web view, so the generated
+ * activity is replaced with one that also compares the port.
+ */
+export function renderAndroidActivity(template, origin, appID = APP_ID) {
+  const rendered = template
+    .replaceAll("__PACKAGE__", appID)
+    .replaceAll("__ALLOWED_ORIGIN__", origin);
+  if (rendered.includes("__PACKAGE__") || rendered.includes("__ALLOWED_ORIGIN__")) {
+    throw new Error("MainActivity template still has unsubstituted placeholders");
+  }
+  if (!/^package [\w.]+;$/m.test(rendered)) {
+    throw new Error("MainActivity template lost its package declaration");
+  }
+  return rendered;
+}
+
 function patch(file, transform, label) {
   if (!fs.existsSync(file)) return false;
   const before = fs.readFileSync(file, "utf8");
@@ -129,6 +159,18 @@ function main() {
     "android strings.xml",
   );
   if (android) {
+    const template = path.join(root, "native/android/MainActivity.java");
+    const activity = path.join(root, androidActivityPath());
+    if (fs.existsSync(template) && fs.existsSync(activity)) {
+      const origin = normalizeServerURL(serverURLFromEnv(process.env));
+      const rendered = renderAndroidActivity(fs.readFileSync(template, "utf8"), origin);
+      if (fs.readFileSync(activity, "utf8") === rendered) {
+        console.log(`android MainActivity.java: already bound to ${origin}`);
+      } else {
+        fs.writeFileSync(activity, rendered);
+        console.log(`android MainActivity.java: bound to ${origin}`);
+      }
+    }
     patch(
       path.join(root, "android/app/src/main/AndroidManifest.xml"),
       (xml) => withAndroidAuthIntentFilter(withAndroidDeepLinkIntentFilter(xml)),
