@@ -1,28 +1,60 @@
 <script lang="ts">
- import { tick } from "svelte";
+ import { onDestroy, tick, untrack } from "svelte";
  import { apiWithTimeout, apiURL } from "../../lib/api";
  import { createNotepadAvailability } from "../../lib/chat/notepad-availability";
  import { watchNotepad, type NotepadSnapshot } from "../../lib/chat/notepad";
  import NotepadCard from "./NotepadCard.svelte";
  type Target = { workspaceID: string; channelID: string; anchor: HTMLElement } | null;
  let { target }: { target: Target } = $props();
- let active = $state<Target>(null); let available = $state(false); let snapshot = $state<NotepadSnapshot>({ state: "loading", card: null }); let closeTimer: ReturnType<typeof setTimeout> | undefined;
+ let active = $state<Target>(null);
+ let available = $state(false);
+ let snapshot = $state<NotepadSnapshot>({ state: "loading", card: null });
+ let previewElement = $state<HTMLDivElement>();
+ let closeTimer: ReturnType<typeof setTimeout> | undefined;
  const availability = createNotepadAvailability({ read: (path, signal) => apiWithTimeout<{ available: boolean }>(path, { signal }) }, (value) => available = value);
  const path = $derived(active ? `/api/channels/${encodeURIComponent(active.channelID)}/notepad` : "");
  const availabilityPath = $derived(active ? `${path}/availability` : null);
  let position = $state({ left: 8, top: 8 });
- function cancelClose() { clearTimeout(closeTimer); }
- function closeSoon() { clearTimeout(closeTimer); closeTimer = setTimeout(() => { active = null; }, 160); }
- function place() { if (!active) return; const rect = active.anchor.getBoundingClientRect(); const width = Math.min(432, window.innerWidth - 16); position = { left: Math.max(8, Math.min(rect.right + 8, window.innerWidth - width - 8)), top: Math.max(8, Math.min(rect.top, window.innerHeight - 80)) }; }
- function escape(event: KeyboardEvent) { if (event.key === "Escape" && active) { active = null; event.preventDefault(); } }
- $effect(() => { const next = target; cancelClose(); if (!next) { closeSoon(); return; } if (!active || active.workspaceID !== next.workspaceID || active.channelID !== next.channelID) { active = next; available = false; snapshot = { state: "loading", card: null }; } else active = next; place(); });
+ function cancelClose() { clearTimeout(closeTimer); closeTimer = undefined; }
+ function closeSoon() { cancelClose(); closeTimer = setTimeout(() => { active = null; closeTimer = undefined; }, 160); }
+ function place() {
+  if (!active || !previewElement) return;
+  const anchor = active.anchor.getBoundingClientRect();
+  const card = previewElement.getBoundingClientRect();
+  position = {
+   left: Math.max(8, Math.min(anchor.right + 8, window.innerWidth - card.width - 8)),
+   top: Math.max(8, Math.min(anchor.top, window.innerHeight - card.height - 8)),
+  };
+ }
+ function escape(event: KeyboardEvent) { if (event.key === "Escape" && active) { cancelClose(); active = null; event.preventDefault(); } }
+ // This effect intentionally tracks the parent target only. Reading `active`
+ // untracked prevents internal closes (Escape/timer) from restoring a stale target.
+ $effect(() => {
+  const next = target;
+  const current = untrack(() => active);
+  cancelClose();
+  if (!next) { if (current) closeSoon(); return; }
+  if (!current || current.workspaceID !== next.workspaceID || current.channelID !== next.channelID) {
+   active = next; available = false; snapshot = { state: "loading", card: null };
+  } else active = next;
+ });
  $effect(() => { availability.select(availabilityPath); return () => availability.dispose(); });
  $effect(() => { if (!available || !path) return; return watchNotepad(path, { read: (target, signal) => apiWithTimeout<NotepadSnapshot>(target, { signal }), connect: (target) => { const url = new URL(apiURL(target), window.location.href); url.protocol = url.protocol === "https:" ? "wss:" : "ws:"; return new WebSocket(url); } }, (value) => snapshot = value); });
- $effect(() => { if (!active) return; const update = () => place(); window.addEventListener("resize", update); window.addEventListener("scroll", update, true); void tick().then(place); return () => { window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); }; });
+ $effect(() => {
+  if (!active || !available || !previewElement) return;
+  const update = () => place();
+  const resize = new ResizeObserver(update);
+  resize.observe(previewElement);
+  window.addEventListener("resize", update);
+  window.addEventListener("scroll", update, true);
+  void tick().then(update);
+  return () => { resize.disconnect(); window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
+ });
+ onDestroy(() => cancelClose());
 </script>
 <svelte:window onkeydown={escape} />
 {#if active && available}
- <div class="channel-notepad-preview" role="group" aria-label="Agent notepad preview" style={`left:${position.left}px;top:${position.top}px`} onpointerenter={cancelClose} onpointerleave={closeSoon} onfocusin={cancelClose} onfocusout={closeSoon}>
+ <div bind:this={previewElement} class="channel-notepad-preview" role="group" aria-label="Agent notepad preview" style={`left:${position.left}px;top:${position.top}px`} onpointerenter={cancelClose} onpointerleave={closeSoon} onfocusin={cancelClose} onfocusout={closeSoon}>
   <NotepadCard id={`agent-notepad-preview-${active.workspaceID}-${active.channelID}`} {snapshot} />
  </div>
 {/if}
