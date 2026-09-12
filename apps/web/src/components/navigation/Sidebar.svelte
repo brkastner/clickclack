@@ -467,6 +467,9 @@
 
     <ChannelList
       {workspaceID}
+      currentUserID={currentUser?.id}
+      {onSelectDirect}
+      {onStartDirect}
       expanded={sections.channels}
       personaExpansion={sections.personas}
       onTogglePersona={togglePersona}
@@ -505,6 +508,9 @@
 
     <ChannelList
       {workspaceID}
+      currentUserID={currentUser?.id}
+      {onSelectDirect}
+      {onStartDirect}
       variant="archived"
       expanded={sections.archived}
       channels={orderedChannels}

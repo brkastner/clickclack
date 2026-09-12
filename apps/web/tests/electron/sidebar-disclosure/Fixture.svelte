@@ -11,14 +11,16 @@
   const people = [person("bot_one", "Alpha"), person("bot_two", "Beta"), person("bot_empty", "Empty")];
   const currentUser: User = { ...person("human", "Owner"), kind: "human" };
   const profiles = people.map(p => ({ ...p, bot_user_id: p.id, unread_count: 0 }));
-  const channels: Channel[] = [
+  let channels = $state<Channel[]>([
     { id: "chn_one", route_id: "r_one", workspace_id: "wsp_one", name: "first", kind: "public", created_at: "2026-01-01", external_managed: false, bot_assignments: [{ channel_id: "chn_one", bot_user_id: "bot_one" }] },
     { id: "chn_two", route_id: "r_two", workspace_id: "wsp_one", name: "second", kind: "public", created_at: "2026-01-01", external_managed: false, unread_count: 2, bot_assignments: [{ channel_id: "chn_two", bot_user_id: "bot_two" }] },
-  ];
+  ]);
   const selectChannel = (id: string) => { events.push(`channel:${id}`); selectedChannelID = id; selectedDirectID = ""; };
   const selectDirect = (id: string) => { events.push(`direct:${id}`); selectedDirectID = id; };
 </script>
 <div class="fixture-controls">
+  <button onclick={() => channels = channels.map(c => c.id === "chn_one" ? { ...c, archived_at: c.archived_at ? undefined : "2026-01-02" } : c)}>Toggle Alpha channel archive</button>
+  <button onclick={() => events = []}>Clear events</button>
   <button onclick={() => workspaceID = workspaceID === "wsp_one" ? "wsp_two" : "wsp_one"}>Switch workspace</button>
   <button onclick={() => resolvedColorMode.set("light")}>Light</button>
   <button onclick={() => resolvedColorMode.set("dark")}>Dark</button>
