@@ -103,7 +103,24 @@ test("local context-menu action confirms; redirects and subframes cannot reveal"
   );
   assert.equal(prevented, true);
   assert.equal(d.confirmations.length, 0);
-  d.main.applicationContents.emit("context-menu", {}, { linkURL: A + target });
+  d.main.applicationContents.emit(
+    "context-menu",
+    {},
+    {
+      linkURL: A + target,
+      frame: { url: A + "/app" },
+    },
+  );
+  assert.equal(d.contextMenus.length, 0);
+  assert.equal(d.confirmations.length, 0);
+  d.main.applicationContents.emit(
+    "context-menu",
+    {},
+    {
+      linkURL: A + target,
+      frame: d.main.applicationContents.mainFrame,
+    },
+  );
   const action = d.contextMenus.at(-1).find((item) => item.label === "Show Local File in Folder…");
   assert(action);
   action.click();

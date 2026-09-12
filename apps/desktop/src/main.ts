@@ -427,12 +427,17 @@ function configureWebContents(window: BaseWindow, contents: WebContents) {
         { role: "selectAll" },
       );
     }
-    if (params.linkURL && localFilePath(params.linkURL, settings.serverUrl)) {
-      if (template.length > 0) template.push({ type: "separator" });
-      template.push({
-        label: "Show Local File in Folder…",
-        click: () => void revealLocalFile(contents, params.linkURL),
-      });
+    const localLink = localFilePath(params.linkURL, settings.serverUrl);
+    if (localLink) {
+      // Context-menu data originates in a frame, so it needs the same
+      // main-frame authority check as the IPC local-file action.
+      if (params.frame === contents.mainFrame) {
+        if (template.length > 0) template.push({ type: "separator" });
+        template.push({
+          label: "Show Local File in Folder…",
+          click: () => void revealLocalFile(contents, params.linkURL),
+        });
+      }
     } else if (params.linkURL && isExternalURL(params.linkURL)) {
       if (template.length > 0) template.push({ type: "separator" });
       template.push({
