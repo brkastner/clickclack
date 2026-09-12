@@ -1,1 +1,0 @@
-import{G as e,J as t,Tt as n,W as r,Y as i,it as a,tt as o}from"./DQxXMSoL.js";function s(s,c){var l=r,u=e,d=s();let f=n(d,n=>{var c=d!==s(),f,p=e,m=r;i(u),t(l);try{f=o(()=>{a(()=>{let e=s();c&&n(e)})})}finally{i(p),t(m)}return c=!0,f});return c?{set:c,update:e=>c(e(s())),subscribe:f.subscribe}:{subscribe:f.subscribe}}export{s as t};

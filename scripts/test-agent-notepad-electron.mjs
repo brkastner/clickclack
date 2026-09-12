@@ -24,16 +24,16 @@ let app;
 try {
   app = await electron.launch({
     executablePath: desktopRequire("electron"),
-    args: ["--no-sandbox", `${root}/main.cjs`],
+    args: ["--ozone-platform=x11", "--no-sandbox", `${root}/main.cjs`],
     env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: "true" },
   });
   const page = await app.firstWindow();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(server.resolvedUrls.local[0]);
-  const summary = page.locator("summary");
+  const trigger = page.getByRole("button", { name: /Agent notepad/ });
   await expect(page.getByRole("heading", { name: "Durable notes" })).toHaveCount(0);
-  await summary.focus();
+  await trigger.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Durable notes" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Progress steps" }).locator("li")).toHaveCount(3);
@@ -67,7 +67,11 @@ try {
       if (theme === "dark") await page.getByRole("button", { name: "Toggle theme" }).click();
     }
   }
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("heading", { name: "Durable notes" })).toHaveCount(0);
+  await expect(trigger).toBeFocused();
   await page.getByRole("button", { name: "Remote clear" }).click();
+  await trigger.click();
   await expect(page.getByRole("status")).toHaveText("No notepad yet.");
   await page.getByRole("button", { name: "Remote replace" }).click();
   await expect(page.getByRole("heading", { name: "Updated notes" })).toBeVisible();
@@ -79,7 +83,7 @@ try {
   await expect(page.getByRole("textbox", { name: "Composer draft" })).toHaveValue(
     "Unsent fixture draft",
   );
-  await summary.focus();
+  await trigger.focus();
   await page.keyboard.press("Space");
   await expect(page.getByRole("heading", { name: "Updated notes" })).toBeVisible();
   assert.deepEqual(errors, []);

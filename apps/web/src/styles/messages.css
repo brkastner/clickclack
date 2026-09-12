@@ -481,7 +481,7 @@
   right: 0;
   height: 20px;
   margin: 0;
-  padding: 0 22px;
+  padding: 0 154px 0 22px;
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -496,6 +496,12 @@
   margin: 0;
   opacity: 1;
   transform: none;
+}
+
+@media (max-width: 520px) {
+  .composer-dock .agent-responding {
+    padding-right: 132px;
+  }
 }
 
 .typing-indicator__dots {

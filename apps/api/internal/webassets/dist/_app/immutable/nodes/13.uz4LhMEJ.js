@@ -1,0 +1,1 @@
+import{n as e}from"../chunks/hePW80VL.js";import{i as t,t as n}from"../chunks/CM3AS5W3.js";import{n as r}from"../chunks/BelWyZaW.js";var i=e({load:()=>a,prerender:()=>!1,ssr:()=>!1});function a({params:e}){throw r(307,t(e.workspaceID,n))}export{i as universal};

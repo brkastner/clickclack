@@ -5428,12 +5428,6 @@
       />
     {/if}
 
-    {#if notepadAvailable && (selectedDirectID || selectedChannelID)}
-      {#key `${selectedWorkspaceID}:${selectedDirectID}:${selectedChannelID}`}
-        <AgentNotepad path={selectedDirectID ? `/api/dms/${encodeURIComponent(selectedDirectID)}/notepad` : `/api/channels/${encodeURIComponent(selectedChannelID)}/notepad`} />
-      {/key}
-    {/if}
-
     {#if activeTopic}
       <div class="topic-filter" role="status">
         <span>Showing topic <strong>{activeTopic.name}</strong></span>
@@ -5505,6 +5499,12 @@
     <TypingIndicator entries={typingEntries} currentUserID={user?.id} />
 
     <div class="composer-dock">
+    {#if notepadAvailable && (selectedDirectID || selectedChannelID)}
+      {#key `${selectedWorkspaceID}:${selectedDirectID}:${selectedChannelID}`}
+        <AgentNotepad path={selectedDirectID ? `/api/dms/${encodeURIComponent(selectedDirectID)}/notepad` : `/api/channels/${encodeURIComponent(selectedChannelID)}/notepad`} />
+      {/key}
+    {/if}
+
     <AgentResponding
       active={agentResponding && $threadView.root === null}
       agentNames={activeRespondingAgentNames}

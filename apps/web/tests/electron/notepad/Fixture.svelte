@@ -29,9 +29,12 @@
   <button onclick={disconnect}>Disconnect</button>
  </nav>
  <main>
-  {#key target}<AgentNotepad path={`/fixture/${target}`} {dependencies}/>{/key}
-  <article><p>Conversation messages remain visible below the notepad.</p><p>The panel scrolls independently without covering the composer.</p></article>
-  <textarea aria-label="Composer draft" bind:value={draft} placeholder="Write a message…"></textarea>
+  <article><p>Conversation messages remain visible above the composer.</p><p>The notepad floats above the composer without changing the message list.</p></article>
+  <div class="composer-dock">
+   {#key target}<AgentNotepad path={`/fixture/${target}`} {dependencies}/>{/key}
+   <p class="responding">kai is responding…</p>
+   <textarea aria-label="Composer draft" bind:value={draft} placeholder="Write a message…"></textarea>
+  </div>
  </main>
 </div>
 <style>
@@ -41,5 +44,6 @@
  header,nav { padding:0.5rem 1rem; } h1 { font-size:1.25rem; } nav { display:flex; flex-wrap:wrap; gap:0.5rem; }
  button { background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:5px; padding:0.5rem; }
  main { display:flex; flex-direction:column; min-height:0; flex:1; } article { padding:1rem; flex:1; overflow:auto; }
- textarea { margin:1rem; min-height:5rem; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:0.6rem; }
+ .composer-dock { position:relative; padding-top:20px; } .responding { margin:0; padding:1px 154px 1px 1rem; color:var(--text); font-size:12px; height:20px; box-sizing:border-box; }
+ textarea { display:block; box-sizing:border-box; width:calc(100% - 2rem); margin:1rem; min-height:5rem; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:0.6rem; }
 </style>
