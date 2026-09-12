@@ -46,13 +46,14 @@ The gateway's `sessions.messages.subscribe` response resolves canonical session 
 
 ## Transport and lifecycle
 
+- `GET /api/channels/{channel_id}/notepad/availability` and `GET /api/dms/{conversation_id}/notepad/availability` authorize the exact conversation and return only `{ available: boolean }` with `Cache-Control: no-store`. They check server-owned bindings without contacting the gateway or exposing routing identities. The UI hides the entry until availability is confirmed for the current conversation and rejects stale checks after switching targets.
 - `GET /api/channels/{channel_id}/notepad` and `GET /api/dms/{conversation_id}/notepad` return `{ state, card }` with `Cache-Control: no-store`. A ready result with `card: null` means there is no card.
 - The corresponding `/notepad/watch` endpoints upgrade to an authenticated WebSocket using the same cookie or `clickclack.bearer.TOKEN` subprotocol and Origin checks as the existing realtime transport. They require `realtime:read` in addition to read access. A successful watch sends `{ type: "notepad.changed", state: "ready" }`; every such notice requires a refetch. Notices have no card content or replay cursor. Closing the socket unwatches.
-- Both paths require `messages:read`, `dms:read` for DMs, and current conversation/workspace access. Reads recheck access after gateway work. Watch sends and the idle recheck revalidate exact credentials, refreshed scopes and current membership. Revocation closes the watch and releases its gateway connection.
+- Availability, read and watch paths require `messages:read`, `dms:read` for DMs, and current conversation/workspace access. Reads recheck access after gateway work. Watch sends and the idle recheck revalidate exact credentials, refreshed scopes and current membership. Revocation closes the watch and releases its gateway connection.
 - Each read/watch owns one gateway connection and one captured binding. There is no shared card cache or database projection. Gateway subscriptions are released on connection close. Separate scoped watch sockets do not alter the chat realtime queue or composer transport.
 - The adapter requires advertised `progressCard.get`, `sessions.messages.subscribe`, `sessions.messages.unsubscribe` and `progressCard.changed`. It subscribes before reading and checks participation through `progressCard.get`. The gateway's subscription and participation checks are distinct. Only matching progress invalidations are forwarded. The adapter ignores unrelated event contents, coalesces pending invalidations and detects sequence gaps.
 - The panel fetches after the watch is established and after reconnect. Changes during a read retire its response and queue a trailing read. Closing or switching the panel aborts outstanding requests. Invalidated/disconnected content is removed rather than shown as current. A fresh null result clears the panel, even after missed events or a revision reset.
-- Gateway heartbeat loss and request deadlines become unavailable/disconnected states. The browser reconnects with bounded exponential delay. Unsupported, unmapped and denied states stop retries until the panel is reopened. Pi-only and unbound conversations show an explicit unavailable mapping explanation on opening.
+- Gateway heartbeat loss and request deadlines become unavailable/disconnected states. The browser reconnects with bounded exponential delay. Unsupported, unmapped and denied states stop retries until the panel is reopened. Pi-only and unbound conversations do not render the notepad entry. Authoritative `unavailable` responses clear the card and retain retry behavior, separately from browser transport disconnection.
 
 Markdown uses the same DOMPurify/marked rendering path as messages. Progress steps display pending, in-progress and completed states. Native disclosure keyboard controls, independent content scrolling and bounded height preserve room for chat and the composer in both themes.
 
@@ -76,12 +77,13 @@ From the prepared ClickClack checkout:
 go test -race ./apps/api/internal/notepad/... ./apps/api/internal/config ./apps/api/internal/httpapi -run 'Test(Gateway|ParseCard|NormalizeOpenClaw|Notepad)' -count=1
 pnpm --filter @clickclack/web exec node --test src/lib/notepad.test.ts
 pnpm --filter @clickclack/web typecheck
-node scripts/test-agent-notepad-electron.mjs
 pnpm check
 pnpm build
 git diff --check
 ```
 
-The isolated Electron fixture mounts the real panel, verifies sanitized markdown, structured and markdown-only cards, clearing, reconnect, keyboard disclosure and preservation of a synthetic composer draft. Captures are written under `test-results/notepad/` at desktop and narrow widths in light/dark themes. This is fixture evidence, not a live conversation or full ChatApp interaction proof. Existing repository chat, composer, attachment, persona and workflow tests remain part of `pnpm check`.
+Run `node scripts/test-agent-notepad-electron.mjs` only inside an isolated virtual display or hidden workspace that cannot affect the active desktop. Do not launch it directly on the user's display or fall back to visible windows. On Linux, ensure Electron uses the isolated X11 display rather than inheriting the live Wayland session.
+
+The isolated Electron fixture mounts the real panel, verifies sanitized markdown, structured and markdown-only cards, clearing, reconnect, keyboard disclosure and preservation of a synthetic composer draft. Captures are written under `test-results/notepad/` at desktop and narrow widths in light/dark themes. This is fixture evidence, not a live conversation or full ChatApp interaction proof. The availability controller has unit coverage for bound/unbound targets and stale responses; the conditional ChatApp entry mount has not been verified in an Electron fixture. Existing repository chat, composer, attachment, persona and workflow tests remain part of `pnpm check`.
 
 Activation requires separate authorization to install the built ClickClack artifact and supply the private configuration. Nothing in this guide authorizes deployment, service restarts, live configuration changes, publishing or merging. The selected implementation contract remains in [the plan](../drafts/agent-notepad.md) and [SPEC.md](../../SPEC.md#agent-notepad-kas-893).
