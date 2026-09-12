@@ -21,10 +21,9 @@
     selectedDirectID: string;
     workingConversationIDs: Set<string>;
     hrefForChannel: (channelID: string) => string;
-    hrefForDirect: (conversationID: string) => string;
     onSelectChannel: (channelID: string) => void;
-    onSelectDirect: (conversationID: string) => void;
-    onStartDirect: (memberID: string) => void;
+    personaExpansion?: Record<string, boolean>;
+    onTogglePersona?: (personaID: string) => void;
     onCreateChannel: (profile?: ChannelProfileShortcut) => void;
     onToggle: () => void;
     onReorder: (channelIDs: string[]) => void;
@@ -36,7 +35,8 @@
 
   let {
     variant = "active", expanded, channels, profiles, directConversations, selectedChannelID, selectedDirectID,
-    workingConversationIDs, hrefForChannel, hrefForDirect, onSelectChannel, onSelectDirect, onStartDirect,
+    workspaceID, workingConversationIDs, hrefForChannel, onSelectChannel,
+    personaExpansion = {}, onTogglePersona,
     onCreateChannel, onToggle, onReorder, onReorderProfiles, onAssignProfile, personaChannelPins,
     onPinPersonaChannel,
   }: Props = $props();
@@ -267,6 +267,8 @@
   <div class="sidebar-profile-groups">
     {#each botGroups as group (group.profile.bot_user_id)}
       {@const conversation = directConversationForUser(directConversations, group.profile.bot_user_id)}
+      {@const personaExpanded = personaExpansion[group.profile.bot_user_id] ?? true}
+      {@const personaListID = `sidebar-persona-${workspaceID}-${group.profile.bot_user_id}-channels`}
       {@const unread = personaUnreadSummary(conversation, group.channels, selectedDirectID, selectedChannelID)}
       <section class="channel-subgroup profile-channel-group" role="group" class:profile-drop-target={dropGroupKey === `bot:${group.profile.bot_user_id}`}
         ondragover={(event) => groupDragOver(event, `bot:${group.profile.bot_user_id}`)}
@@ -305,9 +307,10 @@
           >
             <svg viewBox="0 0 12 16" width="12" height="16" aria-hidden="true"><circle cx="3" cy="4" r="1"/><circle cx="9" cy="4" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="9" cy="8" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="9" cy="12" r="1"/></svg>
           </button>
-          <a href={conversation ? hrefForDirect(conversation.id) : "#"} class="channel-subgroup-toggle profile-source-link" class:active={conversation?.id === selectedDirectID} class:has-unread={unread.total > 0}
+          <button type="button" class="channel-subgroup-toggle profile-source-link" class:active={conversation?.id === selectedDirectID} class:has-unread={unread.total > 0}
+            aria-expanded={personaExpanded} aria-controls={personaListID}
             aria-label={unread.total > 0 ? `${group.profile.display_name}, ${unread.total} unread` : group.profile.display_name}
-            onclick={(event) => { event.preventDefault(); if (conversation) onSelectDirect(conversation.id); else onStartDirect(group.profile.bot_user_id); }}>
+            onclick={() => onTogglePersona?.(group.profile.bot_user_id)}>
             {#if $botAvatarFiles.length > 0 || group.profile.avatar_url || group.profile.avatar_url_light}
               <Avatar
                 isBot={true}
@@ -325,13 +328,14 @@
               <span class="persona-band-scrim" aria-hidden="true"></span>
             {/if}
             <span class="persona-name">{group.profile.display_name}</span><span class="channel-subgroup-count">{group.channels.length}</span>
+            <span class="persona-disclosure-caret" aria-hidden="true">{personaExpanded ? "▾" : "▸"}</span>
             {#if unread.total > 0}
               <span class="persona-unread-stack" aria-hidden="true">
                 {#if unread.direct > 0}<span class="persona-unread-badge persona-unread-badge--dm">DM {unread.direct > 99 ? "99+" : unread.direct}</span>{/if}
                 {#if unread.channels > 0}<span class="persona-unread-badge persona-unread-badge--channels"># {unread.channels > 99 ? "99+" : unread.channels}</span>{/if}
               </span>
             {/if}
-          </a>
+          </button>
           <button
             type="button"
             class="profile-add-button"
@@ -340,7 +344,7 @@
             onclick={() => onCreateChannel(group.profile)}
           >＋</button>
         </div>
-        <div class="channel-subgroup-list" role="list">
+        <div class="channel-subgroup-list" role="list" id={personaListID} hidden={!personaExpanded}>
           {#each group.channels as channel (channel.id)}{@render channelRow(channel, group.channels, `bot:${group.profile.bot_user_id}`)}{/each}
         </div>
       </section>

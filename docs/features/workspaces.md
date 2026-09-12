@@ -115,11 +115,37 @@ account and treats that account as the channel's unmentioned default responder.
 Bot names, handles, avatars, message authorship, and mentions continue to use
 the canonical bot user.
 
-The sidebar renders each assigned bot from its `users` identity and opens that
-bot's direct conversation from the group header. The adjacent add button creates
-a channel and assigns it to that bot before navigating into it. Unassigned
-channels stay in the ordinary channel list. Managers can also link an existing
-channel by dragging it under a bot. Bot tokens cannot mutate assignments.
+The sidebar renders each assigned bot from its `users` identity. Before KAS-890,
+the group header opens that bot's direct conversation. The adjacent add button
+creates a channel and assigns it to that bot before navigating into it.
+Unassigned channels stay in the ordinary channel list. Managers can also link an
+existing channel by dragging it under a bot. Bot tokens cannot mutate assignments.
+
+**Selected header disclosure change (KAS-890):** Replace only the hero header's
+DM navigation with independent expand/collapse behavior. Use a native button,
+a visible caret, `aria-expanded`, and `aria-controls` with a stable per-persona
+list ID. Mouse, Enter, and Space toggle the entire owned list, including selected
+and unread rows. Hidden rows leave the tab order. Selection and read state stay
+unchanged, and empty sections remain toggleable.
+
+Reuse workspace-scoped disclosure persistence with an optional expansion map
+keyed by `bot_user_id`. Preserve existing section flags and old stored values,
+default missing personas to expanded, and handle malformed or unavailable storage
+without breaking interaction. Preserve preferences across reloads and persona
+reordering, with workspace isolation. The separate + button still creates a
+named channel for the correct profile without toggling. Named rows, unread
+badges, counts, hero rendering, drag handles, ordering and assignment drop targets
+keep their behavior. Other DM entry points and existing channel pinning remain.
+
+See the [specification](../../SPEC.md#sidebar-hero-header-disclosure-kas-890) and
+[selected implementation plan](../drafts/sidebar-hero-disclosure.md) for the full
+steps and validation. Verification uses the real Sidebar in isolated Electron
+with synthetic data, not live conversations, plus persistence tests, web tests,
+typecheck, scoped lint, the canonical build, and the existing hero regression.
+This documentation change does not implement or deploy disclosure. No DM deletion
+or migration, backend ownership/routing changes, or changes to top-level
+Channels/DM priority-row disclosure are included. KAS-891 section pinning and
+KAS-892 recent-message section sorting remain separate backlog work.
 
 Profile groups render above ordinary alphabetized sections. Each header crops
 the bot's own avatar across the section as a hero image, with the name overlaid;
@@ -128,14 +154,15 @@ dragging the header's move handle onto another profile, or by focusing the handl
 and pressing Arrow Up or Arrow Down. The browser stores persona order separately
 for each user and workspace, so it is not shared and needs no server state.
 
-**Pending hero rendering correction:** The selected change will make zoom below
-100% reveal more source image instead of shrinking a pre-cropped strip, and make
-hero images less faded while keeping labels readable. The editor and sidebar
-will share hero-only geometry without changing ordinary avatars or stored crop
-settings. See the [specification](../../SPEC.md#sidebar-hero-rendering-correction)
-and [implementation plan](../drafts/sidebar-hero-rendering.md) for the complete
-compatibility boundaries and validation. This documentation change does not
-implement or deploy the correction.
+**Preserved hero rendering correction:** The previous zoom/fading fix is deployed
+and owner accepted. Zoom below 100% reveals more source image instead of shrinking
+a pre-cropped strip, and hero images are less faded while labels remain readable.
+The editor and sidebar share hero-only geometry without changing ordinary avatars
+or stored crop settings. Preserve this behavior during KAS-890. See the
+[specification](../../SPEC.md#sidebar-hero-rendering-correction) and the separate
+[historical implementation plan](../drafts/sidebar-hero-rendering.md) for its
+compatibility boundaries and validation. This disclosure documentation change
+performs no implementation or deployment.
 
 Guest workspace members are waiting-room users. They can only see `#guest`, can
 post three messages per day, and cannot create rooms or DMs. Moderators and
