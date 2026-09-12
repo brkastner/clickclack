@@ -132,6 +132,7 @@
     type WorkflowRun,
   } from "./lib/chat/workflow-run";
   import WorkflowHistoryPanel from "./components/workflow/WorkflowHistoryPanel.svelte";
+ import AgentNotepad from "./components/notepad/AgentNotepad.svelte";
   import {
     isDecisionEvent,
     playDecisionSound,
@@ -5411,6 +5412,12 @@
         onPinnedItems={togglePinnedPanel}
         onOpenChannelSettings={openChannelSettings}
       />
+    {/if}
+
+    {#if selectedDirectID || selectedChannelID}
+      {#key `${selectedWorkspaceID}:${selectedDirectID}:${selectedChannelID}`}
+        <AgentNotepad path={selectedDirectID ? `/api/dms/${encodeURIComponent(selectedDirectID)}/notepad` : `/api/channels/${encodeURIComponent(selectedChannelID)}/notepad`} />
+      {/key}
     {/if}
 
     {#if activeTopic}

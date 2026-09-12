@@ -11,6 +11,8 @@ export type PublishWorkflowSnapshotRequest =
 export type PublishWorkflowSnapshotResponse =
   components["schemas"]["PublishWorkflowSnapshotResponse"];
 
+export type NotepadResult = components["schemas"]["NotepadResult"];
+export type NotepadChanged = components["schemas"]["NotepadChanged"];
 export type HomeLink = components["schemas"]["HomeLink"];
 
 export type User = components["schemas"]["User"];
@@ -1064,6 +1066,28 @@ export class ClickClackClient {
         body: JSON.stringify({ seq }),
       });
       return data.receipt;
+    },
+  };
+
+  notepads = {
+    get: (kind: "channels" | "dms", id: string): Promise<NotepadResult> =>
+      this.request(`/api/${kind}/${encodeURIComponent(id)}/notepad`),
+    // Closing the returned socket unwatches. Every ready notice requires a read;
+    // notices are ephemeral, content-free invalidations, not snapshots.
+    watch: (
+      kind: "channels" | "dms",
+      id: string,
+      onChange: (event: NotepadChanged) => void,
+    ): WebSocket => {
+      if (!this.WebSocket)
+        throw new Error("ClickClackClient notepads.watch requires a WebSocket implementation");
+      const url = new URL(`${this.baseUrl}/api/${kind}/${encodeURIComponent(id)}/notepad/watch`);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      const socket = this.token
+        ? new this.WebSocket(url, [`clickclack.bearer.${this.token}`])
+        : new this.WebSocket(url);
+      socket.addEventListener("message", (message) => onChange(JSON.parse(String(message.data))));
+      return socket;
     },
   };
 

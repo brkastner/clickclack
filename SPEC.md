@@ -264,6 +264,109 @@ and sidebar sizes. Run web tests, typecheck, scoped lint, the canonical build to
 regenerate embedded assets, and the existing Electron hero regression. Do not
 use live conversations for these tests. Deployment remains a later stage.
 
+### Agent notepad (KAS-893)
+
+**Status: Selected for implementation. This documentation change does not implement, verify or deploy it.**
+
+Add a collapsible, read-only OpenClaw agent notepad to ClickClack using the
+existing HTTP/WebSocket transport and Svelte UI conventions. OpenClaw remains
+the source of truth. Keep implementation in the supplied ClickClack worktree;
+OpenClaw and pi-clickclack are reference-only. The
+[selected implementation plan](docs/drafts/agent-notepad.md) preserves the full
+selected summary, ordered steps and validation verbatim.
+
+#### Mapping and gateway connection
+
+Add an optional integration under `apps/api/internal/config` and a dedicated
+server adapter. Inspection found no existing gateway connection in ClickClack
+configuration; pi-clickclack bridges Pi sessions, not OpenClaw. Prefer
+operator-supplied server-only configuration over a new database table. Bind by
+workspace plus channel/DM ID to a gateway connection identity, exact agent ID
+and session key captured from authoritative OpenClaw routing. Validate duplicate,
+incomplete and ambiguous bindings. Fail closed when unmapped. Never infer targets
+from names or accept arbitrary gateway targets from browsers. Keep credentials
+out of browser payloads, public feature responses, errors and logs.
+
+Implement the authenticated gateway WebSocket handshake, advertised-capability
+checks and typed `progressCard.get` response validation. Use persona-workstation's
+gateway protocol, progress-card handler, session-observer identity helpers,
+`sessions-subscriptions.ts` and native `session-progress-cards.ts` as references.
+Inspect observer delivery and authorization guards before selecting subscription
+calls. List subscription, target observation and participation authorization
+are distinct requirements, not interchangeable guarantees.
+
+Subscribe before reading and retain the owner-scoped wire identity. Treat matching
+`progressCard.changed` events as invalidations requiring refetch, never as card
+content. Coalesce in-flight refreshes with one trailing refresh, fence requests
+by connection/target generation, refetch after reconnect and release obsolete
+observation ownership. Never invoke `progressCard.put`.
+
+#### Conversation authorization and transport
+
+Add conversation-scoped read/watch/unwatch contracts through
+`apps/api/internal/httpapi`, `packages/protocol` and `packages/sdk-ts`, following
+existing generation conventions. Follow `workflow_snapshots.go` authorization:
+current actor, `messages:read`, `dms:read` where applicable,
+`GetChannel`/`GetDirectConversation` and workspace access. Recheck current
+conversation access for reads, subscription creation and event delivery. Remove
+watches on disconnect or revocation. Scope server cache keys by connection and
+binding identity.
+
+Extend the authenticated WebSocket lifecycle for narrowly targeted invalidations
+and status, not a workspace-wide stream of card contents. Return distinct
+unsupported, unmapped, denied, unavailable and successful-empty outcomes.
+Unauthorized users must receive neither card reads nor invalidations.
+
+#### Panel behavior
+
+Add a focused lifecycle module under `apps/web/src/lib/chat` and integrate the
+collapsible panel into `ChatApp.svelte` beside existing workflow panel conventions.
+Fetch on opening and reconnect. Reset immediately on target changes and reject
+late responses so one conversation cannot show another target's card. Render
+markdown through the existing sanitized message-rendering path, optional
+`pending`/`in_progress`/`completed` steps and update time.
+
+Show loading, empty, denied, unsupported/unmapped and disconnected states. Never
+present an unverified cached snapshot as current. An authoritative null card,
+including after reconnect, must produce the empty state. Keep the entry point
+unavailable for unbound or Pi-only conversations. Support keyboard controls,
+light/dark themes and narrow layouts without obstructing chat or changing
+composer or persona behavior.
+
+#### Validation and handoff
+
+Use synthetic gateway fixtures for adapter, HTTP/WebSocket authorization, client
+lifecycle and UI regression tests. Cover two gateway/agent/session identities,
+matching and unrelated events, duplicate/out-of-order invalidations, invalidation
+during a read, conversation switching during a read, reconnect, remote clearing,
+malformed replies, missing methods, authentication failures and disposal. Prove
+current-access enforcement including revocation, credential non-disclosure and
+that malicious markdown cannot execute scripts.
+
+Run focused Go adapter and HTTP/WebSocket tests, existing workflow/agent-activity
+authorization tests, focused web lifecycle/rendering tests and SDK/protocol
+generation/type checks. Then run `pnpm check` (the `check:changed` alias runs the
+same full gate) and `git diff --check`. If implementation requires SQL despite
+the configuration-first design, edit canonical SQL and regenerate with
+`pnpm generate:sqlc`; do not hand-edit generated storedb files.
+
+Capture evidence in a task-owned isolated Electron instance at desktop and narrow
+sizes in both themes. Preserve regression coverage for chat, composer drafts and
+sending, attachments, persona navigation and Pi workflows. Distinguish fixture
+cases from live evidence. When an already-authorized live mapping is available,
+perform only a read and qualify advertised methods, authentication and observation
+against that gateway. Otherwise deliver fixture evidence with the exact remaining
+live qualification gap. Local source inspection alone is not live compatibility
+proof.
+
+Document the binding format, how to obtain exact routing identities, credentials
+and observation requirements, configuration/activation instructions and lifecycle.
+Handoff commits/worktree, mapping and transport decisions, checks/results, UI
+captures, live-versus-fixture evidence, required activation steps and confirmation
+that nothing was activated. Do not restart services, deploy, publish, alter live
+configuration or mutate a live notepad. This plan does not add Pi-side card
+production or replace chat/session ownership.
+
 ## API
 
 Contract: OpenAPI first.

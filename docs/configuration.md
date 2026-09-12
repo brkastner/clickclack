@@ -284,3 +284,11 @@ All signed-in users can read all packs, regardless of workspace. Bot tokens need
 not an access-control or content-classification system. Do not place private files
 inside the configured root. The API exposes the configured path to signed-in users
 for settings guidance. See [Bots](features/bots.md) for viewer behavior.
+
+## OpenClaw agent notepad
+
+The optional `openclaw_notepad` configuration binds exact ClickClack conversations
+to operator-provisioned OpenClaw gateways and sessions. It is disabled without
+bindings. Gateway tokens and paired-device private keys stay server-side. See
+[Agent notepad](features/agent-notepad.md) for the configuration format, device
+requirements, routing identity, lifecycle and read-only verification steps.

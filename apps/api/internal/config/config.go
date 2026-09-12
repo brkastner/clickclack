@@ -14,36 +14,62 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 )
 
+type OpenClawNotepadBinding struct {
+	WorkspaceID          string `json:"workspace_id"`
+	ChannelID            string `json:"channel_id,omitempty"`
+	DirectConversationID string `json:"direct_conversation_id,omitempty"`
+	GatewayID            string `json:"gateway_id"`
+	AgentID              string `json:"agent_id"`
+	SessionKey           string `json:"session_key"`
+}
+
+// OpenClawNotepadConfig is server-only routing data. Browser requests identify
+// only ClickClack conversations; they never provide gateway targets or credentials.
+type OpenClawNotepadConfig struct {
+	Gateways []OpenClawNotepadGateway `json:"gateways"`
+	Bindings []OpenClawNotepadBinding `json:"bindings"`
+}
+
+// Credentials belong to a separately provisioned, paired operator.read device.
+// ClickClack never creates pairings or returns these fields to clients.
+type OpenClawNotepadGateway struct {
+	ID             string `json:"id"`
+	URL            string `json:"url"`
+	Token          string `json:"token"`
+	PrivateKeyFile string `json:"private_key_file"`
+}
+
 type Config struct {
-	AvatarPacksDir         string   `json:"avatar_packs_dir"`
-	Addr                   string   `json:"addr"`
-	Data                   string   `json:"data"`
-	DB                     string   `json:"db"`
-	Uploads                string   `json:"uploads"`
-	Environment            string   `json:"environment"`
-	MetricsEnabled         bool     `json:"metrics_enabled"`
-	PublicURL              string   `json:"public_url"`
-	PublicAPIURL           string   `json:"public_api_url"`
-	HomeURL                string   `json:"home_url"`
-	HomeLabel              string   `json:"home_label"`
-	EmbedFrameAncestors    []string `json:"embed_frame_ancestors"`
-	CookieNamespace        string   `json:"cookie_namespace"`
-	DevBootstrap           bool     `json:"dev_bootstrap"`
-	PasswordAuthEnabled    bool     `json:"password_auth_enabled"`
-	GitHubClientID         string   `json:"github_client_id"`
-	GitHubClientSecret     string   `json:"github_client_secret"`
-	GitHubAllowedOrg       string   `json:"github_allowed_org"`
-	GitHubModeratorOrg     string   `json:"github_moderator_org"`
-	OpenClawIDClientID     string   `json:"openclaw_id_client_id"`
-	OpenClawIDClientSecret string   `json:"openclaw_id_client_secret"`
-	OpenClawIDIssuer       string   `json:"openclaw_id_issuer"`
-	AccessTeamDomain       string   `json:"access_team_domain"`
-	AccessAUD              string   `json:"access_aud"`
-	PushoverAPIToken       string   `json:"pushover_api_token"`
-	R2AccountID            string   `json:"r2_account_id"`
-	R2AccessKeyID          string   `json:"r2_access_key_id"`
-	R2SecretAccessKey      string   `json:"r2_secret_access_key"`
-	R2Endpoint             string   `json:"r2_endpoint"`
+	AvatarPacksDir         string                `json:"avatar_packs_dir"`
+	Addr                   string                `json:"addr"`
+	Data                   string                `json:"data"`
+	DB                     string                `json:"db"`
+	Uploads                string                `json:"uploads"`
+	Environment            string                `json:"environment"`
+	MetricsEnabled         bool                  `json:"metrics_enabled"`
+	PublicURL              string                `json:"public_url"`
+	PublicAPIURL           string                `json:"public_api_url"`
+	HomeURL                string                `json:"home_url"`
+	HomeLabel              string                `json:"home_label"`
+	EmbedFrameAncestors    []string              `json:"embed_frame_ancestors"`
+	CookieNamespace        string                `json:"cookie_namespace"`
+	DevBootstrap           bool                  `json:"dev_bootstrap"`
+	PasswordAuthEnabled    bool                  `json:"password_auth_enabled"`
+	GitHubClientID         string                `json:"github_client_id"`
+	GitHubClientSecret     string                `json:"github_client_secret"`
+	GitHubAllowedOrg       string                `json:"github_allowed_org"`
+	GitHubModeratorOrg     string                `json:"github_moderator_org"`
+	OpenClawIDClientID     string                `json:"openclaw_id_client_id"`
+	OpenClawIDClientSecret string                `json:"openclaw_id_client_secret"`
+	OpenClawIDIssuer       string                `json:"openclaw_id_issuer"`
+	AccessTeamDomain       string                `json:"access_team_domain"`
+	AccessAUD              string                `json:"access_aud"`
+	PushoverAPIToken       string                `json:"pushover_api_token"`
+	R2AccountID            string                `json:"r2_account_id"`
+	R2AccessKeyID          string                `json:"r2_access_key_id"`
+	R2SecretAccessKey      string                `json:"r2_secret_access_key"`
+	R2Endpoint             string                `json:"r2_endpoint"`
+	OpenClawNotepad        OpenClawNotepadConfig `json:"openclaw_notepad"`
 }
 
 func Defaults() Config {
@@ -176,6 +202,9 @@ func Load(path string) (Config, error) {
 }
 
 func (c *Config) ValidateServe() error {
+	if err := normalizeOpenClawNotepadConfig(&c.OpenClawNotepad); err != nil {
+		return err
+	}
 	if err := normalizeAccessConfig(c); err != nil {
 		return err
 	}

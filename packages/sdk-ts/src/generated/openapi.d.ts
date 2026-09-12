@@ -4,6 +4,86 @@
  */
 
 export interface paths {
+  "/api/channels/{channel_id}/notepad": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read the server-bound OpenClaw notepad
+     * @description Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
+     */
+    get: operations["getChannelNotepad"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/channels/{channel_id}/notepad/watch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Observe notepad invalidations on an authenticated WebSocket; closing unwatches
+     * @description Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
+     */
+    get: operations["watchChannelNotepad"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dms/{conversation_id}/notepad": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read the server-bound OpenClaw notepad
+     * @description Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
+     */
+    get: operations["getDirectNotepad"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dms/{conversation_id}/notepad/watch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Observe notepad invalidations on an authenticated WebSocket; closing unwatches
+     * @description Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
+     */
+    get: operations["watchDirectNotepad"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/workflow-runs": {
     parameters: {
       query?: never;
@@ -1385,6 +1465,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    NotepadStep: {
+      step: string;
+      /** @enum {string} */
+      status: "pending" | "in_progress" | "completed";
+    };
+    NotepadCard: {
+      revision: number;
+      /** @description Unix timestamp in milliseconds */
+      updatedAt: number;
+      markdown?: string;
+      steps?: components["schemas"]["NotepadStep"][];
+    };
+    /** @enum {string} */
+    NotepadState: "ready" | "unmapped" | "unsupported" | "denied" | "unavailable";
+    NotepadResult: {
+      state: components["schemas"]["NotepadState"];
+      card: components["schemas"]["NotepadCard"] | null;
+    };
+    NotepadChanged: {
+      /** @constant */
+      type: "notepad.changed";
+      state: components["schemas"]["NotepadState"];
+    };
     WorkflowSource: {
       /** @constant */
       provider: "pi-workflows";
@@ -2523,6 +2626,146 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getChannelNotepad: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Non-cacheable notepad result; ready with null card means no notepad yet */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotepadResult"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  watchChannelNotepad: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description WebSocket frames follow NotepadChanged. Authenticate by session cookie or clickclack.bearer.TOKEN subprotocol. Unwatch by closing; reconnect and refetch after every ready notice. Frames have no durable cursor and no card content. */
+      101: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getDirectNotepad: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Non-cacheable notepad result; ready with null card means no notepad yet */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotepadResult"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  watchDirectNotepad: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description WebSocket frames follow NotepadChanged. Authenticate by session cookie or clickclack.bearer.TOKEN subprotocol. Unwatch by closing; reconnect and refetch after every ready notice. Frames have no durable cursor and no card content. */
+      101: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   publishWorkflowSnapshot: {
     parameters: {
       query?: never;
