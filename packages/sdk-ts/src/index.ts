@@ -952,6 +952,19 @@ export class ClickClackClient {
     },
   };
 
+  outputs = async (
+    workspaceId: string,
+    authorId: string,
+    options: { limit?: number; cursor?: string; signal?: AbortSignal } = {},
+  ): Promise<components["schemas"]["OutputPage"]> => {
+    const params = new URLSearchParams({ author_id: authorId });
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.cursor) params.set("cursor", options.cursor);
+    return this.request(`/api/workspaces/${encodeURIComponent(workspaceId)}/outputs?${params}`, {
+      signal: options.signal,
+    });
+  };
+
   search = async (
     workspaceId: string,
     query: string,

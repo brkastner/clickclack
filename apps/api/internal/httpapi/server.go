@@ -233,6 +233,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/workspaces/{workspace_id}/topics", s.listTopics)
 		r.Post("/workspaces/{workspace_id}/topics", s.createTopic)
 		r.Get("/workspaces/{workspace_id}/bots", s.listBots)
+		r.Get("/workspaces/{workspace_id}/outputs", s.listOutputs)
 		r.Post("/workspaces/{workspace_id}/bots", s.createBot)
 		r.Get("/workspaces/{workspace_id}/bot-commands", s.listBotCommands)
 		r.Delete("/workspaces/{workspace_id}/bots/{bot_user_id}/membership", s.removeBotFromWorkspace)

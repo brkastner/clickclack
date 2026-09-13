@@ -38,6 +38,14 @@ export type WorkspaceViewProps = {
 
 export const WORKSPACE_VIEWS: WorkspaceView[] = [
   {
+    id: "vai-gallery",
+    slug: "vai-gallery",
+    label: "VAI gallery",
+    description: "Responses from a selected workspace bot.",
+    icon: ["M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"],
+    load: () => import("../components/outputs/OutputGallery.svelte"),
+  },
+  {
     id: "home",
     slug: "home",
     label: "Home",

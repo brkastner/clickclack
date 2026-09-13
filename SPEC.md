@@ -413,6 +413,90 @@ that nothing was activated. Do not restart services, deploy, publish, alter live
 configuration or mutate a live notepad. This plan does not add Pi-side card
 production or replace chat/session ownership.
 
+### VAI workspace gallery (KAS-768)
+
+**Status: Selected for implementation. This documentation change does not implement, verify or deploy it.**
+
+Add one workspace-scoped gallery for VAI responses using existing ClickClack
+messages as the source of truth. Show media previews and text/file fallbacks,
+provide a newest-response action, and link each response to its exact source
+message and channel or direct conversation, including thread replies. Preserve
+the gallery position and focus when returning from a source message. The
+[selected implementation plan](docs/drafts/vai-gallery.md) preserves the complete
+selected summary, contracts, ordered changes and checks, tests, risks, and boundaries.
+
+#### Identity and retrieval
+
+Use a verified installation-to-user mapping when available. Otherwise let the
+user select an authorized bot account once and retain its immutable ID locally,
+keyed by user and workspace. Show the selected account. Never guess identity from
+a display name or message text. Missing or ambiguous identity requires source
+selection, not an empty-gallery result.
+
+Add `GET /api/workspaces/{workspace_id}/outputs` with required `author_id` and
+optional `cursor` and `limit`. Return `{outputs: Message[], next_cursor: string|null}`
+using existing message, attachment, and source identifiers. Obtain conversation
+labels from authorized existing data or a documented bounded response field,
+not one request per card.
+
+Include nondeleted ordinary messages from that bot in the workspace, using
+`kind=message` and its existing legacy default representation where applicable.
+Include attachment-only and text-only responses. Exclude `agent_commentary` and
+`agent_tool`; ordinary-message status does not prove generation completion.
+
+Order by normalized `created_at` descending, then message ID descending. Bind
+cursors to workspace, requester, author, ordering, and endpoint version. Apply
+conversation visibility before pagination and recheck it on every request,
+including direct-conversation membership. Batch message and attachment loading.
+The latest action fetches a fresh first page with `limit=1` under the same rules.
+
+Keep `/api/search`, message shapes, source URLs, and ordinary chat routing
+compatible. Use a separate endpoint because existing SQLite text search returns
+no results for an empty query and depends on FTS. Reuse authorization and paging
+conventions without changing text-search semantics. Support SQLite and Postgres
+with typed SQL. No output table or content backfill is planned. Add equivalent
+indexes only when query-plan evidence warrants them, editing sqlc sources and
+regenerating with `pnpm generate:sqlc`.
+
+#### Navigation and failure handling
+
+Reuse media presentation and extract only the source-reveal interface needed by
+search and gallery. Load and highlight exact source messages even outside the
+current message window. Preserve gallery pages, selected card, scroll anchor,
+and focus during source navigation. Keep the gallery outside the timeline and
+avoid a broad navigation redesign.
+
+Handle source selection, empty results, loading, retries, unsupported or broken
+media, and removed or inaccessible sources explicitly. Retain successful pages
+when loading more fails. Invalidate stale requests on workspace or source changes.
+Revalidate on reconnect, focus, and return. Use existing message and permission
+signals to refresh or remove cached cards without silently reordering a scrolled
+gallery. Do not promise external media retention or immediate offline revocation.
+
+#### Verification, rollout, and scope
+
+Test stable identity, response eligibility, pagination, bounded loading, and
+conversation authorization in both databases. Cover private channels, DMs,
+revocation between pages, cursor misuse, duplicate names, deleted accounts, and
+attachment-only history. Verify exact channel, DM, and thread navigation and
+return state, including stale requests and failure recovery. Preserve existing
+search behavior. Run focused tests and repository quality gates, then prove the
+full keyboard and pointer flow in isolated Electron with synthetic data.
+
+Release through the existing workflow deployment stage, with the additive
+backend before or alongside the frontend. Rebuild the desktop only if shell
+changes require it. Load applicable deployment skills and claim live completion
+only after their checks pass; before that, report implemented and tested, not live.
+
+Keep implementation in this ClickClack repository or its workflow-managed
+checkout. Do not change VAI, OpenClaw, pi-clickclack, upstream projects, sibling
+repositories, or external services. Do not add duplicate output storage, indexing
+or thumbnail services, a media proxy, or other infrastructure. A second conversation
+panel, future filter suite, generic asset manager, producer-protocol redesign,
+unrelated UI cleanup, and infrastructure redesign are excluded. Do not scrape
+live conversations for identity inference or fixtures. Use existing authorized
+contracts, synthetic data, and existing deployment procedures.
+
 ## API
 
 Contract: OpenAPI first.

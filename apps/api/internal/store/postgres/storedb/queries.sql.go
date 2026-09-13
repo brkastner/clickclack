@@ -1747,6 +1747,26 @@ func (q *Queries) GetOAuthTransactionForConsume(ctx context.Context, stateHash s
 	return i, err
 }
 
+const getOutputBot = `-- name: GetOutputBot :one
+SELECT u.id FROM users u
+JOIN workspace_members wm ON wm.user_id = u.id
+LEFT JOIN bot_tombstones bt ON bt.bot_user_id = u.id
+WHERE u.id = $1 AND wm.workspace_id = $2
+AND u.kind = 'bot' AND bt.bot_user_id IS NULL
+`
+
+type GetOutputBotParams struct {
+	AuthorID    string `json:"author_id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+func (q *Queries) GetOutputBot(ctx context.Context, arg GetOutputBotParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getOutputBot, arg.AuthorID, arg.WorkspaceID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getSessionUser = `-- name: GetSessionUser :one
 SELECT u.id, u.kind, u.owner_user_id, u.display_name, u.handle, u.avatar_url, u.avatar_url_light, u.created_at, s.expires_at AS session_expires_at,
        COALESCE(uns.pushover_enabled, 0) AS pushover_enabled,
@@ -4123,6 +4143,139 @@ func (q *Queries) ListMentionedUserIDs(ctx context.Context, arg ListMentionedUse
 	for rows.Next() {
 		var i ListMentionedUserIDsRow
 		if err := rows.Scan(&i.ID, &i.Handle); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOutputMessages = `-- name: ListOutputMessages :many
+WITH eligible AS (
+ SELECT m.id, CASE
+	WHEN length(m.created_at) = 20 AND right(m.created_at, 1) = 'Z'
+		THEN left(m.created_at, 19) || '.000000000Z'
+	WHEN length(m.created_at) BETWEEN 22 AND 30
+		AND substr(m.created_at, 20, 1) = '.'
+		AND right(m.created_at, 1) = 'Z'
+		THEN left(m.created_at, 20) ||
+			rpad(substr(m.created_at, 21, length(m.created_at) - 21), 9, '0') ||
+			'Z'
+	ELSE to_char(m.created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') || '000Z'
+END AS output_created_at FROM messages m
+ WHERE m.workspace_id = $4 AND m.author_id = $5
+ AND m.deleted_at IS NULL AND (m.kind = 'message' OR m.kind = '')
+ AND ((m.channel_id IS NOT NULL AND m.direct_conversation_id IS NULL
+       AND EXISTS (SELECT 1 FROM channels c WHERE c.id = m.channel_id AND c.workspace_id = m.workspace_id
+         AND (CAST($6 AS INTEGER) = 0 OR c.name = 'guest')))
+ OR (CAST($6 AS INTEGER) = 0 AND EXISTS (SELECT 1 FROM direct_conversation_members dcm
+       JOIN direct_conversations dc ON dc.id = dcm.conversation_id
+       WHERE dcm.conversation_id = m.direct_conversation_id AND dcm.user_id = $7
+       AND dc.workspace_id = m.workspace_id)))
+)
+SELECT m.id, m.workspace_id, m.channel_id, m.direct_conversation_id, m.author_id, m.parent_message_id, m.thread_root_id, m.topic_id, m.channel_seq, m.thread_seq, m.body, m.body_format, m.created_at, m.edited_at, m.deleted_at, m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id, m.client_nonce, m.route_id, m.kind, m.turn_id, u.display_name AS author_display_name, u.handle AS author_handle,
+ u.avatar_url AS author_avatar_url, u.avatar_url_light AS author_avatar_url_light,
+ u.created_at AS author_created_at, u.owner_user_id AS author_owner_id
+FROM eligible e JOIN messages m ON m.id = e.id JOIN users u ON u.id = m.author_id
+WHERE (CAST($1 AS TEXT) = '' OR e.output_created_at < $1
+ OR (e.output_created_at = $1 AND m.id < $2))
+ORDER BY e.output_created_at DESC, m.id DESC LIMIT $3
+`
+
+type ListOutputMessagesParams struct {
+	CursorTime  string `json:"cursor_time"`
+	CursorID    string `json:"cursor_id"`
+	PageLimit   int32  `json:"page_limit"`
+	WorkspaceID string `json:"workspace_id"`
+	AuthorID    string `json:"author_id"`
+	Guest       int32  `json:"guest"`
+	UserID      string `json:"user_id"`
+}
+
+type ListOutputMessagesRow struct {
+	ID                   string         `json:"id"`
+	WorkspaceID          string         `json:"workspace_id"`
+	ChannelID            sql.NullString `json:"channel_id"`
+	DirectConversationID sql.NullString `json:"direct_conversation_id"`
+	AuthorID             string         `json:"author_id"`
+	ParentMessageID      sql.NullString `json:"parent_message_id"`
+	ThreadRootID         string         `json:"thread_root_id"`
+	TopicID              sql.NullString `json:"topic_id"`
+	ChannelSeq           sql.NullInt64  `json:"channel_seq"`
+	ThreadSeq            sql.NullInt64  `json:"thread_seq"`
+	Body                 string         `json:"body"`
+	BodyFormat           string         `json:"body_format"`
+	CreatedAt            string         `json:"created_at"`
+	EditedAt             sql.NullString `json:"edited_at"`
+	DeletedAt            sql.NullString `json:"deleted_at"`
+	QuotedMessageID      sql.NullString `json:"quoted_message_id"`
+	QuotedBodySnapshot   string         `json:"quoted_body_snapshot"`
+	QuotedAuthorID       sql.NullString `json:"quoted_author_id"`
+	ClientNonce          string         `json:"client_nonce"`
+	RouteID              sql.NullString `json:"route_id"`
+	Kind                 string         `json:"kind"`
+	TurnID               sql.NullString `json:"turn_id"`
+	AuthorDisplayName    string         `json:"author_display_name"`
+	AuthorHandle         string         `json:"author_handle"`
+	AuthorAvatarUrl      string         `json:"author_avatar_url"`
+	AuthorAvatarUrlLight string         `json:"author_avatar_url_light"`
+	AuthorCreatedAt      string         `json:"author_created_at"`
+	AuthorOwnerID        sql.NullString `json:"author_owner_id"`
+}
+
+func (q *Queries) ListOutputMessages(ctx context.Context, arg ListOutputMessagesParams) ([]ListOutputMessagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOutputMessages,
+		arg.CursorTime,
+		arg.CursorID,
+		arg.PageLimit,
+		arg.WorkspaceID,
+		arg.AuthorID,
+		arg.Guest,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOutputMessagesRow
+	for rows.Next() {
+		var i ListOutputMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.ChannelID,
+			&i.DirectConversationID,
+			&i.AuthorID,
+			&i.ParentMessageID,
+			&i.ThreadRootID,
+			&i.TopicID,
+			&i.ChannelSeq,
+			&i.ThreadSeq,
+			&i.Body,
+			&i.BodyFormat,
+			&i.CreatedAt,
+			&i.EditedAt,
+			&i.DeletedAt,
+			&i.QuotedMessageID,
+			&i.QuotedBodySnapshot,
+			&i.QuotedAuthorID,
+			&i.ClientNonce,
+			&i.RouteID,
+			&i.Kind,
+			&i.TurnID,
+			&i.AuthorDisplayName,
+			&i.AuthorHandle,
+			&i.AuthorAvatarUrl,
+			&i.AuthorAvatarUrlLight,
+			&i.AuthorCreatedAt,
+			&i.AuthorOwnerID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

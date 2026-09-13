@@ -2001,3 +2001,41 @@ SELECT * FROM workflow_run_snapshots
 WHERE workspace_id = sqlc.arg(workspace_id) AND channel_id = sqlc.arg(channel_id) AND direct_conversation_id = sqlc.arg(direct_conversation_id)
 AND (CAST(sqlc.arg(cursor_id) AS TEXT) = '' OR id < sqlc.arg(cursor_id))
 ORDER BY id DESC LIMIT sqlc.arg(page_limit);
+
+-- name: GetOutputBot :one
+SELECT u.id FROM users u
+JOIN workspace_members wm ON wm.user_id = u.id
+LEFT JOIN bot_tombstones bt ON bt.bot_user_id = u.id
+WHERE u.id = sqlc.arg(author_id) AND wm.workspace_id = sqlc.arg(workspace_id)
+AND u.kind = 'bot' AND bt.bot_user_id IS NULL;
+
+-- name: ListOutputMessages :many
+WITH eligible AS (
+ SELECT m.id, CASE
+	WHEN length(m.created_at) = 20 AND right(m.created_at, 1) = 'Z'
+		THEN left(m.created_at, 19) || '.000000000Z'
+	WHEN length(m.created_at) BETWEEN 22 AND 30
+		AND substr(m.created_at, 20, 1) = '.'
+		AND right(m.created_at, 1) = 'Z'
+		THEN left(m.created_at, 20) ||
+			rpad(substr(m.created_at, 21, length(m.created_at) - 21), 9, '0') ||
+			'Z'
+	ELSE to_char(m.created_at::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') || '000Z'
+END AS output_created_at FROM messages m
+ WHERE m.workspace_id = sqlc.arg(workspace_id) AND m.author_id = sqlc.arg(author_id)
+ AND m.deleted_at IS NULL AND (m.kind = 'message' OR m.kind = '')
+ AND ((m.channel_id IS NOT NULL AND m.direct_conversation_id IS NULL
+       AND EXISTS (SELECT 1 FROM channels c WHERE c.id = m.channel_id AND c.workspace_id = m.workspace_id
+         AND (CAST(sqlc.arg(guest) AS INTEGER) = 0 OR c.name = 'guest')))
+ OR (CAST(sqlc.arg(guest) AS INTEGER) = 0 AND EXISTS (SELECT 1 FROM direct_conversation_members dcm
+       JOIN direct_conversations dc ON dc.id = dcm.conversation_id
+       WHERE dcm.conversation_id = m.direct_conversation_id AND dcm.user_id = sqlc.arg(user_id)
+       AND dc.workspace_id = m.workspace_id)))
+)
+SELECT m.*, u.display_name AS author_display_name, u.handle AS author_handle,
+ u.avatar_url AS author_avatar_url, u.avatar_url_light AS author_avatar_url_light,
+ u.created_at AS author_created_at, u.owner_user_id AS author_owner_id
+FROM eligible e JOIN messages m ON m.id = e.id JOIN users u ON u.id = m.author_id
+WHERE (CAST(sqlc.arg(cursor_time) AS TEXT) = '' OR e.output_created_at < sqlc.arg(cursor_time)
+ OR (e.output_created_at = sqlc.arg(cursor_time) AND m.id < sqlc.arg(cursor_id)))
+ORDER BY e.output_created_at DESC, m.id DESC LIMIT sqlc.arg(page_limit);

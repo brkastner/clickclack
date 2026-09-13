@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { revealMessageSource, sourceConversationID } from "./lib/chat/message-source-navigation";
+  import { galleryReturn, gallerySource, consumeGallerySource, clearGalleryReturn } from "./lib/output-gallery";
+
   import { afterNavigate, goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
   import { toStore } from "svelte/store";
@@ -1026,6 +1029,8 @@
   }
 
   onDestroy(() => {
+    galleryRevealSerial++;
+    galleryRevealAbort?.abort();
     cancelVoiceFiller();
     voiceSession?.disconnect();
     voiceSession = null;
@@ -3729,9 +3734,44 @@
     return "";
   }
 
+  let galleryRevealPending = false;
+  let galleryRevealSerial = 0;
+  let galleryRevealAbort: AbortController | undefined;
+  let gallerySourceError = "";
+  $: if (user && galleryReturn && galleryReturn.userID !== user.id) clearGalleryReturn();
+  $: if (gallerySource && user && selectedWorkspaceID === gallerySource.workspace_id &&
+    currentConversationKey() === (gallerySource.channel_id || gallerySource.direct_conversation_id) &&
+    !messagesLoading && !galleryRevealPending) void openGallerySource();
+
+  async function openGallerySource() {
+    const target = consumeGallerySource();
+    if (!target) return;
+    galleryRevealPending = true;
+    gallerySourceError = "";
+    const workspaceID = selectedWorkspaceID;
+    const conversationID = currentConversationKey();
+    const serial = ++galleryRevealSerial;
+    galleryRevealAbort?.abort();
+    const controller = new AbortController();
+    galleryRevealAbort = controller;
+    const current = () => serial === galleryRevealSerial && selectedWorkspaceID === workspaceID && currentConversationKey() === conversationID;
+    try {
+      await revealMessageSource(target.id, {
+        workspaceID, conversationID, isCurrent: current,
+        fetchMessage: async (id) => (await api<{ message: Message }>(`/api/messages/${encodeURIComponent(id)}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) })).message,
+        revealTimeline: loadMessagesAround,
+        revealThread: async (message) => {
+          if (!await selectThread(message.thread_root_id, undefined, current)) return false;
+          return thread.target({ messageID: message.id, threadSeq: message.thread_seq }, current);
+        },
+      });
+    } catch { if (current()) gallerySourceError = "The gallery source is no longer available."; }
+    finally { galleryRevealPending = false; }
+  }
+
   async function openSearchResult(result: SearchResult) {
     const session = searchSession;
-    const targetID = result.channel_id || result.direct_conversation_id || "";
+    const targetID = sourceConversationID(result);
     if (!session || !selectedWorkspaceID || !targetID) return;
     // A result owns the pane even while Back's parent route is still resolving.
     routeApplySerial++;
@@ -5390,6 +5430,10 @@
   <ChannelNotepadPreview target={notepadPreviewTarget} />
 
   <main class="timeline" inert={mobileNavOpen}>
+    {#if galleryReturn?.userID === user?.id && galleryReturn?.workspaceID === selectedWorkspaceID}
+      <a class="gallery-return" href={`/app/${encodeURIComponent(selectedWorkspaceID)}/views/vai-gallery`}>Back to VAI gallery</a>
+      {#if gallerySourceError}<p role="alert">{gallerySourceError}</p>{/if}
+    {/if}
     {#if activePortraitUser && ((activePortraitUser.kind === "bot" && !activePortraitUser.deleted_at && $botAvatarFiles.length > 0) || activePortraitSource)}
       {#key activePortraitUser.id}
         <Avatar

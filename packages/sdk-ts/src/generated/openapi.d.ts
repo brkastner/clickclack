@@ -1264,6 +1264,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspaces/{workspace_id}/outputs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List ordinary responses from an explicitly selected active workspace bot
+     * @description Includes text-only and attachment-only messages visible to the requester. Excludes deleted and agent activity rows. Ordered by UTC creation time descending then message ID descending. Requires messages:read and dms:read for bot tokens. Authorization is rechecked on every page. No generation-completion guarantee.
+     */
+    get: operations["listOutputs"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/search": {
     parameters: {
       query?: never;
@@ -1505,6 +1525,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    OutputPage: {
+      outputs: components["schemas"]["Message"][];
+      next_cursor: string | null;
+    };
     NotepadStep: {
       step: string;
       /** @enum {string} */
@@ -5659,6 +5683,68 @@ export interface operations {
     responses: {
       /** @description WebSocket upgrade */
       101: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  listOutputs: {
+    parameters: {
+      query: {
+        author_id: string;
+        /** @description Opaque versioned cursor bound to workspace, requester, author and descending creation-time/message-ID order. */
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized message page. Conversation labels come from existing authorized channel and direct-conversation lists, never per-card lookups. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OutputPage"];
+        };
+      };
+      /** @description Invalid author, limit or cursor */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Insufficient scope or access */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Workspace unavailable */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Temporary retrieval failure */
+      500: {
         headers: {
           [name: string]: unknown;
         };

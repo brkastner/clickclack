@@ -93,6 +93,10 @@ func (s *Store) listMessagePage(ctx context.Context, scope messagePageScope, req
 }
 
 func (s *Store) hydrateReactions(ctx context.Context, userID string, messages []store.Message) ([]store.Message, error) {
+	return hydrateReactions(ctx, s.db, userID, messages)
+}
+
+func hydrateReactions(ctx context.Context, db storedb.DBTX, userID string, messages []store.Message) ([]store.Message, error) {
 	ids := make([]string, len(messages))
 	for i, m := range messages {
 		ids[i] = m.ID
@@ -101,7 +105,7 @@ func (s *Store) hydrateReactions(ctx context.Context, userID string, messages []
 		return messages, nil
 	}
 
-	rows, err := s.q.ListReactionsForMessages(ctx, storedb.ListReactionsForMessagesParams{
+	rows, err := storedb.New(db).ListReactionsForMessages(ctx, storedb.ListReactionsForMessagesParams{
 		UserID:     userID,
 		MessageIds: ids,
 	})
@@ -128,6 +132,10 @@ func (s *Store) hydrateReactions(ctx context.Context, userID string, messages []
 }
 
 func (s *Store) hydrateThreadStates(ctx context.Context, messages []store.Message) ([]store.Message, error) {
+	return hydrateThreadStates(ctx, s.db, messages)
+}
+
+func hydrateThreadStates(ctx context.Context, db storedb.DBTX, messages []store.Message) ([]store.Message, error) {
 	rootIDs := make([]string, 0, len(messages))
 	for _, message := range messages {
 		if message.ParentMessageID == nil {
@@ -137,7 +145,7 @@ func (s *Store) hydrateThreadStates(ctx context.Context, messages []store.Messag
 	if len(rootIDs) == 0 {
 		return messages, nil
 	}
-	rows, err := storedb.New(s.db).ListThreadStates(ctx, rootIDs)
+	rows, err := storedb.New(db).ListThreadStates(ctx, rootIDs)
 	if err != nil {
 		return nil, err
 	}
