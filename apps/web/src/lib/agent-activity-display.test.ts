@@ -3,6 +3,101 @@ import test from "node:test";
 import { coalesceAgentActivity } from "./chat/agent-activity.ts";
 import type { Message } from "./types.ts";
 
+const visible = { hideCommentary: false, hideToolCalls: false };
+const now = Date.parse("2026-08-28T21:31:10.000Z");
+
+// Expand compact tools back to source IDs to check chronology without depending
+// on how many adjacent rows the presentation combines.
+function sourceIDs(rows: Message[]): string[] {
+  return rows.flatMap((row) =>
+    row.preamble_block ? row.preamble_block.items.map((item) => item.id) : [row.id],
+  );
+}
+
+for (const [label, interrupt] of [
+  ["human message", { kind: "message", author_id: "usr_human" }],
+  ["another bot", { author_id: "usr_other_bot" }],
+  ["another turn", { turn_id: "turn_2" }],
+  ["ordinary final answer", { kind: "message" }],
+] as const) {
+  test(`keeps activity around ${label} in supplied order`, () => {
+    const rows = [
+      message("msg_01", "**read**"),
+      { ...message("msg_02", "interruption"), ...interrupt },
+      message("msg_03", "**exec**"),
+    ];
+    const before = structuredClone(rows);
+    const result = coalesceAgentActivity(rows, visible, now);
+    assert.deepEqual(
+      sourceIDs(result),
+      rows.map((row) => row.id),
+    );
+    assert.equal(result.length, 3);
+    assert.equal(result[0]?.preamble_block?.final, true);
+    assert.equal(result[2]?.preamble_block?.final, label === "ordinary final answer");
+    assert.deepEqual(rows, before);
+  });
+}
+
+test("late commentary stays after the final answer and prior rows stay put", () => {
+  const rows = [message("msg_01", "**read**"), message("msg_02", "done", "message")];
+  const before = coalesceAgentActivity(rows, visible, now);
+  const after = coalesceAgentActivity(
+    [...rows, message("msg_03", " late narration ", "agent_commentary")],
+    visible,
+    now,
+  );
+  assert.deepEqual(after.slice(0, 2), before);
+  assert.equal(after[2]?.body, "late narration");
+});
+
+test("visibility flags never combine tools across hidden commentary or ordinary rows", () => {
+  const rows = [
+    message("msg_01", "**read**"),
+    message("msg_02", "narration", "agent_commentary"),
+    message("msg_03", "**exec**"),
+    { ...message("msg_04", "human", "message"), author_id: "usr_human" },
+    message("msg_05", "**grep**"),
+  ];
+  for (const hideCommentary of [false, true]) {
+    for (const hideToolCalls of [false, true]) {
+      const result = coalesceAgentActivity(rows, { hideCommentary, hideToolCalls }, now);
+      assert.deepEqual(
+        sourceIDs(result),
+        rows
+          .filter(
+            (row) =>
+              !(hideCommentary && row.kind === "agent_commentary") &&
+              !(hideToolCalls && row.kind === "agent_tool"),
+          )
+          .map((row) => row.id),
+      );
+    }
+  }
+});
+
+for (const [label, scope] of [
+  ["author", { author_id: "usr_other" }],
+  ["channel", { channel_id: "chn_2" }],
+  ["direct conversation", { channel_id: undefined, direct_conversation_id: "dm_2" }],
+  ["missing turn", { turn_id: undefined }],
+] as const) {
+  test(`does not combine tools across ${label} boundaries`, () => {
+    const rows = [message("msg_01", "**read**"), { ...message("msg_02", "**read**"), ...scope }];
+    if (label === "missing turn") rows[0].turn_id = undefined;
+    const result = coalesceAgentActivity(rows, visible, now);
+    assert.deepEqual(sourceIDs(result), ["msg_01", "msg_02"]);
+    assert.equal(result.length, 2);
+  });
+}
+
+test("supplied order wins over timestamps and stale trailing tools stay final", () => {
+  const rows = [message("msg_02", "narration", "agent_commentary"), message("msg_01", "**read**")];
+  const result = coalesceAgentActivity(rows, visible, now + 180_000);
+  assert.deepEqual(sourceIDs(result), ["msg_02", "msg_01"]);
+  assert.equal(result[1]?.preamble_block?.final, true);
+});
+
 function message(id: string, body: string, kind: Message["kind"] = "agent_tool"): Message {
   return {
     id,
