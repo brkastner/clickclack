@@ -24,6 +24,7 @@ type OutputPageRequest struct {
 	UserID      string
 	Limit       int
 	Cursor      string
+	MediaOnly   bool
 }
 
 type OutputPage struct {
@@ -103,6 +104,6 @@ func NormalizeOutputTimestamp(value string) (string, error) {
 }
 
 func outputFingerprint(req OutputPageRequest) string {
-	sum := sha256.Sum256([]byte(strings.Join([]string{req.WorkspaceID, req.AuthorID, req.UserID}, "\x00")))
+	sum := sha256.Sum256([]byte(strings.Join([]string{req.WorkspaceID, req.AuthorID, req.UserID, fmt.Sprintf("media=%t", req.MediaOnly)}, "\x00")))
 	return base64.RawURLEncoding.EncodeToString(sum[:16])
 }

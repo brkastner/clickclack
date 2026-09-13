@@ -9,6 +9,13 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/store/sqlite/storedb"
 )
 
+func boolToInt(value bool) int64 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
 // ListOutputPage returns ordinary messages from one workspace bot. It deliberately
 // does not use FTS: outputs may be attachment-only and are ordered chronologically.
 func (s *Store) ListOutputPage(ctx context.Context, page store.OutputPageRequest) (store.OutputPage, error) {
@@ -42,7 +49,7 @@ func (s *Store) ListOutputPage(ctx context.Context, page store.OutputPageRequest
 	}
 	rows, err := q.ListOutputMessages(ctx, storedb.ListOutputMessagesParams{
 		WorkspaceID: req.WorkspaceID, AuthorID: req.AuthorID, UserID: req.UserID,
-		Guest: guest, CursorTime: createdAt, CursorID: messageID, PageLimit: int64(req.Limit + 1),
+		Guest: guest, MediaOnly: boolToInt(req.MediaOnly), CursorTime: createdAt, CursorID: messageID, PageLimit: int64(req.Limit + 1),
 	})
 	if err != nil {
 		return store.OutputPage{}, err

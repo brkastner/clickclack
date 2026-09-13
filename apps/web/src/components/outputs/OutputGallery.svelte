@@ -3,7 +3,7 @@
   import { goto } from "$app/navigation";
   import { sourceConversationID } from "../../lib/chat/message-source-navigation";
   import { api } from "../../lib/api";
-  import type { Channel, DirectConversation, Message, User, Workspace } from "../../lib/types";
+  import type { Channel, DirectConversation, Message, Upload, User, Workspace } from "../../lib/types";
   import { listAllWorkspaceMembers } from "../../lib/workspace-members";
   import { connectRealtime } from "../../lib/realtime.svelte";
   import { OutputGallerySession, outputBots, boundOutputBot, outputSourceKey, galleryReturn, rememberGallery, revealGallerySource, clearGalleryReturn, type OutputPage } from "../../lib/output-gallery";
@@ -26,6 +26,10 @@
   let pendingRevalidation = false;
   let alive = true;
   const outputs = $derived.by(() => { void revision; return session?.outputs ?? []; });
+  const media = $derived.by(() => outputs.flatMap((message) => mediaAttachments(message).map((upload) => ({ message, upload }))));
+  function mediaAttachments(message: Message): Upload[] {
+    return (message.attachments ?? []).filter((upload) => /^(image|video)\//i.test(upload.content_type));
+  }
   const busy = $derived.by(() => { void revision; return validating || session?.busy; });
   const pageError = $derived.by(() => { void revision; return session?.error; });
   const more = $derived.by(() => { void revision; return session?.nextCursor; });
@@ -43,7 +47,7 @@
     const author = sourceID;
     const scope = workspace.id;
     session = new OutputGallerySession((cursor, limit, signal) => {
-      const params = new URLSearchParams({ author_id: author, limit: String(limit) });
+      const params = new URLSearchParams({ author_id: author, limit: String(limit), media_only: "true" });
       if (cursor) params.set("cursor", cursor);
       return api<OutputPage>(`/api/workspaces/${scope}/outputs?${params}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) });
     });
@@ -156,30 +160,52 @@
 </script>
 <svelte:window onfocus={() => void revalidate()} ononline={() => void revalidate()} />
 <section class="output-gallery" bind:this={scroll} onscroll={(event) => { if (alive && session && !initializing && !validating) session.scrollTop = event.currentTarget.scrollTop; }}>
-  <header><h1>VAI gallery</h1><p>{workspace?.name ?? "Workspace"} · responses from your selected bot account</p>
-    <label>Source account <select value={sourceID} onchange={(event) => void choose(event.currentTarget.value)} disabled={initializing}>
-      <option value="">Select a bot account</option>
-      {#each bots as bot (bot.id)}<option value={bot.id}>{bot.display_name} (@{bot.handle}) · {bot.id}</option>{/each}
-    </select></label>
-    {#if sourceID}<button disabled={busy} onclick={() => void run(() => session!.load())}>Refresh</button><button disabled={busy} onclick={() => void latest()}>Latest response</button>{/if}
+  <header class="output-gallery__header">
+    <div><h1>gallery</h1><p>{workspace?.name ?? "workspace"} · images and videos from a selected bot</p></div>
+    <div class="output-gallery__controls">
+      <label>source
+        <select value={sourceID} onchange={(event) => void choose(event.currentTarget.value)} disabled={initializing} aria-label="gallery source account">
+          <option value="">select a bot account</option>
+          {#each bots as bot (bot.id)}<option value={bot.id}>{bot.display_name}{bot.handle ? ` (@${bot.handle})` : ""}</option>{/each}
+        </select>
+      </label>
+      {#if sourceID}
+        <button class="output-gallery__button" disabled={busy} onclick={() => void run(() => session!.load())}>refresh</button>
+        <button class="output-gallery__button output-gallery__button--primary" disabled={busy} onclick={() => void latest()}>latest</button>
+      {/if}
+    </div>
   </header>
-  {#if error}<p role="alert">{error}</p>{#if !sourceID}<button onclick={() => window.location.reload()}>Reload gallery</button>{/if}{/if}
-  {#if pageError}<p role="alert">{pageError}</p><button onclick={() => void run(() => session!.load(!!session?.nextCursor))}>Retry</button>{/if}
-  {#if initializing || validating}<p role="status">Checking responses…</p>
-  {:else if !sourceID}<p>Select the VAI bot account explicitly. The gallery remembers its account ID for this workspace.</p>
+  {#if error}<p class="output-gallery__notice" role="alert">{error}</p>{#if !sourceID}<button class="output-gallery__button" onclick={() => window.location.reload()}>reload gallery</button>{/if}{/if}
+  {#if pageError}<p class="output-gallery__notice" role="alert">{pageError}</p><button class="output-gallery__button" onclick={() => void run(() => session!.load(!!session?.nextCursor))}>retry</button>{/if}
+  {#if initializing || validating}<p class="output-gallery__notice" role="status">checking gallery…</p>
+  {:else if !sourceID}<p class="output-gallery__notice">select the bot account whose media you want to browse.</p>
   {:else}
-    <div class="output-grid">{#each outputs as message (message.id)}<OutputCard {message} label={labels[message.channel_id || message.direct_conversation_id || ""] || "Source conversation"} onOpen={(value) => void open(value)} />{/each}</div>
-    {#if !busy && !pageError && !outputs.length}<p>No responses from this account yet.</p>{/if}
-    {#if more}<button disabled={busy} onclick={() => void run(() => session!.load(true))}>{busy ? "Loading…" : "Load older responses"}</button>{/if}
+    <div class="output-grid">
+      {#each media as item, index (`${item.message.id}:${item.upload.id}`)}
+        <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={index < 12} onOpen={(value) => void open(value)} />
+      {/each}
+    </div>
+    {#if !busy && !pageError && !media.length}<p class="output-gallery__notice">no images or videos from this account yet.</p>{/if}
+    {#if more}<div class="output-gallery__more"><button class="output-gallery__button" disabled={busy} onclick={() => void run(() => session!.load(true))}>{busy ? "loading…" : "load older media"}</button></div>{/if}
   {/if}
 </section>
 <style>
   .output-gallery { height: 100%; overflow: auto; padding: clamp(1rem, 3vw, 3rem); color: var(--text); }
-  header { margin-bottom: 1.5rem; }
-  h1 { margin: 0; font-size: 1.8rem; }
-  header p { color: var(--text-muted); }
-  label { display: inline-flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-  select { max-width: min(100%, 32rem); }
-  button { margin: .5rem; }
-  .output-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 1.25rem; align-items: start; }
+  .output-gallery__header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin: 0 auto 1.5rem; max-width: 110rem; }
+  h1 { margin: 0; color: var(--text-strong); font-size: clamp(1.75rem, 3vw, 2.4rem); letter-spacing: -.035em; }
+  h1 + p { margin: .35rem 0 0; color: var(--muted); }
+  .output-gallery__controls { display: flex; align-items: end; flex-wrap: wrap; gap: .5rem; }
+  label { display: grid; gap: .3rem; color: var(--muted); font-size: .76rem; font-weight: 650; text-transform: lowercase; }
+  select, .output-gallery__button { min-height: 2.35rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+  select { min-width: min(18rem, calc(100vw - 3rem)); padding: 0 .7rem; cursor: pointer; }
+  .output-gallery__button { padding: 0 .8rem; cursor: pointer; }
+  .output-gallery__button:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--accent); background: var(--hover-strong); }
+  .output-gallery__button--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); font-weight: 700; }
+  .output-gallery__button--primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .output-gallery__button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .output-gallery__button:disabled, select:disabled { cursor: not-allowed; opacity: .55; }
+  .output-gallery__notice { max-width: 44rem; margin: 3rem auto; color: var(--muted); text-align: center; }
+  .output-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 1rem; margin: 0 auto; max-width: 110rem; align-items: start; }
+  .output-gallery__more { display: flex; justify-content: center; padding: 1.5rem; }
+  @media (max-width: 720px) { .output-gallery__header { align-items: stretch; flex-direction: column; } .output-gallery__controls { align-items: stretch; } label { flex: 1 1 100%; } select { width: 100%; } .output-gallery__button { flex: 1; } .output-grid { grid-template-columns: 1fr; } }
 </style>

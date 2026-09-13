@@ -4157,12 +4157,16 @@ WITH eligible AS (
 END AS output_created_at FROM messages m
  WHERE m.workspace_id = ?4 AND m.author_id = ?5
  AND m.deleted_at IS NULL AND (m.kind = 'message' OR m.kind = '')
+ AND (CAST(?6 AS INTEGER) = 0 OR EXISTS (
+   SELECT 1 FROM message_attachments ma JOIN uploads u ON u.id = ma.upload_id
+   WHERE ma.message_id = m.id AND (u.content_type LIKE 'image/%' OR u.content_type LIKE 'video/%')
+ ))
  AND ((m.channel_id IS NOT NULL AND m.direct_conversation_id IS NULL
        AND EXISTS (SELECT 1 FROM channels c WHERE c.id = m.channel_id AND c.workspace_id = m.workspace_id
-         AND (CAST(?6 AS INTEGER) = 0 OR c.name = 'guest')))
- OR (CAST(?6 AS INTEGER) = 0 AND EXISTS (SELECT 1 FROM direct_conversation_members dcm
+         AND (CAST(?7 AS INTEGER) = 0 OR c.name = 'guest')))
+ OR (CAST(?7 AS INTEGER) = 0 AND EXISTS (SELECT 1 FROM direct_conversation_members dcm
        JOIN direct_conversations dc ON dc.id = dcm.conversation_id
-       WHERE dcm.conversation_id = m.direct_conversation_id AND dcm.user_id = ?7
+       WHERE dcm.conversation_id = m.direct_conversation_id AND dcm.user_id = ?8
        AND dc.workspace_id = m.workspace_id)))
 )
 SELECT m.id, m.workspace_id, m.channel_id, m.direct_conversation_id, m.author_id, m.parent_message_id, m.thread_root_id, m.topic_id, m.channel_seq, m.thread_seq, m.body, m.body_format, m.created_at, m.edited_at, m.deleted_at, m.quoted_message_id, m.quoted_body_snapshot, m.quoted_author_id, m.client_nonce, m.route_id, m.kind, m.turn_id, u.display_name AS author_display_name, u.handle AS author_handle,
@@ -4180,6 +4184,7 @@ type ListOutputMessagesParams struct {
 	PageLimit   int64  `json:"page_limit"`
 	WorkspaceID string `json:"workspace_id"`
 	AuthorID    string `json:"author_id"`
+	MediaOnly   int64  `json:"media_only"`
 	Guest       int64  `json:"guest"`
 	UserID      string `json:"user_id"`
 }
@@ -4222,6 +4227,7 @@ func (q *Queries) ListOutputMessages(ctx context.Context, arg ListOutputMessages
 		arg.PageLimit,
 		arg.WorkspaceID,
 		arg.AuthorID,
+		arg.MediaOnly,
 		arg.Guest,
 		arg.UserID,
 	)

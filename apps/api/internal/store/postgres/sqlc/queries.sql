@@ -2024,6 +2024,10 @@ WITH eligible AS (
 END AS output_created_at FROM messages m
  WHERE m.workspace_id = sqlc.arg(workspace_id) AND m.author_id = sqlc.arg(author_id)
  AND m.deleted_at IS NULL AND (m.kind = 'message' OR m.kind = '')
+ AND (CAST(sqlc.arg(media_only) AS INTEGER) = 0 OR EXISTS (
+   SELECT 1 FROM message_attachments ma JOIN uploads u ON u.id = ma.upload_id
+   WHERE ma.message_id = m.id AND (u.content_type LIKE 'image/%' OR u.content_type LIKE 'video/%')
+ ))
  AND ((m.channel_id IS NOT NULL AND m.direct_conversation_id IS NULL
        AND EXISTS (SELECT 1 FROM channels c WHERE c.id = m.channel_id AND c.workspace_id = m.workspace_id
          AND (CAST(sqlc.arg(guest) AS INTEGER) = 0 OR c.name = 'guest')))

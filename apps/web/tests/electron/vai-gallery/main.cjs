@@ -1,9 +1,13 @@
 const { app, BrowserWindow } = require("electron");
+const option = (name, fallback) => {
+  const value = process.argv.find((argument) => argument.startsWith(`--${name}=`))?.split("=")[1];
+  return Number(value || fallback);
+};
 app.whenReady().then(() => {
   const window = new BrowserWindow({
-    width: 1100,
-    height: 800,
-    show: false,
+    width: option("gallery-width", 1100),
+    height: option("gallery-height", 800),
+    show: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   window.loadURL("about:blank");

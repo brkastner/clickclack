@@ -1,28 +1,105 @@
 <script lang="ts">
-  import MediaAttachment from "../MediaAttachment.svelte";
   import { uploadURL } from "../../lib/uploads";
-  import type { Message } from "../../lib/types";
-  let { message, label, onOpen }: { message: Message; label: string; onOpen: (message: Message) => void } = $props();
-  let unavailable = $state(false);
+  import type { Message, Upload } from "../../lib/types";
+
+  let {
+    message,
+    upload,
+    label,
+    eager,
+    onOpen,
+  }: {
+    message: Message;
+    upload: Upload;
+    label: string;
+    eager: boolean;
+    onOpen: (message: Message) => void;
+  } = $props();
+
+  const mediaURL = $derived(uploadURL(upload));
+  const isVideo = $derived(upload.content_type.toLowerCase().startsWith("video/"));
+  const alt = $derived(isVideo ? "" : `Image from ${label}`);
 </script>
+
 <article class="output-card" data-output-id={message.id}>
-  <header><span>{label}</span><time datetime={message.created_at}>{new Date(message.created_at).toLocaleString()}</time></header>
-  <div onerrorcapture={() => unavailable = true}>
-    {#each message.attachments ?? [] as upload (upload.id)}
-      <MediaAttachment {upload} url={uploadURL(upload)} eager={false}
-        onOpenImage={(url) => window.open(url, "_blank", "noopener,noreferrer")}
-        onOpenArtifact={(file) => window.open(uploadURL(file), "_blank", "noopener,noreferrer")} />
-      <a href={uploadURL(upload)} target="_blank" rel="noopener noreferrer">{upload.filename}</a>
-    {/each}
+  <div class="output-card__media">
+    {#if isVideo}
+      <video
+        src={mediaURL}
+        preload="metadata"
+        playsinline
+        controls
+        controlslist="nodownload"
+        aria-label={`Video from ${label}`}
+      ><track kind="captions" /></video>
+    {:else}
+      <img
+        src={mediaURL}
+        {alt}
+        loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        width={upload.width || undefined}
+        height={upload.height || undefined}
+      />
+    {/if}
   </div>
-  {#if unavailable}<p role="status">Media unavailable. Open the source to check access.</p>{/if}
-  {#if message.body}<p class="output-body">{message.body}</p>{/if}
-  <button type="button" data-output-focus={message.id} onclick={() => onOpen(message)}>Open {message.parent_message_id ? "thread response" : "source"}</button>
+  <footer>
+    <div class="output-card__meta">
+      <span>{label}</span>
+      <time datetime={message.created_at}>{new Date(message.created_at).toLocaleString()}</time>
+    </div>
+    <button type="button" class="output-card__source" data-output-focus={message.id} onclick={() => onOpen(message)}>
+      open source
+    </button>
+  </footer>
 </article>
+
 <style>
-  .output-card { border: 1px solid var(--border); border-radius: 10px; padding: 1rem; min-width: 0; background: var(--bg); }
-  header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; color: var(--text-muted); font-size: .8rem; margin-bottom: .75rem; }
-  .output-body { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
-  a { display: block; overflow-wrap: anywhere; margin: .5rem 0; }
-  button { margin-top: .75rem; }
+  .output-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  }
+  .output-card__media {
+    display: grid;
+    min-height: 12rem;
+    max-height: min(48vh, 31rem);
+    background: var(--bg);
+    place-items: center;
+  }
+  img, video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-height: min(48vh, 31rem);
+    object-fit: contain;
+    background: var(--bg);
+  }
+  footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .7rem .8rem;
+    border-top: 1px solid var(--line);
+  }
+  .output-card__meta { min-width: 0; color: var(--muted); font-size: .76rem; }
+  .output-card__meta span, time { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .output-card__source {
+    flex: none;
+    min-height: 2rem;
+    padding: .35rem .6rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: .78rem;
+    cursor: pointer;
+  }
+  .output-card__source:hover { background: var(--hover-strong); }
+  .output-card__source:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

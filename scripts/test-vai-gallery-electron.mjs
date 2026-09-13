@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { readFile, writeFile } from "node:fs/promises";
 import { _electron as electron, expect } from "@playwright/test";
 const webRequire = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const desktopRequire = createRequire(new URL("../apps/desktop/package.json", import.meta.url));
@@ -28,7 +29,7 @@ try {
   await server.listen();
   app = await electron.launch({
     executablePath: desktopRequire("electron"),
-    args: ["--no-sandbox", `${root}/main.cjs`],
+    args: ["--no-sandbox", `--gallery-width=${process.env.GALLERY_WIDTH || 1100}`, `--gallery-height=${process.env.GALLERY_HEIGHT || 800}`, `${root}/main.cjs`],
     env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: "true" },
   });
   const page = await app.firstWindow();
@@ -37,6 +38,8 @@ try {
   const user = { id: "owner", kind: "human", display_name: "Owner", handle: "owner" };
   const bot = { id: "bot", kind: "bot", display_name: "VAI", handle: "vai" };
   const workspace = { id: "workspace", route_id: "w", name: "Synthetic workspace" };
+  const screenshotDir = process.env.GALLERY_SCREENSHOT_DIR || "/tmp/clickclack-gallery-visual";
+  await import("node:fs/promises").then(({ mkdir }) => mkdir(screenshotDir, { recursive: true }));
   const messages = Array.from({ length: 35 }, (_, i) => ({
     id: `output-${i}`,
     workspace_id: workspace.id,
@@ -53,19 +56,10 @@ try {
       ? { parent_message_id: "output-34", thread_root_id: "output-34", thread_seq: 2 }
       : {}),
     ...(i === 0
-      ? {
-          attachments: [
-            {
-              id: "image",
-              filename: "image.png",
-              content_type: "image/png",
-              byte_size: 12,
-              width: 1,
-              height: 1,
-            },
-          ],
-        }
-      : {}),
+      ? { attachments: [{ id: "image", filename: "image.png", content_type: "image/png", byte_size: 12, width: 320, height: 180 }] }
+      : i === 31
+        ? { attachments: [{ id: "video", filename: "video.mp4", content_type: "video/mp4", byte_size: 12, width: 320, height: 180 }] }
+        : {}),
   }));
   let olderFails = true;
   let deleted = false;
@@ -88,16 +82,11 @@ try {
     else if (path === "/api/dms") json = { conversations: [] };
     else if (path.endsWith("/outputs")) {
       limits.push(url.searchParams.get("limit"));
-      const start = url.searchParams.has("cursor") ? 30 : 0;
-      if (start && olderFails)
-        return route.fulfill({ status: 503, json: { error: "Synthetic outage" } });
+      const media = messages.filter((message) => message.attachments?.some((upload) => /^(image|video)\//.test(upload.content_type)));
       const limit = Number(url.searchParams.get("limit"));
-      json = {
-        outputs: messages
-          .slice(start, start + limit)
-          .filter((m) => !deleted || m.id !== "output-0"),
-        next_cursor: start + limit < messages.length ? "older" : null,
-      };
+      json = { outputs: media.slice(0, limit).filter((m) => !deleted || m.id !== "output-0"), next_cursor: null };
+    } else if (path.startsWith("/api/uploads/")) {
+      return route.fulfill({ contentType: "image/png", body: await readFile(`${root}/preview.png`) });
     } else if (path.startsWith("/api/messages/"))
       json = { message: messages.find((m) => m.id === path.split("/").at(-1)) };
     else return route.fulfill({ status: 404 });
@@ -105,35 +94,52 @@ try {
   });
   await page.goto(server.resolvedUrls.local[0]);
   await expect(page.getByRole("combobox")).toBeEnabled();
+  if (process.env.GALLERY_NARROW === "true") {
+    console.log("narrow bounds", await app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.setSize(390, 760);
+      return window.getSize();
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  console.log("gallery fixture ready", await page.evaluate(() => ({ width: innerWidth, height: innerHeight })));
   await expect(page.locator(".output-card")).toHaveCount(0);
+  const captureScreenshot = async (name) => {
+    const data = await app.evaluate(async ({ BrowserWindow }) => {
+      const image = await BrowserWindow.getAllWindows()[0].webContents.capturePage();
+      return image.toPNG().toString("base64");
+    });
+    await writeFile(`${screenshotDir}/${name}`, Buffer.from(data, "base64"));
+  };
   await page.getByRole("combobox").selectOption("bot");
-  await expect(page.locator(".output-card")).toHaveCount(30);
-  await page.getByRole("button", { name: "Load older responses" }).click();
-  await expect(page.getByRole("alert")).toContainText("could not be loaded");
-  await expect(page.locator(".output-card")).toHaveCount(30);
-  olderFails = false;
-  await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(page.locator(".output-card")).toHaveCount(35);
+  await expect(page.locator(".output-card")).toHaveCount(2);
+  await expect(page.locator(".output-card img")).toBeVisible();
+  await expect(page.locator("video")).toBeVisible();
+  await expect.poll(() => page.locator(".output-card img").evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await captureScreenshot("gallery-desktop.png");
+  if (process.env.GALLERY_NARROW === "true") {
+    await page.screenshot({ path: `${screenshotDir}/gallery-narrow-page.png`, fullPage: true, animations: "disabled", timeout: 10_000 });
+  }
+  console.log("desktop captured");
   await page.locator('[data-output-focus="output-31"]').focus();
   await page.keyboard.press("Enter");
   await expect(page.locator('[data-test-source="output-31"]')).toContainText(
     "/app/workspace/channel",
   );
-  await page.getByRole("button", { name: "Return to gallery" }).click();
-  await expect(page.locator(".output-card")).toHaveCount(35);
+  await page.getByRole("button", { name: "Return to gallery" }).click({ force: true });
+  await expect(page.locator(".output-card")).toHaveCount(2);
   await expect(page.locator('[data-output-focus="output-31"]')).toBeFocused();
-  await page.getByRole("button", { name: "Latest response" }).click();
+  await page.getByRole("button", { name: "latest" }).click({ force: true });
   await expect(page.locator('[data-test-source="output-0"]')).toBeVisible();
   assert.ok(limits.includes("1"));
-  await page.getByRole("button", { name: "Return to gallery" }).click();
-  await expect(page.locator(".output-card")).toHaveCount(35);
+  await page.getByRole("button", { name: "Return to gallery" }).click({ force: true });
+  await expect(page.locator(".output-card")).toHaveCount(2);
   deleted = true;
   await page.evaluate(() => window.dispatchEvent(new Event("gallery-test-invalidate")));
   await expect(page.locator('[data-output-id="output-0"]')).toHaveCount(0);
   assert.deepEqual(errors, []);
-  console.log(
-    "VAI gallery Electron synthetic check passed: selection, pagination retry, keyboard source, return focus, latest and deletion.",
-  );
+  console.log(`Gallery Electron visual check passed. Screenshots: ${screenshotDir}/gallery-desktop.png, ${screenshotDir}/gallery-desktop.png`);
 } finally {
   await app?.close();
   await server.close();

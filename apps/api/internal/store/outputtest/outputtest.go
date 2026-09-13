@@ -89,6 +89,12 @@ func Run(t *testing.T, st store.Store, exec func(string, ...any) error) {
 	if len(seen) != len(want) {
 		t.Fatalf("got %d outputs, want %d", len(seen), len(want))
 	}
+	// Gallery pages must skip status/text rows before pagination, not merely hide them in the UI.
+	mediaPage, err := st.ListOutputPage(ctx, store.OutputPageRequest{WorkspaceID: ws, AuthorID: bot.ID, UserID: owner.ID, MediaOnly: true})
+	must(t, err)
+	if len(mediaPage.Outputs) != 1 || mediaPage.Outputs[0].ID != attachment.ID {
+		t.Fatalf("media-only page included non-media output: %#v", mediaPage.Outputs)
+	}
 	request.Cursor = *first.NextCursor
 	request.UserID = member.ID
 	if _, err = st.ListOutputPage(ctx, request); err == nil {

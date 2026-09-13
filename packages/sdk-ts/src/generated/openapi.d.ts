@@ -5697,6 +5697,8 @@ export interface operations {
         /** @description Opaque versioned cursor bound to workspace, requester, author and descending creation-time/message-ID order. */
         cursor?: string;
         limit?: number;
+        /** @description When true, only messages with at least one image or video attachment are eligible before pagination. */
+        media_only?: boolean;
       };
       header?: never;
       path: {

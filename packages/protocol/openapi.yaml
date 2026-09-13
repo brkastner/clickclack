@@ -1841,6 +1841,10 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+        - name: media_only
+          in: query
+          description: When true, only messages with at least one image or video attachment are eligible before pagination.
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Authorized message page. Conversation labels come from existing authorized channel and direct-conversation lists, never per-card lookups.
