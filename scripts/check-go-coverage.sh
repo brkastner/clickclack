@@ -8,7 +8,9 @@ if ! [[ "$min_coverage" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
 	exit 2
 fi
 
-go test ./apps/api/internal/... -coverprofile=coverage.out
+# Include calls made by another package's integration tests, including shared
+# test gateways, rather than reporting those exercised packages as uncovered.
+go test ./apps/api/internal/... -coverpkg=./apps/api/internal/... -coverprofile=coverage.out
 # Keep the aggregate gate focused on request/business logic. Storage and upload
 # adapters are still exercised by `go test ./...`, but their generated SQL and
 # external I/O branches make the total package percentage noisy.

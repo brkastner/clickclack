@@ -323,6 +323,28 @@ func newIsolatedPostgresTestStore(t *testing.T) *Store {
 	return st
 }
 
+// seedPostgresMigrationChannel uses only historical columns: current store methods
+// require the latest schema and must not seed a partially migrated database.
+func seedPostgresMigrationChannel(t *testing.T, ctx context.Context, st *Store) (ownerID, workspaceID, channelID string) {
+	t.Helper()
+	ownerID, workspaceID, channelID = "usr_upgrade", "wsp_upgrade", "chn_upgrade"
+	for _, query := range []string{
+		`INSERT INTO users (id, display_name, handle, created_at)
+		 VALUES ('usr_upgrade', 'Upgrade Owner', 'upgrade-owner', $1)`,
+		`INSERT INTO workspaces (id, name, slug, created_at)
+		 VALUES ('wsp_upgrade', 'Upgrade', 'upgrade', $1)`,
+		`INSERT INTO workspace_members (workspace_id, user_id, role, created_at)
+		 VALUES ('wsp_upgrade', 'usr_upgrade', 'owner', $1)`,
+		`INSERT INTO channels (id, workspace_id, name, kind, created_at)
+		 VALUES ('chn_upgrade', 'wsp_upgrade', 'general', 'public', $1)`,
+	} {
+		if _, err := st.db.ExecContext(ctx, query, now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return ownerID, workspaceID, channelID
+}
+
 func TestCreateReservedUploadSerializesWithNonceRetries(t *testing.T) {
 	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)

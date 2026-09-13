@@ -15,35 +15,25 @@ func TestPinnedMessagesMigrationUpgradesExistingDatabase(t *testing.T) {
 	ctx := context.Background()
 	st := newIsolatedPostgresTestStore(t)
 	applyPostgresMigrationsBefore(t, ctx, st, "0033_pinned_messages.sql")
-	owner, err := st.EnsureBootstrap(ctx, "Pin Upgrade", "postgres-pin-upgrade@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workspaces, err := st.ListWorkspaces(ctx, owner.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	channels, err := st.ListChannels(ctx, workspaces[0].ID, owner.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	message, _, err := st.CreateMessage(ctx, store.CreateMessageInput{
-		ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "existing postgres message",
-	})
-	if err != nil {
+	ownerID, workspaceID, channelID := seedPostgresMigrationChannel(t, ctx, st)
+	const messageID = "msg_upgrade"
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO messages (id, workspace_id, channel_id, author_id, thread_root_id, channel_seq, body, body_format, created_at)
+		VALUES ($1, $2, $3, $4, $1, 1, 'existing postgres message', 'markdown', $5)`,
+		messageID, workspaceID, channelID, ownerID, now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := st.PinMessage(ctx, channels[0].ID, message.ID, owner.ID); err != nil {
+	if _, _, err := st.PinMessage(ctx, channelID, messageID, ownerID); err != nil {
 		t.Fatal(err)
 	}
-	pinned, err := st.ListPinnedMessages(ctx, channels[0].ID, owner.ID, 100)
-	if err != nil || len(pinned) != 1 || pinned[0].ID != message.ID {
+	pinned, err := st.ListPinnedMessages(ctx, channelID, ownerID, 100)
+	if err != nil || len(pinned) != 1 || pinned[0].ID != messageID {
 		t.Fatalf("unexpected upgraded pin list: %#v: %v", pinned, err)
 	}
-	if _, err := st.UnpinMessage(ctx, channels[0].ID, message.ID, owner.ID); err != nil {
+	if _, err := st.UnpinMessage(ctx, channelID, messageID, ownerID); err != nil {
 		t.Fatal(err)
 	}
 }
