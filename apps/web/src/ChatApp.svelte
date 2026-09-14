@@ -5491,7 +5491,6 @@
 
   <main class="timeline" inert={mobileNavOpen}>
     {#if galleryReturn?.userID === user?.id && galleryReturn?.workspaceID === selectedWorkspaceID}
-      <a class="gallery-return" href={`/app/${encodeURIComponent(selectedWorkspaceID)}/views/vai-gallery`}>Back to VAI gallery</a>
       {#if gallerySourceError}<p role="alert">{gallerySourceError}</p>{/if}
     {/if}
     {#if activePortraitUser && ((activePortraitUser.kind === "bot" && !activePortraitUser.deleted_at && $botAvatarFiles.length > 0) || activePortraitSource)}
