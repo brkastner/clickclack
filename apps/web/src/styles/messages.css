@@ -2383,6 +2383,7 @@
 }
 
 .media-tile--image img {
+  height: auto;
   max-height: 320px;
 }
 
