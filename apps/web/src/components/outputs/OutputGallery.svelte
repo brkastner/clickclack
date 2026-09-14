@@ -159,8 +159,12 @@
         const key = tile.dataset.galleryTile!;
         const position = positions[key];
         if (position) {
+          // Keep a settled tile in its assigned column. If its media resolves
+          // late, only later tiles in that column move down; no tile is moved
+          // to a different column and appending alone leaves old positions intact.
           const column = Math.min(columns - 1, Math.round(position.left / (width + gap)));
-          bottoms[column] = Math.max(bottoms[column], position.top + tile.offsetHeight + gap);
+          positions[key] = { left: position.left, top: bottoms[column] };
+          bottoms[column] += tile.offsetHeight + gap;
         }
       }
       for (const tile of tiles) {
