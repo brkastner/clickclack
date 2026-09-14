@@ -5,9 +5,9 @@
 // current tool block; later tools start a new block. This repeats for the full
 // turn: commentary, tools, commentary, tools, final answer.
 //
-// Rows are still grouped by turn_id across the whole list and emitted at the
-// turn's first activity position. That keeps late activity above the ordinary
-// final answer while preserving the activity row order inside the turn.
+// Activity stays in the supplied conversation order, including late activity.
+// Only contiguous tools with the same conversation/author/turn key coalesce;
+// ordinary messages and other turns separate blocks without relocating rows.
 //
 // A tool block is final (collapsed) when another commentary/tool segment follows
 // it, when the turn's ordinary final answer exists, or when the turn is stale.
@@ -168,68 +168,15 @@ function buildToolBlock(turnId: string, rows: Message[], final: boolean): Preamb
   return { turnId, items, final };
 }
 
-type TurnSegment = { type: "commentary"; row: Message } | { type: "tools"; rows: Message[] };
-
-function segmentTurn(rows: Message[]): TurnSegment[] {
-  const segments: TurnSegment[] = [];
-  let tools: Message[] = [];
-  const flushTools = () => {
-    if (tools.length > 0) segments.push({ type: "tools", rows: tools });
-    tools = [];
-  };
-  for (const row of rows) {
-    if (row.kind === "agent_tool") {
-      tools.push(row);
-      continue;
-    }
-    flushTools();
-    segments.push({ type: "commentary", row });
-  }
-  flushTools();
-  return segments;
-}
-
-function buildTurnRows(
-  turn: TurnAccumulator,
-  turnFinal: boolean,
-  flags: AgentActivityFlags,
-): Message[] {
-  const segments = segmentTurn(turn.rows);
-  const out: Message[] = [];
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index];
-    if (!segment) continue;
-    if (segment.type === "commentary") {
-      if (flags.hideCommentary || !segment.row.body.trim()) continue;
-      out.push({ ...segment.row, body: segment.row.body.trim() });
-      continue;
-    }
-    if (flags.hideToolCalls) continue;
-    const first = segment.rows[0];
-    if (!first) continue;
-    const final = turnFinal || index < segments.length - 1;
-    out.push({
-      ...first,
-      body: "",
-      attachments: undefined,
-      quoted_message_id: undefined,
-      preamble_block: buildToolBlock(turn.turnId, segment.rows, final),
-    });
-  }
-  return out;
-}
-
 type TurnAccumulator = {
-  turnId: string;
   rows: Message[];
   firstIndex: number;
   lastIndex: number;
   author: string;
 };
 
-// Walk an ordered message list and replace each turn's activity rows with its
-// commentary/tool segments at the first activity position. Ordinary messages
-// pass through untouched and keep their order.
+// Track turn finality independently, then replace contiguous tool runs in place.
+// Ordinary messages pass through untouched; visibility never erases a boundary.
 export function coalesceAgentActivity(
   messages: Message[],
   flags: AgentActivityFlags,
@@ -250,7 +197,6 @@ export function coalesceAgentActivity(
       turn.lastIndex = i;
     } else {
       turns.set(key, {
-        turnId: message.turn_id || message.id,
         rows: [message],
         firstIndex: i,
         lastIndex: i,
@@ -282,10 +228,33 @@ export function coalesceAgentActivity(
       out.push(message);
       continue;
     }
+    if (message.kind === "agent_commentary") {
+      if (!flags.hideCommentary && message.body.trim()) {
+        out.push({ ...message, body: message.body.trim() });
+      }
+      continue;
+    }
     const key = turnKey(message);
-    const turn = turns.get(key);
-    if (!turn || turn.firstIndex !== i) continue; // folded into the anchor row
-    out.push(...buildTurnRows(turn, finals.get(key) === true, flags));
+    const start = i;
+    while (
+      i + 1 < messages.length &&
+      messages[i + 1].kind === "agent_tool" &&
+      turnKey(messages[i + 1]) === key
+    ) {
+      i += 1;
+    }
+    if (flags.hideToolCalls) continue;
+    out.push({
+      ...message,
+      body: "",
+      attachments: undefined,
+      quoted_message_id: undefined,
+      preamble_block: buildToolBlock(
+        message.turn_id || message.id,
+        messages.slice(start, i + 1),
+        finals.get(key) === true || i < messages.length - 1,
+      ),
+    });
   }
   return out;
 }

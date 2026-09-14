@@ -21,7 +21,7 @@ test("keeps the avatar sticky within its message group", () => {
   assert.match(stickyRule, /align-self:\s*start/u);
 });
 
-test("right-aligns text inside the current user's message bubble", () => {
+test("keeps prose left-aligned inside the current user's right-positioned bubble", () => {
   const acceptedPass =
     messageStyles.match(
       /\/\* ---------- ACCEPTED ASSISTANT THREAD PASS ---------- \*\/([\s\S]*?)@media \(max-width: 760px\)/u,
@@ -34,6 +34,6 @@ test("right-aligns text inside the current user's message bubble", () => {
     )?.[1] ?? "";
 
   assert.match(contentRule, /margin-left:\s*auto/u);
-  assert.match(contentRule, /text-align:\s*right/u);
-  assert.match(markdownRule, /text-align:\s*right/u);
+  assert.match(contentRule, /text-align:\s*left/u);
+  assert.match(markdownRule, /text-align:\s*left/u);
 });

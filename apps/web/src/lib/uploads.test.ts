@@ -66,6 +66,29 @@ test("fileUploadNonce is stable across separate composer entries for one file", 
   );
 });
 
+test("fileUploadNonce separates equal content with different file identities", async () => {
+  const bytes = new Uint8Array([1, 2, 3]);
+  assert.notEqual(
+    await fileUploadNonce("workspace", new File([bytes], "first.png", { type: "image/png" })),
+    await fileUploadNonce("workspace", new File([bytes], "second.png", { type: "image/png" })),
+  );
+});
+
+test("fileUploadNonce separates types and delimiter-bearing identities", async () => {
+  for (const [first, second] of [
+    [
+      new File(["same"], "a.txt", { type: "text/plain" }),
+      new File(["same"], "a.txt", { type: "text/html" }),
+    ],
+    [new File(["same"], "a:b", { type: "c" }), new File(["same"], "a", { type: "b:c" })],
+  ]) {
+    assert.notEqual(
+      await fileUploadNonce("workspace", first),
+      await fileUploadNonce("workspace", second),
+    );
+  }
+});
+
 test("fileUploadNonce separates different content", async () => {
   const first = new File([new Uint8Array([1, 2, 3])], "a.png", { type: "image/png" });
   const second = new File([new Uint8Array([1, 2, 4])], "a.png", { type: "image/png" });

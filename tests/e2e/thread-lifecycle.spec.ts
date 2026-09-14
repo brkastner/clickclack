@@ -71,11 +71,11 @@ test("failed thread replies retain their text and quote and retry without duplic
     }
   });
   await page.getByRole("button", { name: "Reply", exact: true }).last().click();
-  await expect(page.getByLabel("Reply body")).toHaveValue(body);
+  await expect(page.getByLabel("Reply body")).toHaveText(body);
   await expect(page.getByRole("alert")).toContainText("Reply response interrupted");
   await expect(page.getByLabel("Replying to message")).toContainText(roots[0].body);
   await page.getByRole("button", { name: "Reply", exact: true }).last().click();
-  await expect(page.getByLabel("Reply body")).toHaveValue("");
+  await expect(page.getByLabel("Reply body")).toHaveText("");
   expect(submissions).toHaveLength(2);
   expect(submissions[1].nonce).toBe(submissions[0].nonce);
   expect(submissions[1].quoted_message_id).toBe(roots[0].id);
@@ -109,7 +109,7 @@ test("a reply response stays with its thread after switching panes", async ({ pa
     await delivered.promise;
     await page.waitForTimeout(300);
     await expect(page.locator(".reply-list")).not.toContainText("Reply belongs to first thread");
-    await expect(page.getByLabel("Reply body")).toHaveValue("Second thread draft");
+    await expect(page.getByLabel("Reply body")).toHaveText("Second thread draft");
     await openThread(page, roots[0].id);
     await expect(page.locator(".reply-list")).toContainText("Reply belongs to first thread");
   } finally {

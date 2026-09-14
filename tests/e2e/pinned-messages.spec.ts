@@ -143,7 +143,7 @@ test("pins are shared, persistent, and removable through ClickClack", async ({ p
   const { suffix, channel } = await openPinChannel(page);
   const body = `Pinned behavior proof ${suffix}`;
   await page.getByLabel("Message body").fill(body);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const row = page.locator(".message-row:not(.is-pending)", { hasText: body });
   await expect(row).toBeVisible();
   const messageID = await row.getAttribute("data-message-id");
@@ -319,7 +319,7 @@ test("local edits and deletes reconcile the open pinned panel", async ({ page })
   const { suffix, channel } = await openPinChannel(page);
   const body = `Local pin reconciliation ${suffix}`;
   await page.getByLabel("Message body").fill(body);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const row = page.locator(".message-row:not(.is-pending)", { hasText: body });
   await expect(row).toBeVisible();
   const messageID = await row.getAttribute("data-message-id");
@@ -364,7 +364,7 @@ test("thread pin failures remain visible without unhandled errors", async ({ pag
   page.on("pageerror", (error) => pageErrors.push(error));
   const body = `Thread pin failure ${suffix}`;
   await page.getByLabel("Message body").fill(body);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const row = page.locator(".message-row:not(.is-pending)", { hasText: body });
   await expect(row).toBeVisible();
   await row.evaluate((element) => element.scrollIntoView({ block: "center" }));

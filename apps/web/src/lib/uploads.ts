@@ -40,7 +40,9 @@ export async function fileUploadNonce(workspaceID: string, file: File): Promise<
   if (!subtle) return newUploadNonce();
   try {
     const content = hexDigest(await subtle.digest("SHA-256", await file.arrayBuffer()));
-    const scoped = new TextEncoder().encode(`${workspaceID}:${content}`);
+    const scoped = new TextEncoder().encode(
+      JSON.stringify([workspaceID, file.name, file.type, content]),
+    );
     return hexDigest(await subtle.digest("SHA-256", scoped));
   } catch {
     // SubtleCrypto is unavailable outside a secure context. A random nonce keeps

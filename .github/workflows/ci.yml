@@ -163,6 +163,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
+      - name: Install native build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3 make g++
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

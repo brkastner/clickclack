@@ -387,7 +387,7 @@
       ondragleave={() => { if (dropGroupKey === "unsectioned") dropGroupKey = ""; }}
       ondrop={(event) => groupDrop(event, "unsectioned", null)}>
       <button type="button" class="section-toggle" aria-expanded={expanded} aria-controls={listID} onclick={onToggle}><span class="caret" aria-hidden="true">▾</span><span class="label">Channels</span></button>
-      <button type="button" class="add-button" aria-label="Create channel" title="Create channel" onclick={onCreateChannel}>＋</button>
+      <button type="button" class="add-button" aria-label="Create channel" title="Create channel" onclick={() => onCreateChannel()}>＋</button>
     </div>
   {:else}
     <div class="section-title">

@@ -761,7 +761,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  min-width: min(8rem, 25vw);
   flex: 1;
 }
 
@@ -873,6 +873,20 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+@media (max-width: 700px) {
+  .topbar { gap: 8px; padding-inline: 12px; }
+  .topbar-meta, .topbar-divider { display: none; }
+  .search { width: min(180px, 28vw); }
+  .topbar-title { min-width: 5rem; }
+}
+
+@media (max-width: 520px) {
+  .search { display: none; }
+  .topbar-title { min-width: 0; }
+  .topbar-title h1 { min-width: 4rem; }
+  .topbar-actions { gap: 3px; }
 }
 
 /* Topbar actions as keycaps: hard edge, pressed flat on click. */

@@ -70,7 +70,7 @@ for (const surface of ["main", "embed"] as const) {
       await page.screenshot({ path: testInfo.outputPath("selected-history.png") });
       release.resolve();
       await delivered.promise;
-      await expect(composer).toHaveValue("");
+      await expect(composer).toHaveText("");
       await expect(composer).toBeEnabled();
       await page.screenshot({ path: testInfo.outputPath("after-reply-receipt.png") });
       await expectInsideThread(target, page);
@@ -240,6 +240,7 @@ for (const leave of ["root", "workspace"] as const) {
         await openThread(page, roots[1].id);
         await expect(page.locator(".thread-root")).toContainText(roots[1].body);
       } else {
+        await page.getByRole("button", { name: "Switch workspace", exact: true }).click();
         await page.getByRole("link", { name: other.name, exact: true }).click();
         await expect(page).not.toHaveURL(new RegExp(workspace.route_id));
       }

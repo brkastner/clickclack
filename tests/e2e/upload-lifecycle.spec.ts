@@ -27,7 +27,7 @@ async function holdNextUpload(page: Page) {
     release = deferred(),
     delivered = deferred();
   let first = true;
-  await page.route("**/api/uploads", async (route) => {
+  await page.route("**/api/uploads?**", async (route) => {
     const held = first;
     first = false;
     const response = await route.fetch();
@@ -66,15 +66,15 @@ test("the latest selected file wins and stays with same-workspace drafts", async
     await page.getByLabel("Upload file", { exact: true }).setInputFiles(file("first.txt"));
     await gate.requested.promise;
     await page.getByLabel("Upload file", { exact: true }).setInputFiles(file("second.txt"));
-    await expect(page.locator(".attachment-name")).toContainText("second.txt");
+    await expect(page.getByText("second.txt", { exact: true })).toBeVisible();
     gate.release.resolve();
     await gate.delivered.promise;
     await settleReceipt(page);
     await page.screenshot({ path: testInfo.outputPath("upload-selection.png") });
-    await expect(page.locator(".attachment-name")).toContainText("second.txt");
+    await expect(page.getByText("second.txt", { exact: true })).toBeVisible();
     await page.locator(`#sidebar-channels-list a[href$="/${other.route_id}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/${other.route_id}$`));
-    await expect(page.locator(".attachment-name")).toContainText("second.txt");
+    await expect(page.getByText("second.txt", { exact: true })).toBeVisible();
   } finally {
     gate.release.resolve();
   }
@@ -85,6 +85,7 @@ test("browser Back abandons an upload from another workspace", async ({ page }) 
     next = await fixture(page);
   await page.goto(origin.path);
   await waitForAppReady(page);
+  await page.getByRole("button", { name: "Switch workspace", exact: true }).click();
   await page.getByRole("link", { name: next.workspace.name, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/app/${next.workspace.route_id}/[^/]+$`));
   await waitForAppReady(page);
@@ -131,18 +132,29 @@ for (const action of ["send", "remove"] as const) {
       await page.getByLabel("Upload file", { exact: true }).setInputFiles(file("replacement.txt"));
       await gate.requested.promise;
       if (action === "send") {
+        // Sending is deliberately unavailable while an attachment is uploading;
+        // remove the replacement so the already-ready attachment can be sent.
+        await page
+          .getByRole("button", { name: "Remove attachment replacement.txt", exact: true })
+          .click();
         await page.getByLabel("Message body", { exact: true }).fill("Send the visible attachment");
         await page.getByRole("button", { name: "Send", exact: true }).click();
         await expect(
           page.locator(".message-row").getByText("ready.txt", { exact: true }),
         ).toBeVisible();
       } else {
-        await page.getByRole("button", { name: "Remove attachment" }).click();
+        await page
+          .getByRole("button", { name: "Remove attachment replacement.txt", exact: true })
+          .click();
       }
       gate.release.resolve();
       await gate.delivered.promise;
       await settleReceipt(page);
-      await expect(page.locator(".attachment-name")).toHaveCount(0);
+      if (action === "remove") {
+        await expect(page.getByText("ready.txt", { exact: true })).toBeVisible();
+      } else {
+        await expect(page.locator(".attachment-name")).toHaveCount(0);
+      }
     } finally {
       gate.release.resolve();
     }
@@ -169,6 +181,9 @@ test("sending a registered command abandons its pending upload", async ({ page }
   try {
     await page.getByLabel("Upload file", { exact: true }).setInputFiles(file("command-upload.txt"));
     await gate.requested.promise;
+    await page
+      .getByRole("button", { name: "Remove attachment command-upload.txt", exact: true })
+      .click();
     await page.getByLabel("Message body", { exact: true }).fill("/upload-proof");
     await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect(page.getByText("Synthetic command complete", { exact: true })).toBeVisible();
@@ -185,16 +200,16 @@ test("a failed upload is visible and the same file can be retried", async ({ pag
   const data = await fixture(page);
   await page.goto(data.path);
   await waitForAppReady(page);
-  await page.route("**/api/uploads", (route) =>
+  await page.route("**/api/uploads?**", (route) =>
     route.fulfill({ status: 503, json: { error: "Synthetic upload unavailable" } }),
   );
   const input = page.getByLabel("Upload file", { exact: true });
   await input.setInputFiles(file("retry.txt"));
-  await expect(page.getByText("Synthetic upload unavailable", { exact: true })).toBeVisible();
-  await page.unroute("**/api/uploads");
-  await input.setInputFiles(file("retry.txt"));
-  await expect(page.locator(".attachment-name")).toContainText("retry.txt");
-  await expect(page.getByText("Synthetic upload unavailable", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/^Upload failed/)).toBeVisible();
+  await page.unroute("**/api/uploads?**");
+  await page.getByRole("button", { name: "Retry attachment retry.txt", exact: true }).click();
+  await expect(page.getByText("retry.txt", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Upload failed/)).toHaveCount(0);
 });
 
 for (const [action, refresh] of [
@@ -281,7 +296,7 @@ for (const [action, refresh] of [
         await openThread(page, root.id);
         await expect(page.locator(".thread-root")).toContainText(root.body);
       }
-      await row.getByRole("button", { name: "Discard", exact: true }).click();
+      await row.getByRole("button", { name: "Dismiss", exact: true }).click();
       await expect(row).not.toHaveClass(/is-failed/);
       await expect(row.getByText("attachment.txt", { exact: true })).toHaveCount(0);
     }

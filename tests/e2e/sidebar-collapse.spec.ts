@@ -191,9 +191,9 @@ test("sidebar sections collapse independently and persist per workspace", async 
   await expect(unreadDirectLink.getByLabel("1 unread", { exact: true })).toHaveText("1");
   await expect(directMessages.locator("..").getByLabel("1 unread", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Create channel" }).click();
+  await page.getByRole("button", { name: "Create channel", exact: true }).click();
   await expect(
-    page.locator(".profile-modal").getByRole("heading", { name: "Create channel" }),
+    page.locator(".profile-modal").getByRole("heading", { name: "Create channel", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Start direct message" }).click();

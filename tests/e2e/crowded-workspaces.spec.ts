@@ -32,6 +32,6 @@ test("create form stays usable with a crowded workspace menu", async ({ page, re
   await page.goto("/app");
   await waitForAppReady(page);
   await page.getByRole("button", { name: "Switch workspace" }).click();
-  await page.getByRole("menuitem", { name: "New workspace" }).click();
+  await page.getByRole("button", { name: "New workspace" }).click();
   await expectHittable(page.getByLabel("Workspace name"));
 });
