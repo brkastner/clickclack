@@ -110,7 +110,11 @@ test("keeps quotes compact and converts language-tagged code fences", async ({ p
   expect(quoteBox).not.toBeNull();
   expect(Math.abs(quoteBox!.x - editorBox!.x)).toBeLessThanOrEqual(4);
 
-  await editor.fill("");
+  await page.getByRole("button", { name: "Blockquote", exact: true }).click();
+  await expect(quote).toHaveCount(0);
+  await editor.press("ControlOrMeta+A");
+  await editor.press("Backspace");
+  await expect(editor).toHaveText("");
   await editor.pressSequentially("```sh");
   await editor.press("Shift+Enter");
   await editor.pressSequentially("printf hello");
@@ -125,7 +129,9 @@ test("keeps quotes compact and converts language-tagged code fences", async ({ p
   await expect(editor.locator("p").filter({ hasText: "after code" })).toBeVisible();
   await expect(editor).not.toContainText("```sh");
 
-  await editor.fill("");
+  await editor.press("ControlOrMeta+A");
+  await editor.press("Backspace");
+  await expect(editor).toHaveText("");
   await editor.evaluate((node) => {
     const transfer = new DataTransfer();
     transfer.setData("text/plain", "> pasted quote\nplain text\n```sh\nprintf pasted\n```");
