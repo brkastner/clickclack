@@ -293,3 +293,7 @@ CLICKCLACK_CHANNEL_ID=chn_... \
 CLICKCLACK_TEXT="clack from bot" \
 pnpm --filter @clickclack/example-bot start
 ```
+
+## Gallery actions
+
+See [gallery actions](features/gallery-actions.md) for installation/subscription setup, SDK payloads, authenticated responses, media authorization, and retention/idempotency requirements.

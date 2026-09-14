@@ -49,7 +49,7 @@ test("channel context menu exposes Pin and persona shelf clicks prefer the pinne
 
   assert.match(
     channelList,
-    /oncontextmenu=\{\(event\) => void openChannelContextMenu\(event, channel\)\}/u,
+    /oncontextmenu=\{\(event\)\s*=>\s*\{\s*stopNotepadHover\(\);\s*void openChannelContextMenu\(event, channel\);\s*\}\}/u,
   );
   assert.match(channelList, />Pin<\/button>/u);
   assert.match(sidebar, /pinnedPersonaChannel\(personaChannelPins, person\.id, channels\)/u);

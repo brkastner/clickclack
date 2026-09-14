@@ -282,7 +282,7 @@ func normalizeEventTypes(values []string) ([]string, error) {
 		if value == "" {
 			continue
 		}
-		if value != "*" && !store.IsDurableEventType(value) {
+		if value != "*" && !store.IsDurableEventType(value) && !store.IsGalleryEventType(value) {
 			return nil, fmt.Errorf("unknown event type %q", value)
 		}
 		if seen[value] {

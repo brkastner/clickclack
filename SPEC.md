@@ -497,6 +497,94 @@ unrelated UI cleanup, and infrastructure redesign are excluded. Do not scrape
 live conversations for identity inference or fixtures. Use existing authorized
 contracts, synthetic data, and existing deployment procedures.
 
+### Generic gallery plugin actions
+
+**Status: Implemented host contract; see [gallery actions](docs/features/gallery-actions.md) for exact routes, limits, retention, and producer obligations.**
+
+Installed bots may contribute gallery context-menu actions that open one shared
+floating panel. ClickClack owns generic discovery, authorized attachment context,
+safe rendering, session state, and submission tracking. Bots own labels, choices,
+option meanings, execution, and paid-work approval. The gallery and its existing
+add-to-message action remain functional without any plugin. Production host code
+must not contain VAI commands, flags, pack conventions, or execution branches.
+
+The [selected implementation plan](docs/drafts/gallery-plugin-actions.md) records
+all contracts, ordered changes and checks, tests, risks, and boundaries. This is
+the first of two sequential single-repository workflows. Prepare and change only
+a Worktrunk-managed ClickClack checkout here. The separate face workflow consumes
+the tested host contract afterward; missing VAI code does not block host acceptance.
+
+#### Registration and interaction
+
+Extend installed-bot capabilities with optional versioned, bounded action
+descriptors containing stable namespaced IDs, labels, and accepted media types.
+Scope IDs by installation. Reuse installation-management authorization; one bot
+cannot register for another installation. Reject invalid descriptors and safely
+ignore unsupported versions during discovery. Discover registered actions through
+the host, not fresh calls to every bot when a menu opens. Recheck installation,
+source, media, and destination eligibility. Invalidate descriptors and sessions
+when capabilities change or an installation is removed. Never expose secrets.
+
+Use typed open-panel, choices-query, submit, and status exchanges over existing
+authenticated bot transport. Bind protocol version, action and installation,
+actor, workspace, source, destination, session, request, schema revision, and
+expiration as appropriate. Resolve authority from authentication and stored state,
+not client claims. Render only bounded declarative image multi-selection,
+boolean, numeric/select, preview, and submission controls. Bot data may supply
+labels, defaults, constraints, and opaque choice IDs, but not code, raw HTML,
+expressions, filesystem paths, or arbitrary callbacks. Bound dynamic queries by
+declared field IDs and pagination. Reject unsupported or oversized schemas.
+
+Reuse authorized attachment/upload references for source and choice previews.
+Do not add an arbitrary URL-fetch proxy. Producers must expose local pack images
+through the supported authorized media contract. Revalidate source and selected
+attachment access before submission; a bot-returned ID does not grant access.
+
+#### Authorization, durability, and compatibility
+
+Bind every session to an authenticated actor, workspace, installation, accessible
+source, and explicitly authorized destination conversation. Check source and
+destination independently on open, choices, submit, status, and response delivery.
+Use valid existing destination context or ask the user to choose an authorized
+destination. Never guess one.
+
+Validate submission values against stored schema revision and choice scope.
+Atomically record submission identity and enqueue through existing durable
+delivery. The same identity and payload return existing state; a changed payload
+conflicts. Retries retain identity and reconnect queries status rather than
+submitting again. Bots must deduplicate execution and retain paid-work approval;
+host tracking alone cannot guarantee exactly-once external effects.
+
+Represent pending, accepted, failed, expired, unavailable, and uncertain states
+with correlated responses. A timeout after possible acceptance must not create a
+new execution identity. Stale responses, revocation, and installation changes
+cannot revive closed sessions. Closing the UI does not cancel a job. Older hosts
+and bots retain ordinary chat; unsupported versions disable only plugin actions.
+Reuse integration/delivery storage where suitable, adding only necessary durable
+fields with additive SQLite/Postgres migrations and typed SQL. Regenerate SDK
+and sqlc outputs through repository scripts, including `pnpm generate:sqlc`.
+
+#### Verification and handoff
+
+Test permissions, descriptor/schema bounds, media access, correlated responses,
+concurrent duplicate submissions, lost acknowledgments, restart recovery,
+revocation, installation removal, and compatibility. Prove the complete flow with
+a synthetic non-VAI bot and isolated Electron pointer, keyboard, focus, and
+no-plugin regression coverage. Run repository quality gates. No paid provider
+calls or private production conversation data are required.
+
+Document the exact implemented protocol, controls and limits, media flow, SDK
+usage, consumer obligations, disable procedure, absolute worktree, revisions,
+changed files, and checks for the next face workflow. Host completion is not
+whole-feature completion. Deployment remains separate. If performed, deploy
+additive backend support before compatible frontend exposure and retain rollback
+through capability disablement or a compatible prior application build, without
+destructive schema rollback. Keep the unimplemented VAI capability disabled.
+Load applicable deployment skills and pass completion checks before claiming live
+status. Preserve existing work; do not merge or edit main checkouts, face,
+upstream, or unrelated repositories. Add no service, infrastructure resource,
+broad plugin platform, remote executable UI, or arbitrary filesystem browser.
+
 ## API
 
 Contract: OpenAPI first.

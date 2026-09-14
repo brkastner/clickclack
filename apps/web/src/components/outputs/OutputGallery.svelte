@@ -10,6 +10,8 @@
   import { OutputGallerySession, outputBots, boundOutputBot, outputSourceKey, galleryReturn, rememberGallery, revealGallerySource, clearGalleryReturn, type OutputPage } from "../../lib/output-gallery";
   import { MAX_MESSAGE_ATTACHMENTS } from "../../lib/attachments";
   import { enqueueGalleryAttachment, galleryAttachmentQueue, removeGalleryAttachment, clearGalleryAttachments, setGalleryAttachmentDestination } from "../../lib/gallery-attachment-queue";
+  import GalleryActionPanel from "./GalleryActionPanel.svelte";
+  import type { GalleryActionDiscovery } from "../../lib/gallery-actions";
   import OutputCard from "./OutputCard.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   let { workspaceID }: { workspaceID: string } = $props();
@@ -23,6 +25,7 @@
   let directs = $state<DirectConversation[]>([]);
   let queue = $state<Upload[]>([]);
   let choosingDestination = $state(false);
+  let galleryAction = $state<{action:GalleryActionDiscovery;upload:Upload;destinationID:string}>();
   let expandedImageIndex = $state<number | undefined>();
   let expandedVideo = $state<Upload>();
   let expandedOpener: HTMLElement | null = null;
@@ -62,6 +65,7 @@
   const more = $derived.by(() => { void revision; return session?.nextCursor; });
   async function run(action: () => Promise<unknown>) { const work = action(); revision++; await work; revision++; }
   async function choose(id: string) {
+    galleryAction = undefined;
     navigation++;
     sourceAbort?.abort();
     error = "";
@@ -318,13 +322,14 @@
     <div class="output-grid" bind:this={masonryGrid} style={`--gallery-gap: ${galleryGap}px; height: ${masonryHeight}px`}>
       {#each media as item, itemIndex (tileKey(item))}
         <div class="output-grid__tile" data-gallery-tile={tileKey(item)} style={masonryStyle(item)}>
-          <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpandImage={expandImage} onExpandVideo={expandVideo} />
+          <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpandImage={expandImage} onExpandVideo={expandVideo} onGalleryAction={(action,upload,message)=>{galleryAction={action,upload,destinationID:message.channel_id || message.direct_conversation_id || ""};}} />
         </div>
       {/each}
     </div>
     {#if !busy && !pageError && !media.length}<p class="output-gallery__notice">no images or videos from this account yet.</p>{/if}
     {#if more}<div class="output-gallery__more"><button class="output-gallery__button" disabled={busy} onclick={() => void run(() => session!.load(true))}>{busy ? "loading…" : "load older media"}</button></div>{/if}
   {/if}
+  {#if galleryAction && user}{#key `${galleryAction.action.installation_id}:${galleryAction.action.descriptor.id}:${galleryAction.upload.id}`}<GalleryActionPanel {...galleryAction} {workspaceID} actorID={user.id} onClose={()=>{galleryAction=undefined;}} />{/key}{/if}
   {#if queue.length}
     <aside class="output-gallery__queue" aria-label="Pending gallery attachments"><strong>{queue.length} pending</strong><button class="output-gallery__button" onclick={() => (choosingDestination = true)}>add to message…</button><button class="output-gallery__button" onclick={clearQueue}>clear</button>{#each queue as upload (upload.id)}<button class="output-gallery__queued" onclick={() => removeFromQueue(upload.id)} aria-label={`Remove ${upload.filename} from pending attachments`}>{upload.filename} ×</button>{/each}</aside>
   {/if}

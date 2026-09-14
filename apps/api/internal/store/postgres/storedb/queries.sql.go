@@ -125,6 +125,40 @@ func (q *Queries) ChannelRouteID(ctx context.Context, arg ChannelRouteIDParams) 
 	return route_id, err
 }
 
+const claimGalleryRequest = `-- name: ClaimGalleryRequest :execrows
+UPDATE gallery_outbox SET due_at = $1, attempts = attempts + 1
+WHERE request_id = $2 AND due_at <= $3
+`
+
+type ClaimGalleryRequestParams struct {
+	NextDue   int64  `json:"next_due"`
+	RequestID string `json:"request_id"`
+	NowAt     int64  `json:"now_at"`
+}
+
+func (q *Queries) ClaimGalleryRequest(ctx context.Context, arg ClaimGalleryRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, claimGalleryRequest, arg.NextDue, arg.RequestID, arg.NowAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const cleanupGallerySessions = `-- name: CleanupGallerySessions :execrows
+DELETE FROM gallery_sessions WHERE id IN (
+ SELECT expired.id FROM gallery_sessions AS expired WHERE expired.retain_until <= $1
+ ORDER BY expired.retain_until, expired.id LIMIT 32
+)
+`
+
+func (q *Queries) CleanupGallerySessions(ctx context.Context, nowAt int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cleanupGallerySessions, nowAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const clearMemberBlocked = `-- name: ClearMemberBlocked :exec
 UPDATE workspace_member_moderation
 SET blocked_at = NULL,
@@ -411,6 +445,47 @@ func (q *Queries) CountWorkspaceMembersByRole(ctx context.Context, arg CountWork
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createGalleryRequest = `-- name: CreateGalleryRequest :exec
+INSERT INTO gallery_requests (id, session_id, kind, digest, envelope_json, data_json)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type CreateGalleryRequestParams struct {
+	ID           string `json:"id"`
+	SessionID    string `json:"session_id"`
+	Kind         string `json:"kind"`
+	Digest       string `json:"digest"`
+	EnvelopeJson string `json:"envelope_json"`
+	DataJson     string `json:"data_json"`
+}
+
+func (q *Queries) CreateGalleryRequest(ctx context.Context, arg CreateGalleryRequestParams) error {
+	_, err := q.db.ExecContext(ctx, createGalleryRequest,
+		arg.ID,
+		arg.SessionID,
+		arg.Kind,
+		arg.Digest,
+		arg.EnvelopeJson,
+		arg.DataJson,
+	)
+	return err
+}
+
+const createGallerySession = `-- name: CreateGallerySession :exec
+INSERT INTO gallery_sessions (id, version, data_json, retain_until) VALUES ($1, 1, $2, $3)
+`
+
+type CreateGallerySessionParams struct {
+	ID          string `json:"id"`
+	DataJson    string `json:"data_json"`
+	RetainUntil int64  `json:"retain_until"`
+}
+
+func (q *Queries) CreateGallerySession(ctx context.Context, arg CreateGallerySessionParams) error {
+	_, err := q.db.ExecContext(ctx, createGallerySession, arg.ID, arg.DataJson, arg.RetainUntil)
+	return err
 }
 
 const deleteAllBotCommands = `-- name: DeleteAllBotCommands :exec
@@ -826,6 +901,20 @@ func (q *Queries) DirectRouteID(ctx context.Context, arg DirectRouteIDParams) (s
 	return route_id, err
 }
 
+const enqueueGalleryRequest = `-- name: EnqueueGalleryRequest :exec
+INSERT INTO gallery_outbox (request_id, due_at) VALUES ($1, $2)
+`
+
+type EnqueueGalleryRequestParams struct {
+	RequestID string `json:"request_id"`
+	DueAt     int64  `json:"due_at"`
+}
+
+func (q *Queries) EnqueueGalleryRequest(ctx context.Context, arg EnqueueGalleryRequestParams) error {
+	_, err := q.db.ExecContext(ctx, enqueueGalleryRequest, arg.RequestID, arg.DueAt)
+	return err
+}
+
 const ensureAppearancePreferences = `-- name: EnsureAppearancePreferences :exec
 INSERT INTO user_appearance_preferences (user_id)
 VALUES ($1)
@@ -900,6 +989,15 @@ func (q *Queries) FindOneToOneDirectConversation(ctx context.Context, arg FindOn
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const finishGalleryRequest = `-- name: FinishGalleryRequest :exec
+DELETE FROM gallery_outbox WHERE request_id = $1
+`
+
+func (q *Queries) FinishGalleryRequest(ctx context.Context, requestID string) error {
+	_, err := q.db.ExecContext(ctx, finishGalleryRequest, requestID)
+	return err
 }
 
 const firstUser = `-- name: FirstUser :one
@@ -1600,6 +1698,40 @@ func (q *Queries) GetEventDeliveryAttemptCursor(ctx context.Context, arg GetEven
 	var created_at string
 	err := row.Scan(&created_at)
 	return created_at, err
+}
+
+const getGalleryRequest = `-- name: GetGalleryRequest :one
+SELECT id, session_id, kind, digest, envelope_json, data_json FROM gallery_requests WHERE id = $1
+`
+
+func (q *Queries) GetGalleryRequest(ctx context.Context, id string) (GalleryRequest, error) {
+	row := q.db.QueryRowContext(ctx, getGalleryRequest, id)
+	var i GalleryRequest
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.Kind,
+		&i.Digest,
+		&i.EnvelopeJson,
+		&i.DataJson,
+	)
+	return i, err
+}
+
+const getGallerySession = `-- name: GetGallerySession :one
+SELECT id, retain_until, version, data_json FROM gallery_sessions WHERE id = $1
+`
+
+func (q *Queries) GetGallerySession(ctx context.Context, id string) (GallerySession, error) {
+	row := q.db.QueryRowContext(ctx, getGallerySession, id)
+	var i GallerySession
+	err := row.Scan(
+		&i.ID,
+		&i.RetainUntil,
+		&i.Version,
+		&i.DataJson,
+	)
+	return i, err
 }
 
 const getIdentityEmailForUser = `-- name: GetIdentityEmailForUser :one
@@ -3814,6 +3946,33 @@ func (q *Queries) ListDirectPushNotificationRecipients(ctx context.Context, arg 
 	return items, nil
 }
 
+const listDueGalleryRequests = `-- name: ListDueGalleryRequests :many
+SELECT request_id, due_at, attempts FROM gallery_outbox WHERE due_at <= $1 ORDER BY due_at LIMIT 32
+`
+
+func (q *Queries) ListDueGalleryRequests(ctx context.Context, dueAt int64) ([]GalleryOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listDueGalleryRequests, dueAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GalleryOutbox
+	for rows.Next() {
+		var i GalleryOutbox
+		if err := rows.Scan(&i.RequestID, &i.DueAt, &i.Attempts); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEventDeliveryAttemptsFirstPage = `-- name: ListEventDeliveryAttemptsFirstPage :many
 SELECT eda.id, eda.subscription_id, eda.event_id, eda.workspace_id, eda.event_type,
        eda.attempt, eda.request_json, eda.response_status, eda.response_body,
@@ -4037,6 +4196,43 @@ func (q *Queries) ListEventsAfter(ctx context.Context, arg ListEventsAfterParams
 			&i.PayloadJson,
 			&i.CreatedAt,
 			&i.MentionedUserIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGalleryCapabilities = `-- name: ListGalleryCapabilities :many
+SELECT g.installation_id, g.workspace_id, g.token_id, g.generation, g.descriptors_json FROM gallery_capabilities g
+JOIN app_installations a ON a.id = g.installation_id AND a.revoked_at IS NULL
+JOIN bot_tokens t ON t.id = g.token_id AND t.revoked_at IS NULL
+JOIN workspace_members m ON m.user_id = a.bot_user_id AND m.workspace_id = a.workspace_id
+WHERE g.workspace_id = $1
+`
+
+func (q *Queries) ListGalleryCapabilities(ctx context.Context, workspaceID string) ([]GalleryCapability, error) {
+	rows, err := q.db.QueryContext(ctx, listGalleryCapabilities, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GalleryCapability
+	for rows.Next() {
+		var i GalleryCapability
+		if err := rows.Scan(
+			&i.InstallationID,
+			&i.WorkspaceID,
+			&i.TokenID,
+			&i.Generation,
+			&i.DescriptorsJson,
 		); err != nil {
 			return nil, err
 		}
@@ -5856,6 +6052,31 @@ func (q *Queries) PruneEvents(ctx context.Context, arg PruneEventsParams) (int64
 	return result.RowsAffected()
 }
 
+const putGalleryCapability = `-- name: PutGalleryCapability :exec
+INSERT INTO gallery_capabilities (installation_id, workspace_id, token_id, generation, descriptors_json)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (installation_id) DO UPDATE SET token_id = excluded.token_id, generation = excluded.generation, descriptors_json = excluded.descriptors_json
+`
+
+type PutGalleryCapabilityParams struct {
+	InstallationID  string `json:"installation_id"`
+	WorkspaceID     string `json:"workspace_id"`
+	TokenID         string `json:"token_id"`
+	Generation      string `json:"generation"`
+	DescriptorsJson string `json:"descriptors_json"`
+}
+
+func (q *Queries) PutGalleryCapability(ctx context.Context, arg PutGalleryCapabilityParams) error {
+	_, err := q.db.ExecContext(ctx, putGalleryCapability,
+		arg.InstallationID,
+		arg.WorkspaceID,
+		arg.TokenID,
+		arg.Generation,
+		arg.DescriptorsJson,
+	)
+	return err
+}
+
 const readChannelRead = `-- name: ReadChannelRead :one
 SELECT last_read_seq, last_read_at
 FROM channel_reads
@@ -6545,6 +6766,39 @@ func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) er
 		arg.ID,
 	)
 	return err
+}
+
+const updateGalleryRequest = `-- name: UpdateGalleryRequest :exec
+UPDATE gallery_requests SET data_json = $1 WHERE id = $2
+`
+
+type UpdateGalleryRequestParams struct {
+	DataJson string `json:"data_json"`
+	ID       string `json:"id"`
+}
+
+func (q *Queries) UpdateGalleryRequest(ctx context.Context, arg UpdateGalleryRequestParams) error {
+	_, err := q.db.ExecContext(ctx, updateGalleryRequest, arg.DataJson, arg.ID)
+	return err
+}
+
+const updateGallerySession = `-- name: UpdateGallerySession :execrows
+UPDATE gallery_sessions SET version = version + 1, data_json = $1
+WHERE id = $2 AND version = $3
+`
+
+type UpdateGallerySessionParams struct {
+	DataJson string `json:"data_json"`
+	ID       string `json:"id"`
+	Version  int64  `json:"version"`
+}
+
+func (q *Queries) UpdateGallerySession(ctx context.Context, arg UpdateGallerySessionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateGallerySession, arg.DataJson, arg.ID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateIdentityEmailIfEmpty = `-- name: UpdateIdentityEmailIfEmpty :exec

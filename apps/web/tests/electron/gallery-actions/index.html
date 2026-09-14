@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Generic gallery action synthetic check</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: light-dark(#faf4ed, #0e1219);
+        --surface: light-dark(#f4ede8, #1b2232);
+        --panel-2: light-dark(#f4ede8, #1b2232);
+        --line-strong: light-dark(#cecacd, rgba(190, 210, 255, 0.16));
+        --text: light-dark(#575279, #dbe2ec);
+        --text-strong: light-dark(#403d52, #f4f7fb);
+        --muted: light-dark(#6e6a86, #8a95a8);
+        --accent: light-dark(#907aa9, #41c6ff);
+        --accent-hover: light-dark(#6f5f8f, #6ad3ff);
+        --accent-contrast: light-dark(#fffaf3, #061420);
+        --hover-strong: light-dark(#dfdad9, rgba(214, 228, 255, 0.08));
+      }
+      :root[data-color-mode="light"] { color-scheme: light; }
+      :root[data-color-mode="dark"] { color-scheme: dark; }
+      body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

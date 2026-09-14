@@ -179,6 +179,10 @@ func serve(args []string) error {
 			log.Printf("pending upload cleanup retry failed: %v", err)
 		}
 	}
+	dispatcherCtx, stopDispatcher := context.WithCancel(ctx)
+	dispatcherDone := make(chan struct{})
+	go func() { defer close(dispatcherDone); server.RunGalleryDispatcher(dispatcherCtx) }()
+	defer func() { stopDispatcher(); <-dispatcherDone }()
 	return httpapi.ListenAndServe(ctx, cfg.Addr, server.Handler())
 }
 

@@ -29,6 +29,19 @@ export type BotSetupCodeDefaults = components["schemas"]["BotSetupCodeClaimDefau
 
 export type BotSetupCodeClaim = components["schemas"]["BotSetupCodeClaimResponse"];
 
+export const GALLERY_ACTIONS_WRITE_SCOPE = "gallery_actions:write";
+export type GalleryActionOpen = components["schemas"]["GalleryActionOpen"];
+export type GalleryActionSubmit = components["schemas"]["GalleryActionSubmit"];
+export type GalleryActionChoicesQuery = components["schemas"]["GalleryActionChoicesQuery"];
+export type GalleryActionReply = components["schemas"]["GalleryActionReply"];
+export type GalleryActionEvent = components["schemas"]["GalleryActionEvent"];
+export type GalleryActionResult = components["schemas"]["GalleryActionResult"];
+export type GalleryActionDiscovery = components["schemas"]["GalleryActionDiscovery"];
+export type GalleryActionRegistration = components["schemas"]["GalleryActionRegistration"];
+export type GalleryActionDescriptor = components["schemas"]["GalleryActionDescriptor"];
+export type GalleryActionDescriptorListResponse =
+  components["schemas"]["GalleryActionDescriptorListResponse"];
+
 export type BotCommandInput = components["schemas"]["BotCommandInput"];
 
 export type BotCommand = components["schemas"]["BotCommand"];
@@ -426,6 +439,22 @@ export class ClickClackClient {
       });
       return data.bot_commands;
     },
+    setGalleryActions: async (
+      installationId: string,
+      galleryActions: GalleryActionDescriptor[],
+    ): Promise<GalleryActionDescriptor[]> => {
+      const data = await this.request<GalleryActionDescriptorListResponse>(
+        "/api/bots/self/gallery-actions",
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            installation_id: installationId,
+            gallery_actions: galleryActions,
+          }),
+        },
+      );
+      return data.gallery_actions;
+    },
     create: async (
       workspaceId: string,
       input: {
@@ -575,6 +604,52 @@ export class ClickClackClient {
         },
       );
     },
+  };
+
+  galleryActions = {
+    /** Persist this identity and reuse it for open retries. Valid for initial open for 30 minutes. */
+    newSessionId: (): string => `${Math.floor(Date.now() / 1000)}.${crypto.randomUUID()}`,
+    list: async (
+      workspaceId: string,
+      sourceUploadId: string,
+      destinationId: string,
+    ): Promise<GalleryActionDiscovery[]> => {
+      const params = new URLSearchParams({
+        source_upload_id: sourceUploadId,
+        destination_id: destinationId,
+      });
+      const data = await this.request<{ gallery_actions: GalleryActionDiscovery[] }>(
+        `/api/workspaces/${encodeURIComponent(workspaceId)}/gallery-actions?${params}`,
+      );
+      return data.gallery_actions;
+    },
+    open: (workspaceId: string, input: GalleryActionOpen): Promise<GalleryActionResult> =>
+      this.request(`/api/workspaces/${encodeURIComponent(workspaceId)}/gallery-actions/open`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    choices: (sessionId: string, input: GalleryActionChoicesQuery): Promise<GalleryActionResult> =>
+      this.request(`/api/gallery-actions/sessions/${encodeURIComponent(sessionId)}/choices`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    submit: (sessionId: string, input: GalleryActionSubmit): Promise<GalleryActionResult> =>
+      this.request(`/api/gallery-actions/sessions/${encodeURIComponent(sessionId)}/submit`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    status: (sessionId: string, requestId?: string): Promise<GalleryActionResult> =>
+      this.request(
+        `/api/gallery-actions/sessions/${encodeURIComponent(sessionId)}${requestId ? `?request_id=${encodeURIComponent(requestId)}` : ""}`,
+      ),
+    respond: (
+      requestId: string,
+      input: GalleryActionReply,
+    ): Promise<{ request: GalleryActionResult["request"] }> =>
+      this.request(
+        `/api/bots/self/gallery-actions/requests/${encodeURIComponent(requestId)}/response`,
+        { method: "POST", body: JSON.stringify(input) },
+      ),
   };
 
   slashCommands = {

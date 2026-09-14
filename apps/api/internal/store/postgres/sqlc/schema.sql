@@ -635,3 +635,34 @@ CREATE TABLE workflow_run_snapshots (
     UNIQUE (workspace_id, channel_id, direct_conversation_id, producer_id, provider, session_id, run_id)
 );
 CREATE INDEX workflow_run_snapshot_page ON workflow_run_snapshots (workspace_id, channel_id, direct_conversation_id, id DESC);
+
+CREATE TABLE gallery_capabilities (
+ installation_id TEXT PRIMARY KEY REFERENCES app_installations(id) ON DELETE CASCADE,
+ workspace_id TEXT NOT NULL,
+ token_id TEXT NOT NULL,
+ generation TEXT NOT NULL,
+ descriptors_json TEXT NOT NULL
+);
+CREATE TABLE gallery_sessions (
+ id TEXT PRIMARY KEY,
+ retain_until BIGINT NOT NULL DEFAULT 0,
+ version BIGINT NOT NULL,
+ data_json TEXT NOT NULL
+);
+CREATE TABLE gallery_requests (
+ id TEXT PRIMARY KEY,
+ session_id TEXT NOT NULL REFERENCES gallery_sessions(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL,
+ digest TEXT NOT NULL,
+ envelope_json TEXT NOT NULL,
+ data_json TEXT NOT NULL
+);
+CREATE TABLE gallery_outbox (
+ request_id TEXT PRIMARY KEY REFERENCES gallery_requests(id) ON DELETE CASCADE,
+ due_at BIGINT NOT NULL,
+ attempts BIGINT NOT NULL DEFAULT 0
+);
+CREATE INDEX gallery_outbox_due ON gallery_outbox(due_at);
+
+CREATE INDEX gallery_sessions_retention ON gallery_sessions(retain_until, id);
+CREATE INDEX gallery_requests_session ON gallery_requests(session_id);

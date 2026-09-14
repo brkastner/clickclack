@@ -60,6 +60,7 @@ var botScopeBundles = map[string][]string{
 }
 
 var botAllowedScopes = []string{
+	store.GalleryActionsWriteScope,
 	"workspaces:read",
 	"channels:read",
 	"channels:write",

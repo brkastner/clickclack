@@ -1521,6 +1521,118 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/bots/self/gallery-actions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations["setGalleryActions"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/gallery-actions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listGalleryActions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/gallery-actions/open": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["openGalleryAction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/gallery-actions/sessions/{session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["statusGalleryAction"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/gallery-actions/sessions/{session_id}/choices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["choicesGalleryAction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/gallery-actions/sessions/{session_id}/submit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["submitGalleryAction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/bots/self/gallery-actions/requests/{request_id}/response": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["respondGalleryAction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1760,6 +1872,163 @@ export interface components {
     BotWithTokens: {
       bot: components["schemas"]["User"];
       tokens: components["schemas"]["BotToken"][];
+    };
+    GalleryActionChoice: {
+      id: string;
+      label: string;
+      upload_id?: string;
+    };
+    /** @description Bounds must be ordered. Defaults and effective values must match choices, bounds and numeric step relative to min. IDs are unique within each array. */
+    GalleryActionField:
+      | {
+          id: string;
+          /** @enum {string} */
+          kind: "boolean";
+          label: string;
+          required?: boolean;
+          default?: boolean;
+        }
+      | {
+          id: string;
+          /** @enum {string} */
+          kind: "number";
+          label: string;
+          required?: boolean;
+          min: number;
+          max: number;
+          step?: number;
+          default?: number;
+        }
+      | {
+          id: string;
+          /** @enum {string} */
+          kind: "select";
+          label: string;
+          required?: boolean;
+          choices: components["schemas"]["GalleryActionChoice"][];
+          default?: string;
+        }
+      | {
+          id: string;
+          /** @enum {string} */
+          kind: "images";
+          label: string;
+          required?: boolean;
+          choices: components["schemas"]["GalleryActionChoice"][];
+          min: number;
+          max: number;
+          dynamic?: boolean;
+          default?: string[];
+        };
+    GalleryActionDescriptor: {
+      /** @enum {integer} */
+      version: 1;
+      id: string;
+      label: string;
+      accepted_media_types: string[];
+      schema_revision: number;
+      fields: components["schemas"]["GalleryActionField"][];
+    };
+    GalleryActionDescriptorListResponse: {
+      gallery_actions: components["schemas"]["GalleryActionDescriptor"][];
+    };
+    GalleryActionRegistration: {
+      installation_id: string;
+      gallery_actions: components["schemas"]["GalleryActionDescriptor"][];
+    };
+    GalleryActionDiscovery: {
+      installation_id: string;
+      descriptor: components["schemas"]["GalleryActionDescriptor"];
+    };
+    GalleryActionDiscoveryResponse: {
+      gallery_actions: components["schemas"]["GalleryActionDiscovery"][];
+    };
+    GalleryActionOpen: {
+      /** @description New sessions use unix-seconds.random (at least 16 random characters), issued within 30 minutes with at most 60 seconds future skew. Persist and reuse the exact identity for retries. Expired identities cannot reopen after cleanup. */
+      session_id: string;
+      installation_id: string;
+      action_id: string;
+      source_upload_id: string;
+      destination_id: string;
+    };
+    GalleryActionSubmit: {
+      request_id: string;
+      schema_revision: number;
+      values: {
+        [key: string]: boolean | number | string | string[];
+      };
+    };
+    GalleryActionChoicesQuery: {
+      request_id: string;
+      schema_revision: number;
+      field_id: string;
+      offset?: number;
+      limit: number;
+    };
+    GalleryActionReply: {
+      session_id: string;
+      schema_revision: number;
+      /** @enum {string} */
+      state: "accepted" | "failed";
+      choices?: components["schemas"]["GalleryActionChoice"][];
+      preview_upload_id?: string;
+    };
+    GalleryActionSession: {
+      id: string;
+      actor_id: string;
+      workspace_id: string;
+      installation_id: string;
+      source_upload_id: string;
+      destination_id: string;
+      capability_revision: string;
+      descriptor: components["schemas"]["GalleryActionDescriptor"];
+      request_count?: number;
+      expires_at: number;
+      submission_id?: string;
+      preview_upload_id?: string;
+    };
+    GalleryActionRequest: {
+      request_id: string;
+      session_id: string;
+      /** @enum {string} */
+      kind: "open" | "choices" | "submit";
+      payload:
+        | components["schemas"]["GalleryActionOpen"]
+        | components["schemas"]["GalleryActionSubmit"]
+        | components["schemas"]["GalleryActionChoicesQuery"];
+      /** @enum {string} */
+      state: "pending" | "accepted" | "failed" | "expired" | "unavailable" | "uncertain";
+      response?: components["schemas"]["GalleryActionReply"];
+      subscription_id: string;
+    };
+    GalleryActionResult: {
+      session: components["schemas"]["GalleryActionSession"];
+      request: components["schemas"]["GalleryActionRequest"];
+    };
+    GalleryActionReplyResult: {
+      request: components["schemas"]["GalleryActionRequest"];
+    };
+    GalleryActionEvent: {
+      /** @enum {integer} */
+      version: 1;
+      event_id: string;
+      /** @enum {string} */
+      type: "gallery_action.open" | "gallery_action.choices" | "gallery_action.submit";
+      installation_id: string;
+      action_id: string;
+      actor_id: string;
+      workspace_id: string;
+      source_upload_id: string;
+      destination_id: string;
+      session_id: string;
+      request_id: string;
+      submission_id: string;
+      schema_revision: number;
+      expires_at: number;
+      payload:
+        | components["schemas"]["GalleryActionOpen"]
+        | components["schemas"]["GalleryActionSubmit"]
+        | components["schemas"]["GalleryActionChoicesQuery"];
     };
     BotCommandInput: {
       /** @description Trimmed, accepted with or without a leading slash, then validated and stored in lowercase canonical form. */
@@ -6259,6 +6528,442 @@ export interface operations {
     responses: {
       /** @description Slash-command callback response */
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  setGalleryActions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GalleryActionRegistration"];
+      };
+    };
+    responses: {
+      /** @description Current durable state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionRegistration"];
+        };
+      };
+      /** @description Durably queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionRegistration"];
+        };
+      };
+      /** @description Invalid bounded request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Actor, source, destination, installation, or scope denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity payload or revision conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Expired, revoked, or unavailable */
+      410: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  listGalleryActions: {
+    parameters: {
+      query: {
+        source_upload_id: string;
+        destination_id: string;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current durable state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionDiscoveryResponse"];
+        };
+      };
+      /** @description Durably queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionDiscoveryResponse"];
+        };
+      };
+      /** @description Invalid bounded request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Actor, source, destination, installation, or scope denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity payload or revision conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Expired, revoked, or unavailable */
+      410: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  openGalleryAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GalleryActionOpen"];
+      };
+    };
+    responses: {
+      /** @description Current durable state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionResult"];
+        };
+      };
+      /** @description Durably queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionResult"];
+        };
+      };
+      /** @description Invalid bounded request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Actor, source, destination, installation, or scope denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity payload or revision conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Expired, revoked, or unavailable */
+      410: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  statusGalleryAction: {
+    parameters: {
+      query?: {
+        request_id?: string;
+      };
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current durable state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionResult"];
+        };
+      };
+      /** @description Durably queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionResult"];
+        };
+      };
+      /** @description Invalid bounded request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Actor, source, destination, installation, or scope denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity payload or revision conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Expired, revoked, or unavailable */
+      410: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  choicesGalleryAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GalleryActionChoicesQuery"];
+      };
+    };
+    responses: {
+      /** @description Current durable state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionResult"];
+        };
+      };
+      /** @description Durably queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionResult"];
+        };
+      };
+      /** @description Invalid bounded request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Actor, source, destination, installation, or scope denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity payload or revision conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Expired, revoked, or unavailable */
+      410: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  submitGalleryAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GalleryActionSubmit"];
+      };
+    };
+    responses: {
+      /** @description Current durable state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionResult"];
+        };
+      };
+      /** @description Durably queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionResult"];
+        };
+      };
+      /** @description Invalid bounded request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Actor, source, destination, installation, or scope denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity payload or revision conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Expired, revoked, or unavailable */
+      410: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  respondGalleryAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        request_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GalleryActionReply"];
+      };
+    };
+    responses: {
+      /** @description Current durable state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionReplyResult"];
+        };
+      };
+      /** @description Durably queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GalleryActionReplyResult"];
+        };
+      };
+      /** @description Invalid bounded request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Actor, source, destination, installation, or scope denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity payload or revision conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Expired, revoked, or unavailable */
+      410: {
         headers: {
           [name: string]: unknown;
         };

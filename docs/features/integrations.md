@@ -288,3 +288,7 @@ app callbacks.
 
 - Retry scheduling for failed outgoing deliveries.
 - Mattermost client compatibility (REST, WebSocket protocol).
+
+## Gallery actions
+
+See [gallery actions](gallery-actions.md) for installation/subscription setup, SDK payloads, authenticated responses, media authorization, and retention/idempotency requirements.

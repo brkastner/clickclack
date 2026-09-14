@@ -235,6 +235,36 @@ type EventSubscription struct {
 	RevokedAt         sql.NullString `json:"revoked_at"`
 }
 
+type GalleryCapability struct {
+	InstallationID  string `json:"installation_id"`
+	WorkspaceID     string `json:"workspace_id"`
+	TokenID         string `json:"token_id"`
+	Generation      string `json:"generation"`
+	DescriptorsJson string `json:"descriptors_json"`
+}
+
+type GalleryOutbox struct {
+	RequestID string `json:"request_id"`
+	DueAt     int64  `json:"due_at"`
+	Attempts  int64  `json:"attempts"`
+}
+
+type GalleryRequest struct {
+	ID           string `json:"id"`
+	SessionID    string `json:"session_id"`
+	Kind         string `json:"kind"`
+	Digest       string `json:"digest"`
+	EnvelopeJson string `json:"envelope_json"`
+	DataJson     string `json:"data_json"`
+}
+
+type GallerySession struct {
+	ID          string `json:"id"`
+	RetainUntil int64  `json:"retain_until"`
+	Version     int64  `json:"version"`
+	DataJson    string `json:"data_json"`
+}
+
 type Identity struct {
 	ID              string `json:"id"`
 	UserID          string `json:"user_id"`

@@ -2217,6 +2217,256 @@ paths:
       responses:
         "201":
           description: Slash-command callback response
+  /api/bots/self/gallery-actions:
+    put:
+      operationId: setGalleryActions
+      parameters: []
+      responses:
+        '200':
+          description: Current durable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionRegistration'
+        '202':
+          description: Durably queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionRegistration'
+        '400':
+          description: Invalid bounded request
+        '403':
+          description: Actor, source, destination, installation, or scope denied
+        '409':
+          description: Identity payload or revision conflict
+        '410':
+          description: Expired, revoked, or unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryActionRegistration'
+  /api/workspaces/{workspace_id}/gallery-actions:
+    get:
+      operationId: listGalleryActions
+      parameters:
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: source_upload_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: destination_id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current durable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionDiscoveryResponse'
+        '202':
+          description: Durably queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionDiscoveryResponse'
+        '400':
+          description: Invalid bounded request
+        '403':
+          description: Actor, source, destination, installation, or scope denied
+        '409':
+          description: Identity payload or revision conflict
+        '410':
+          description: Expired, revoked, or unavailable
+  /api/workspaces/{workspace_id}/gallery-actions/open:
+    post:
+      operationId: openGalleryAction
+      parameters:
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current durable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionResult'
+        '202':
+          description: Durably queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionResult'
+        '400':
+          description: Invalid bounded request
+        '403':
+          description: Actor, source, destination, installation, or scope denied
+        '409':
+          description: Identity payload or revision conflict
+        '410':
+          description: Expired, revoked, or unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryActionOpen'
+  /api/gallery-actions/sessions/{session_id}:
+    get:
+      operationId: statusGalleryAction
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current durable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionResult'
+        '202':
+          description: Durably queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionResult'
+        '400':
+          description: Invalid bounded request
+        '403':
+          description: Actor, source, destination, installation, or scope denied
+        '409':
+          description: Identity payload or revision conflict
+        '410':
+          description: Expired, revoked, or unavailable
+  /api/gallery-actions/sessions/{session_id}/choices:
+    post:
+      operationId: choicesGalleryAction
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current durable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionResult'
+        '202':
+          description: Durably queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionResult'
+        '400':
+          description: Invalid bounded request
+        '403':
+          description: Actor, source, destination, installation, or scope denied
+        '409':
+          description: Identity payload or revision conflict
+        '410':
+          description: Expired, revoked, or unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryActionChoicesQuery'
+  /api/gallery-actions/sessions/{session_id}/submit:
+    post:
+      operationId: submitGalleryAction
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current durable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionResult'
+        '202':
+          description: Durably queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionResult'
+        '400':
+          description: Invalid bounded request
+        '403':
+          description: Actor, source, destination, installation, or scope denied
+        '409':
+          description: Identity payload or revision conflict
+        '410':
+          description: Expired, revoked, or unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryActionSubmit'
+  /api/bots/self/gallery-actions/requests/{request_id}/response:
+    post:
+      operationId: respondGalleryAction
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current durable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionReplyResult'
+        '202':
+          description: Durably queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryActionReplyResult'
+        '400':
+          description: Invalid bounded request
+        '403':
+          description: Actor, source, destination, installation, or scope denied
+        '409':
+          description: Identity payload or revision conflict
+        '410':
+          description: Expired, revoked, or unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryActionReply'
 components:
   parameters:
     workspace_id:
@@ -2819,6 +3069,533 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BotToken"
+    GalleryActionChoice:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - label
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+        label:
+          type: string
+          minLength: 1
+          maxLength: 100
+        upload_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+    GalleryActionField:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required:
+        - id
+        - kind
+        - label
+        properties:
+          id:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          kind:
+            type: string
+            enum:
+            - boolean
+          label:
+            type: string
+            minLength: 1
+            maxLength: 100
+          required:
+            type: boolean
+          default:
+            type: boolean
+      - type: object
+        additionalProperties: false
+        required:
+        - id
+        - kind
+        - label
+        - min
+        - max
+        properties:
+          id:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          kind:
+            type: string
+            enum:
+            - number
+          label:
+            type: string
+            minLength: 1
+            maxLength: 100
+          required:
+            type: boolean
+          min:
+            type: number
+            minimum: -1000000000000.0
+            maximum: 1000000000000.0
+          max:
+            type: number
+            minimum: -1000000000000.0
+            maximum: 1000000000000.0
+          step:
+            type: number
+            exclusiveMinimum: 0
+            maximum: 1000000000000.0
+          default:
+            type: number
+            minimum: -1000000000000.0
+            maximum: 1000000000000.0
+      - type: object
+        additionalProperties: false
+        required:
+        - id
+        - kind
+        - label
+        - choices
+        properties:
+          id:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          kind:
+            type: string
+            enum:
+            - select
+          label:
+            type: string
+            minLength: 1
+            maxLength: 100
+          required:
+            type: boolean
+          choices:
+            type: array
+            items:
+              $ref: '#/components/schemas/GalleryActionChoice'
+            minItems: 1
+            maxItems: 100
+          default:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+      - type: object
+        additionalProperties: false
+        required:
+        - id
+        - kind
+        - label
+        - choices
+        - min
+        - max
+        properties:
+          id:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+          kind:
+            type: string
+            enum:
+            - images
+          label:
+            type: string
+            minLength: 1
+            maxLength: 100
+          required:
+            type: boolean
+          choices:
+            type: array
+            items:
+              $ref: '#/components/schemas/GalleryActionChoice'
+            maxItems: 100
+          min:
+            type: integer
+            minimum: 0
+            maximum: 100
+          max:
+            type: integer
+            minimum: 0
+            maximum: 100
+          dynamic:
+            type: boolean
+          default:
+            type: array
+            items:
+              type: string
+              pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+            maxItems: 100
+            uniqueItems: true
+      description: Bounds must be ordered. Defaults and effective values must match choices, bounds and numeric step
+        relative to min. IDs are unique within each array.
+    GalleryActionDescriptor:
+      type: object
+      additionalProperties: false
+      required:
+      - version
+      - id
+      - label
+      - accepted_media_types
+      - schema_revision
+      - fields
+      properties:
+        version:
+          type: integer
+          enum:
+          - 1
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+        label:
+          type: string
+          minLength: 1
+          maxLength: 100
+        accepted_media_types:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z]+/[a-z0-9.+-]+$
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+        schema_revision:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/GalleryActionField'
+          maxItems: 16
+    GalleryActionDescriptorListResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - gallery_actions
+      properties:
+        gallery_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GalleryActionDescriptor'
+          maxItems: 32
+    GalleryActionRegistration:
+      type: object
+      additionalProperties: false
+      required:
+      - installation_id
+      - gallery_actions
+      properties:
+        installation_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        gallery_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GalleryActionDescriptor'
+          maxItems: 32
+    GalleryActionDiscovery:
+      type: object
+      additionalProperties: false
+      required:
+      - installation_id
+      - descriptor
+      properties:
+        installation_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        descriptor:
+          $ref: '#/components/schemas/GalleryActionDescriptor'
+    GalleryActionDiscoveryResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - gallery_actions
+      properties:
+        gallery_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GalleryActionDiscovery'
+    GalleryActionOpen:
+      type: object
+      additionalProperties: false
+      required:
+      - session_id
+      - installation_id
+      - action_id
+      - source_upload_id
+      - destination_id
+      properties:
+        session_id:
+          type: string
+          description: New sessions use unix-seconds.random (at least 16 random characters), issued within 30 minutes with at most 60 seconds future skew. Persist and reuse the exact identity for retries. Expired identities cannot reopen after cleanup.
+          pattern: ^[a-zA-Z0-9_.-]{1,100}$
+        installation_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        action_id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+        source_upload_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        destination_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+    GalleryActionSubmit:
+      type: object
+      additionalProperties: false
+      required:
+      - request_id
+      - schema_revision
+      - values
+      properties:
+        request_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        schema_revision:
+          type: integer
+          minimum: 1
+        values:
+          type: object
+          additionalProperties:
+            oneOf:
+            - type: boolean
+            - type: number
+              minimum: -1000000000000.0
+              maximum: 1000000000000.0
+            - type: string
+            - type: array
+              items:
+                type: string
+              maxItems: 100
+    GalleryActionChoicesQuery:
+      type: object
+      additionalProperties: false
+      required:
+      - request_id
+      - schema_revision
+      - field_id
+      - limit
+      properties:
+        request_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        schema_revision:
+          type: integer
+          minimum: 1
+        field_id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+        offset:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+    GalleryActionReply:
+      type: object
+      additionalProperties: false
+      required:
+      - session_id
+      - schema_revision
+      - state
+      properties:
+        session_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        schema_revision:
+          type: integer
+          minimum: 1
+        state:
+          type: string
+          enum:
+          - accepted
+          - failed
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/GalleryActionChoice'
+          maxItems: 100
+        preview_upload_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+    GalleryActionSession:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - actor_id
+      - workspace_id
+      - installation_id
+      - source_upload_id
+      - destination_id
+      - capability_revision
+      - descriptor
+      - expires_at
+      properties:
+        id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        actor_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        workspace_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        installation_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        source_upload_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        destination_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        capability_revision:
+          type: string
+        descriptor:
+          $ref: '#/components/schemas/GalleryActionDescriptor'
+        request_count:
+          type: integer
+          minimum: 1
+          maximum: 128
+        expires_at:
+          type: integer
+        submission_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        preview_upload_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+    GalleryActionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - request_id
+      - session_id
+      - kind
+      - payload
+      - state
+      - subscription_id
+      properties:
+        request_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        session_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        kind:
+          type: string
+          enum:
+          - open
+          - choices
+          - submit
+        payload:
+          oneOf:
+          - $ref: '#/components/schemas/GalleryActionOpen'
+          - $ref: '#/components/schemas/GalleryActionSubmit'
+          - $ref: '#/components/schemas/GalleryActionChoicesQuery'
+        state:
+          type: string
+          enum:
+          - pending
+          - accepted
+          - failed
+          - expired
+          - unavailable
+          - uncertain
+        response:
+          $ref: '#/components/schemas/GalleryActionReply'
+        subscription_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+    GalleryActionResult:
+      type: object
+      additionalProperties: false
+      required:
+      - session
+      - request
+      properties:
+        session:
+          $ref: '#/components/schemas/GalleryActionSession'
+        request:
+          $ref: '#/components/schemas/GalleryActionRequest'
+    GalleryActionReplyResult:
+      type: object
+      additionalProperties: false
+      required:
+      - request
+      properties:
+        request:
+          $ref: '#/components/schemas/GalleryActionRequest'
+    GalleryActionEvent:
+      type: object
+      additionalProperties: false
+      required:
+      - version
+      - event_id
+      - type
+      - installation_id
+      - action_id
+      - actor_id
+      - workspace_id
+      - source_upload_id
+      - destination_id
+      - session_id
+      - request_id
+      - submission_id
+      - schema_revision
+      - expires_at
+      - payload
+      properties:
+        version:
+          type: integer
+          enum:
+          - 1
+        event_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        type:
+          type: string
+          enum:
+          - gallery_action.open
+          - gallery_action.choices
+          - gallery_action.submit
+        installation_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        action_id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+        actor_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        workspace_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        source_upload_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        destination_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        session_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        request_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]{1,128}$
+        submission_id:
+          type: string
+        schema_revision:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: integer
+        payload:
+          oneOf:
+          - $ref: '#/components/schemas/GalleryActionOpen'
+          - $ref: '#/components/schemas/GalleryActionSubmit'
+          - $ref: '#/components/schemas/GalleryActionChoicesQuery'
     BotCommandInput:
       type: object
       required: [command, description]

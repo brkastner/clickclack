@@ -2043,3 +2043,54 @@ FROM eligible e JOIN messages m ON m.id = e.id JOIN users u ON u.id = m.author_i
 WHERE (CAST(sqlc.arg(cursor_time) AS TEXT) = '' OR e.output_created_at < sqlc.arg(cursor_time)
  OR (e.output_created_at = sqlc.arg(cursor_time) AND m.id < sqlc.arg(cursor_id)))
 ORDER BY e.output_created_at DESC, m.id DESC LIMIT sqlc.arg(page_limit);
+
+-- name: PutGalleryCapability :exec
+INSERT INTO gallery_capabilities (installation_id, workspace_id, token_id, generation, descriptors_json)
+VALUES (sqlc.arg(installation_id), sqlc.arg(workspace_id), sqlc.arg(token_id), sqlc.arg(generation), sqlc.arg(descriptors_json))
+ON CONFLICT (installation_id) DO UPDATE SET token_id = excluded.token_id, generation = excluded.generation, descriptors_json = excluded.descriptors_json;
+
+-- name: ListGalleryCapabilities :many
+SELECT g.* FROM gallery_capabilities g
+JOIN app_installations a ON a.id = g.installation_id AND a.revoked_at IS NULL
+JOIN bot_tokens t ON t.id = g.token_id AND t.revoked_at IS NULL
+JOIN workspace_members m ON m.user_id = a.bot_user_id AND m.workspace_id = a.workspace_id
+WHERE g.workspace_id = sqlc.arg(workspace_id);
+
+-- name: CreateGallerySession :exec
+INSERT INTO gallery_sessions (id, version, data_json, retain_until) VALUES (sqlc.arg(id), 1, sqlc.arg(data_json), sqlc.arg(retain_until));
+
+-- name: GetGallerySession :one
+SELECT * FROM gallery_sessions WHERE id = sqlc.arg(id);
+
+-- name: UpdateGallerySession :execrows
+UPDATE gallery_sessions SET version = version + 1, data_json = sqlc.arg(data_json)
+WHERE id = sqlc.arg(id) AND version = sqlc.arg(version);
+
+-- name: CreateGalleryRequest :exec
+INSERT INTO gallery_requests (id, session_id, kind, digest, envelope_json, data_json)
+VALUES (sqlc.arg(id), sqlc.arg(session_id), sqlc.arg(kind), sqlc.arg(digest), sqlc.arg(envelope_json), sqlc.arg(data_json));
+
+-- name: GetGalleryRequest :one
+SELECT * FROM gallery_requests WHERE id = sqlc.arg(id);
+
+-- name: UpdateGalleryRequest :exec
+UPDATE gallery_requests SET data_json = sqlc.arg(data_json) WHERE id = sqlc.arg(id);
+
+-- name: EnqueueGalleryRequest :exec
+INSERT INTO gallery_outbox (request_id, due_at) VALUES (sqlc.arg(request_id), sqlc.arg(due_at));
+
+-- name: ListDueGalleryRequests :many
+SELECT * FROM gallery_outbox WHERE due_at <= sqlc.arg(due_at) ORDER BY due_at LIMIT 32;
+
+-- name: ClaimGalleryRequest :execrows
+UPDATE gallery_outbox SET due_at = sqlc.arg(next_due), attempts = attempts + 1
+WHERE request_id = sqlc.arg(request_id) AND due_at <= sqlc.arg(now_at);
+
+-- name: FinishGalleryRequest :exec
+DELETE FROM gallery_outbox WHERE request_id = sqlc.arg(request_id);
+
+-- name: CleanupGallerySessions :execrows
+DELETE FROM gallery_sessions WHERE id IN (
+ SELECT expired.id FROM gallery_sessions AS expired WHERE expired.retain_until <= sqlc.arg(now_at)
+ ORDER BY expired.retain_until, expired.id LIMIT 32
+);

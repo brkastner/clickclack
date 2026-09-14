@@ -1,16 +1,26 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { api } from "../../lib/api";
+  import { eligibleGalleryActions, type GalleryActionDiscovery } from "../../lib/gallery-actions";
   import { uploadURL } from "../../lib/uploads";
   import type { Message, Upload } from "../../lib/types";
 
-  let { message, upload, label, eager, onOpen, onAddToMessage, onExpandImage, onExpandVideo }: {
+  let { message, upload, label, eager, onOpen, onAddToMessage, onExpandImage, onExpandVideo, onGalleryAction }: {
     message: Message; upload: Upload; label: string; eager: boolean;
     onOpen: (message: Message) => void;
     onAddToMessage: (upload: Upload) => void;
     onExpandImage: (upload: Upload) => void;
     onExpandVideo: (upload: Upload) => void;
+    onGalleryAction?: (action: GalleryActionDiscovery, upload: Upload, message: Message) => void;
   } = $props();
   let menu = $state(false);
+  let actions = $state<GalleryActionDiscovery[]>([]);
+  let discovery = 0;
+  $effect(() => { if (!menu || !onGalleryAction) return; const serial = ++discovery; const abort = new AbortController(); actions = [];
+    const params = new URLSearchParams({source_upload_id:upload.id,destination_id:message.channel_id || message.direct_conversation_id || ""});
+    void api<{gallery_actions:unknown}>(`/api/workspaces/${encodeURIComponent(message.workspace_id)}/gallery-actions?${params}`,{signal:abort.signal}).then(data=>{if(serial===discovery&&!abort.signal.aborted)actions=eligibleGalleryActions(data.gallery_actions,upload);}).catch(()=>{});
+    return ()=>{abort.abort();};
+  });
   let menuButton: HTMLButtonElement;
   const mediaURL = $derived(uploadURL(upload));
   const isVideo = $derived(upload.content_type.toLowerCase().startsWith("video/"));
@@ -54,6 +64,7 @@
   {#if menu}
     <div class="output-card__menu" role="menu" tabindex="-1" aria-label="Media options" onkeydown={keydown}>
       <button type="button" role="menuitem" onclick={() => { onAddToMessage(upload); closeMenu(); }}>Add to pending message</button>
+      {#each actions as action (`${action.installation_id}:${action.descriptor.id}`)}<button type="button" role="menuitem" onclick={async () => { menu = false; await tick(); menuButton?.focus({preventScroll:true}); onGalleryAction?.(action, upload, message); }}>{action.descriptor.label}</button>{/each}
       <a role="menuitem" href={mediaURL} download={upload.filename} onclick={() => (menu = false)}>Download</a>
     </div>
   {/if}
