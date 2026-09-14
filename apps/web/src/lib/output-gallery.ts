@@ -1,6 +1,7 @@
 import type { Message, User } from "./types";
 
 export type OutputPage = { outputs: Message[]; next_cursor: string | null };
+export const OUTPUT_GALLERY_PAGE_SIZE = 60;
 export const outputSourceKey = (userID: string, workspaceID: string) =>
   `clickclack:output-source:${encodeURIComponent(userID)}:${encodeURIComponent(workspaceID)}`;
 export function outputBots(users: User[]): User[] {
@@ -47,7 +48,7 @@ export class OutputGallerySession {
     if (this.busy || (more && !this.nextCursor)) return;
     const cursor = more ? this.nextCursor! : "";
     await this.request(async (signal) => {
-      const page = await this.fetchPage(cursor, 30, signal);
+      const page = await this.fetchPage(cursor, OUTPUT_GALLERY_PAGE_SIZE, signal);
       return () => {
         const seen = new Set(more ? this.outputs.map((m) => m.id) : []);
         const unique = {
@@ -66,7 +67,8 @@ export class OutputGallerySession {
       const pages: OutputPage[] = [];
       // Sequential bounded page requests preserve pagination boundaries. Do not
       // insert fresh first-page cards into a scrolled gallery without Refresh.
-      for (const cursor of this.cursors) pages.push(await this.fetchPage(cursor, 30, signal));
+      for (const cursor of this.cursors)
+        pages.push(await this.fetchPage(cursor, OUTPUT_GALLERY_PAGE_SIZE, signal));
       const current = new Map(pages.flatMap((p) => p.outputs).map((m) => [m.id, m]));
       return () => {
         this.pages = this.pages.map((p) => ({

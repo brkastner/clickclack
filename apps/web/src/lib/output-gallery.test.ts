@@ -103,5 +103,5 @@ test("return token preserves selected card and scroll while latest always reques
   assert.equal(session.scrollTop, 840);
   assert.equal(session.anchorID, "a");
   assert.equal(session.anchorOffset, 20);
-  assert.deepEqual(limits, [30, 30, 1]);
+  assert.deepEqual(limits, [60, 60, 1]);
 });

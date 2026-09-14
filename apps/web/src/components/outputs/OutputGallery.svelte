@@ -24,6 +24,7 @@
   let choosingDestination = $state(false);
   let expanded = $state<Upload>();
   let expandedOpener: HTMLElement | null = null;
+  let galleryGap = $state(16);
   let revision = $state(0);
   let initializing = $state(true);
   let validating = $state(false);
@@ -116,6 +117,10 @@
       await goto(`/app/${encodeURIComponent(workspace.id)}/${encodeURIComponent(target)}`);
     } catch { if (alive && serial === navigation) error = "This source is unavailable or access has changed. Refresh the gallery."; }
   }
+  function setGalleryGap(value: number) {
+    galleryGap = value;
+    try { localStorage.setItem("clickclack:gallery-gap", String(value)); } catch { /* A temporary gap is still usable. */ }
+  }
   function addToQueue(upload: Upload) {
     if (!user || !workspace) return;
     queue = enqueueGalleryAttachment(user.id, workspace.id, upload, MAX_MESSAGE_ATTACHMENTS).uploads;
@@ -164,6 +169,7 @@
         channels = loadedChannels.channels; directs = loadedDirects.conversations;
         labels = Object.fromEntries([...channels.map((c) => [c.id, `#${c.name}`]), ...directs.map((d) => [d.id, d.members.filter((m) => m.id !== user?.id).map((m) => m.display_name).join(", ") || "Direct conversation"])]);
         queue = galleryAttachmentQueue(user.id, scope).uploads;
+        try { galleryGap = Math.max(4, Math.min(40, Number(localStorage.getItem("clickclack:gallery-gap")) || 16)); } catch { /* Default gap is stable. */ }
         const saved = galleryReturn;
         if (saved?.userID === user.id && saved.workspaceID === scope && boundOutputBot(bots, saved.sourceID)) {
           sourceID = saved.sourceID; session = saved.session;
@@ -199,6 +205,7 @@
           {#each bots as bot (bot.id)}<option value={bot.id}>{bot.display_name}{bot.handle ? ` (@${bot.handle})` : ""}</option>{/each}
         </select>
       </label>
+      <label>spacing <input type="range" min="4" max="40" step="2" value={galleryGap} aria-label="gallery spacing" oninput={(event) => setGalleryGap(Number(event.currentTarget.value))} /></label>
       {#if sourceID}
         <button class="output-gallery__button" disabled={busy} onclick={() => void run(() => session!.load())}>refresh</button>
         <button class="output-gallery__button output-gallery__button--primary" disabled={busy} onclick={() => void latest()}>latest</button>
@@ -210,7 +217,7 @@
   {#if initializing || validating}<p class="output-gallery__notice" role="status">checking gallery…</p>
   {:else if !sourceID}<p class="output-gallery__notice">select the bot account whose media you want to browse.</p>
   {:else}
-    <div class="output-grid">
+    <div class="output-grid" style={`gap: ${galleryGap}px`}>
       {#each media as item, index (`${item.message.id}:${item.upload.id}`)}
         <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={index < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpand={expand} />
       {/each}
