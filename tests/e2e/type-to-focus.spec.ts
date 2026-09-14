@@ -79,7 +79,7 @@ test.describe("type-to-focus composer", () => {
   test("redirect targets the thread composer when a thread is open", async ({ page }) => {
     const rootBody = `thread root ${Date.now()}`;
     await page.getByLabel("Message body").fill(rootBody);
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     const row = page.locator(".message-row:not(.is-pending)", {
       has: page.locator(".markdown").filter({ hasText: rootBody }),
     });
@@ -99,7 +99,7 @@ test.describe("type-to-focus composer", () => {
   }) => {
     const rootBody = `button focus root ${Date.now()}`;
     await page.getByLabel("Message body").fill(rootBody);
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     const row = page.locator(".message-row:not(.is-pending)", {
       has: page.locator(".markdown").filter({ hasText: rootBody }),
     });
@@ -128,7 +128,7 @@ test.describe("type-to-focus composer", () => {
   test("typing with selected thread quote text does not redirect to composer", async ({ page }) => {
     const rootBody = `thread quote root ${Date.now()}`;
     await page.getByLabel("Message body").fill(rootBody);
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     const row = page.locator(".message-row:not(.is-pending)", {
       has: page.locator(".markdown").filter({ hasText: rootBody }),
     });
@@ -192,7 +192,7 @@ test.describe("type-to-focus composer", () => {
       const composer = page.getByLabel("Message body");
       const body = `the original draft ${Date.now()}`;
       await composer.fill(body);
-      await page.getByRole("button", { name: "Send" }).click();
+      await page.getByRole("button", { name: "Send", exact: true }).click();
 
       const originalRow = page.locator(".message-row:not(.is-pending)", {
         has: page.locator(".markdown").filter({ hasText: body }),
@@ -212,12 +212,12 @@ test.describe("type-to-focus composer", () => {
       await activeComposer.fill("Keep this draft after clearing the quote");
       const chip = page.getByLabel("Replying to message");
       await expect(chip).toBeVisible();
-      await page.getByRole("heading", { name: "#general", exact: true }).click();
+      await replyButton.focus();
       await expect(activeComposer).not.toBeFocused();
 
       await page.keyboard.press("Escape");
       await expect(chip).toHaveCount(0);
-      await expect(activeComposer).toHaveValue("Keep this draft after clearing the quote");
+      await expect(activeComposer).toHaveText("Keep this draft after clearing the quote");
     });
   }
 });

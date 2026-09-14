@@ -147,54 +147,90 @@ test("composer completions follow the caret and preserve modified keys", async (
     ["before @cmd-bot-caret", `before @${bot.handle} `],
     ["/sta", "/start "],
   ]) {
-    await composer.fill(draft);
+    await composer.focus();
+    await composer.press("Control+A");
+    await composer.press("Backspace");
+    await composer.pressSequentially(draft);
     await expect(suggestions).toBeVisible();
-    await composer.press("Home");
+    await composer.press("Control+Home");
+    expect(await composer.evaluate(() => window.getSelection()?.anchorOffset)).toBe(0);
     await expect(suggestions).not.toBeVisible();
     await composer.press("Tab");
-    await expect(composer).toHaveValue(draft);
+    await expect(composer).toHaveText(draft);
     await expect(composer).not.toBeFocused();
 
-    await composer.fill(draft);
+    await composer.focus();
+    await composer.press("Control+A");
+    await composer.press("Backspace");
+    await composer.pressSequentially(draft);
     await expect(suggestions).toBeVisible();
     await composer.press("Shift+Enter");
-    await expect(composer).toHaveValue(`${draft}\n`);
+    await expect(composer).toHaveText(draft);
+    await expect(composer.locator("br:not(.ProseMirror-trailingBreak)")).toHaveCount(1);
     await expect(suggestions).not.toBeVisible();
 
-    await composer.fill(draft);
+    await composer.focus();
+    await composer.press("Control+A");
+    await composer.press("Backspace");
+    await composer.pressSequentially(draft);
+    await composer.press("Control+End");
     await composer.press("Shift+ArrowUp");
-    expect(
-      await composer.evaluate((node: HTMLTextAreaElement) =>
-        node.value.slice(node.selectionStart, node.selectionEnd),
-      ),
-    ).toBe(draft);
+    const selectedText = await composer.evaluate(() => window.getSelection()?.toString());
+    expect(selectedText).toContain(draft);
+    expect(selectedText?.trim()).toBe(draft);
 
-    await composer.fill(draft);
+    await composer.focus();
+    await composer.press("Control+A");
+    await composer.press("Backspace");
+    await composer.pressSequentially(draft);
     await expect(suggestions).toBeVisible();
     await composer.press("Shift+Tab");
-    await expect(composer).toHaveValue(draft);
+    await expect(composer).toHaveText(draft);
     await expect(composer).not.toBeFocused();
 
-    await composer.fill(draft);
+    await composer.focus();
+    await composer.press("Control+A");
+    await composer.press("Backspace");
+    await composer.pressSequentially(draft);
     await expect(suggestions).toBeVisible();
     await composer.press("Tab");
-    await expect(composer).toHaveValue(completion);
+    await expect(composer).toHaveText(completion);
   }
 
-  await composer.fill("/sta");
+  await composer.focus();
+  await composer.press("Control+A");
+  await composer.press("Backspace");
+  await composer.pressSequentially("/sta");
+  await expect(suggestions).toBeVisible();
   await composer.press("ArrowUp");
   await expect(suggestions.getByRole("option", { selected: true })).toContainText("/status");
   await composer.press("ArrowDown");
   await expect(suggestions.getByRole("option", { selected: true })).toContainText("/start");
   await composer.press("Enter");
-  await expect(composer).toHaveValue("/start ");
-  await composer.fill("/sta");
+  await expect(composer).toHaveText("/start ");
+  await composer.focus();
+  await composer.press("Control+A");
+  await composer.press("Backspace");
+  await composer.pressSequentially("/sta");
+  await expect(suggestions).toBeVisible();
   await suggestions.getByRole("option").filter({ hasText: "/status" }).press("Enter");
-  await expect(composer).toHaveValue("/status ");
-  await composer.fill("/sta");
+  await expect(composer).toHaveText("/status ");
+  await composer.focus();
+  await composer.press("Control+A");
+  await composer.press("Backspace");
+  await composer.pressSequentially("/sta");
+  await expect(suggestions).toBeVisible();
+  await page.getByRole("button", { name: "Toggle formatting tools" }).click();
   await page.getByRole("button", { name: "Bold", exact: true }).press("Enter");
-  await expect(composer).toHaveValue("/sta**text**");
-  await composer.fill("/sta");
+  await expect(composer).toHaveText("/sta");
+  await composer.pressSequentially("text");
+  await expect(composer).toHaveText("/statext");
+  await expect(composer.locator("strong")).toHaveText("text");
+  await composer.focus();
+  await composer.press("Control+A");
+  await composer.press("Backspace");
+  await composer.pressSequentially("/sta");
+  await expect(suggestions).toBeVisible();
   await composer.press("Control+Enter");
   await expect(page.locator(".markdown").filter({ hasText: "/sta" })).toBeVisible();
 });
@@ -252,7 +288,7 @@ for (const surface of ["channel", "direct", "thread", "embed-channel", "embed-th
           await expect(page.getByRole("listbox", { name: "Mention suggestions" })).toBeVisible();
         }
         await composer.dispatchEvent("keydown", { key: "Enter", ...composing });
-        await expect(composer).toHaveValue(draft);
+        await expect(composer).toHaveText(draft);
       }
     }
     expect(sentBodies).toEqual([]);
@@ -261,7 +297,7 @@ for (const surface of ["channel", "direct", "thread", "embed-channel", "embed-th
     await composer.fill(committed);
     await composer.press("Enter");
     await expect(page.locator(".markdown").filter({ hasText: committed })).toBeVisible();
-    await expect(composer).toHaveValue("");
+    await expect(composer).toHaveText("");
     const buttonBody = `${committed} with button`;
     await composer.fill(buttonBody);
     await page
@@ -269,7 +305,7 @@ for (const surface of ["channel", "direct", "thread", "embed-channel", "embed-th
       .getByRole("button", { name: inputLabel === "Reply body" ? "Reply" : "Send", exact: true })
       .click();
     await expect(page.locator(".markdown").filter({ hasText: buttonBody })).toBeVisible();
-    await expect(composer).toHaveValue("");
+    await expect(composer).toHaveText("");
     expect(sentBodies).toEqual([committed, buttonBody]);
   });
 }
@@ -287,7 +323,7 @@ test("dispatches a registered slash command through the hook without posting the
 
     await openChannel(page, workspace.route_id, channel.name);
     await page.getByLabel("Message body").fill("/deploy prod");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
 
     // The bot's in_channel response lands as a bot message over realtime.
     await expect(page.locator(".markdown").filter({ hasText: "deploy started" })).toBeVisible();
@@ -316,7 +352,7 @@ test("shows ephemeral slash responses as a local-only composer notice", async ({
 
     await openChannel(page, workspace.route_id, channel.name);
     await page.getByLabel("Message body").fill("/whoami");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
 
     const notice = page.locator(".composer-notice");
     await expect(notice).toBeVisible();
@@ -341,7 +377,7 @@ test("unregistered slash text falls through to a plain message", async ({ page }
 
   await openChannel(page, workspace.route_id, channel.name);
   await page.getByLabel("Message body").fill("/shrug oh well");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   await expect(page.locator(".markdown").filter({ hasText: "/shrug oh well" })).toBeVisible();
   await expect(page.locator(".composer-notice")).toHaveCount(0);
@@ -363,7 +399,7 @@ test("preserves a unique bot command owner in realtime metadata", async ({ page 
       response.request().method() === "POST" &&
       response.url().endsWith(`/api/channels/${channel.id}/messages`),
   );
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   const response = await created;
   expect(response.ok()).toBe(true);
@@ -390,7 +426,7 @@ test("quoted registered slash text falls through to a quoted plain message", asy
 
     await openChannel(page, workspace.route_id, channel.name);
     await page.getByLabel("Message body").fill("quoted source");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     const sourceRow = page.locator(".message-row", {
       has: page.locator(".markdown").filter({ hasText: "quoted source" }),
     });
@@ -404,13 +440,13 @@ test("quoted registered slash text falls through to a quoted plain message", asy
     for (const composing of [{ isComposing: true }, { keyCode: 229 }]) {
       await composer.dispatchEvent("keydown", { key: "Escape", ...composing });
       await expect(quote).toBeVisible();
-      await expect(composer).toHaveValue("unfinished quoted draft");
+      await expect(composer).toHaveText("unfinished quoted draft");
     }
 
     const suggestions = page.getByRole("listbox", { name: "Slash command suggestions" });
     await composer.fill("/dep");
     await expect(suggestions).toBeVisible();
-    await page.getByRole("button", { name: "GIF picker", exact: true }).click();
+    await page.getByRole("button", { name: "Add GIF", exact: true }).click();
     const picker = page.getByRole("dialog", { name: "GIF picker panel" });
     await picker.getByLabel("Search GIFs").press("Escape");
     await expect(picker).not.toBeVisible();
@@ -419,20 +455,24 @@ test("quoted registered slash text falls through to a quoted plain message", asy
     await composer.press("Escape");
     await expect(suggestions).not.toBeVisible();
     await expect(quote).toBeVisible();
-    await composer.fill("/depl");
-    await suggestions.getByRole("option").press("Escape");
+    await composer.focus();
+    await composer.press("Control+A");
+    await composer.press("Backspace");
+    await composer.pressSequentially("/depl");
+    await expect(suggestions).toBeVisible();
+    await composer.press("Escape");
     await expect(suggestions).not.toBeVisible();
     await expect(quote).toBeVisible();
     await expect(composer).toBeFocused();
-    await expect(composer).toHaveValue("/depl");
+    await expect(composer).toHaveText("/depl");
     await composer.press("Escape");
     await expect(quote).not.toBeVisible();
-    await expect(composer).toHaveValue("/depl");
+    await expect(composer).toHaveText("/depl");
     await sourceRow.hover();
     await sourceRow.getByRole("button", { name: "Reply" }).click();
 
     await page.getByLabel("Message body").fill("/deploy quoted");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
 
     const replyRow = page.locator(".message-row", {
       has: page.locator(".markdown").filter({ hasText: "/deploy quoted" }),
@@ -460,7 +500,7 @@ test("restores a registered slash draft when callback dispatch fails", async ({ 
 
     await openChannel(page, workspace.route_id, channel.name);
     await page.getByLabel("Message body").fill("/broken retry-me");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
 
     await expect(page.locator(".composer-notice--error")).toBeVisible();
     await expect(page.getByLabel("Message body")).toHaveText("/broken retry-me");
@@ -488,7 +528,7 @@ test("does not apply delayed slash callback state after a conversation change", 
 
     await openChannel(page, workspace.route_id, firstChannel.name);
     await page.getByLabel("Message body").fill("/slow");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     await probe.received;
 
     await page.getByRole("link", { name: `# ${secondChannel.name}` }).click();
@@ -609,6 +649,7 @@ test("merges bot-declared command menus into composer autocomplete", async ({ pa
       { command: "restart", description: "Restart the agent" },
     ]);
     await composer.fill("/re");
+    await composer.press("End");
     await expect(
       page.locator(".composer-suggestions button", { hasText: "/restart" }),
     ).toBeVisible();
@@ -621,6 +662,7 @@ test("merges bot-declared command menus into composer autocomplete", async ({ pa
         ),
     );
     await composer.fill("/");
+    await composer.press("End");
     await expect(
       page.locator(".composer-suggestions button", { hasText: "/restart" }),
     ).toBeVisible();

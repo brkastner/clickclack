@@ -60,7 +60,7 @@ test("offers rich formatting controls and a functional voice control", async ({ 
     (request) =>
       request.method() === "POST" && request.url().endsWith(`/api/channels/${channel.id}/messages`),
   );
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const payload = (await created).postDataJSON() as { body: string };
   expect(payload.body).toContain("##");
   expect(payload.body).toContain("**polished composer**");
@@ -76,16 +76,7 @@ test("keeps multi-character mobile input in one stable draft", async ({ page }) 
   await editor.focus();
   const chunks = ["update ", "script ", "and ", "rescue ", "sheet ", "with ", "Gboard"];
   for (const chunk of chunks) {
-    await editor.evaluate((node, data) => {
-      node.dispatchEvent(
-        new InputEvent("beforeinput", {
-          bubbles: true,
-          cancelable: true,
-          data,
-          inputType: "insertText",
-        }),
-      );
-    }, chunk);
+    await page.keyboard.insertText(chunk);
   }
 
   const body = chunks.join("");
@@ -96,7 +87,7 @@ test("keeps multi-character mobile input in one stable draft", async ({ page }) 
     (request) =>
       request.method() === "POST" && request.url().endsWith(`/api/channels/${channel.id}/messages`),
   );
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const payload = (await created).postDataJSON() as { body: string };
   expect(payload.body).toBe(body);
 });
@@ -189,7 +180,7 @@ test("replaces emoji shortcodes and inserts from the picker", async ({ page }) =
     (request) =>
       request.method() === "POST" && request.url().endsWith(`/api/channels/${channel.id}/messages`),
   );
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const payload = (await created).postDataJSON() as { body: string };
   expect(payload.body).toContain("🚀");
 });

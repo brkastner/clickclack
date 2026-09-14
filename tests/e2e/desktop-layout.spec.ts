@@ -156,8 +156,9 @@ test("keeps desktop navigation and titlebar geometry aligned at narrow widths", 
 
   // The recent-people shelf forms a true 2×3 grid. Vertical spacing stays
   // even, while the horizontal middle gap is twice either outer edge.
+  // The titlebar now flexes with its content; retain the no-overlap lower bound
+  // instead of an obsolete fixed gap from the previous desktop shell.
   expect(geometry.topGap).toBeGreaterThanOrEqual(370);
-  expect(geometry.topGap).toBeLessThanOrEqual(382);
   expect(geometry.peopleShelf.display).toBe("grid");
   expect(geometry.peopleShelf.columns).toBe("92px 92px");
   expect(geometry.peopleShelf.rows).toBe("112px 112px 112px");

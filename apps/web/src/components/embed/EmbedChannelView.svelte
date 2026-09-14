@@ -75,7 +75,7 @@
   let socket: RealtimeConnection | null = null;
   let loadSerial = 0;
   let loadPending = false;
-  let messageSubmission: MessageSubmission | null = null;
+  let messageSubmission = $state<MessageSubmission | null>(null);
   let workspaceMemberUsers = $state<User[]>([]);
   let memberLoadSerial = 0;
   let memberLoadAbort: AbortController | null = null;
@@ -174,6 +174,9 @@
 
   function clearChannel() {
     messageRequests.clear();
+    // Authentication teardown retires request ownership but preserves the text
+    // for the next authenticated session.
+    if (messageSubmission) messageBody = messageSubmission.body;
     messageSubmission = null;
     sending = false;
     sendError = "";
@@ -444,7 +447,7 @@
         { method: "POST", body: JSON.stringify({ body, nonce: submission.nonce, quoted_message_id: quotedMessageID }) },
       ));
     } catch (error) {
-      if (messageSubmission !== submission) return;
+      if (messageSubmission?.nonce !== submission.nonce) return;
       if (error instanceof APIError && error.status === 401) {
         handleLoadError(error);
         return;
@@ -452,9 +455,9 @@
       sendError = readableAPIError(error, "Could not send this message.");
       return;
     } finally {
-      if (messageSubmission === submission) sending = false;
+      if (messageSubmission?.nonce === submission.nonce) sending = false;
     }
-    if (messageSubmission !== submission || channel?.id !== channelID || viewState !== "ready") return;
+    if (messageSubmission?.nonce !== submission.nonce || channel?.id !== channelID || viewState !== "ready") return;
     messageSubmission = null;
     // A creation receipt cannot replace a row already observed through a read or edit.
     messages = mergeMessages([message], messages);
@@ -596,7 +599,7 @@
       {#if memberLoadError}<p class="embed-notice" role="status">Mentions unavailable: {memberLoadError}</p>{/if}
       {#if sendError}<p class="embed-notice" role="status">{sendError}</p>{/if}
       <ChatComposer
-        value={messageBody}
+        value={messageSubmission?.body ?? messageBody}
         placeholder={`Message #${channelDisplayTitle(channel)}`}
         ariaLabel="Message body"
         submitLabel="Send"
@@ -605,7 +608,9 @@
         replyTarget={replyTarget}
         showToolbar
         {mentionPeople}
-        onValue={(value) => (messageBody = value)}
+        onValue={(value) => {
+          if (!messageSubmission) messageBody = value;
+        }}
         onSubmit={() => void sendMessage()}
         onKeydown={handleComposerKeydown}
         onFocus={() => (sendError = "")}

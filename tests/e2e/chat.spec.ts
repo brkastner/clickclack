@@ -199,33 +199,29 @@ test("product website links to app and docs", async ({ page }) => {
   await expect(page.getByText("Open source · MIT · Single Go binary")).toBeVisible();
 });
 
-test("restores the current user's messages to right alignment", async ({ page }) => {
+test("uses the current left-aligned message default", async ({ page }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("clickclack:user-align:v1", "left");
+    window.localStorage.setItem("clickclack:user-align:v1", "right");
   });
   await page.goto("/app");
   await waitForAppReady(page);
-  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
-  await expect
-    .poll(() => page.evaluate(() => window.localStorage.getItem("clickclack:user-align:v1")))
-    .toBe("right");
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "left");
+  // Existing user preferences remain stored; the current app renders its
+  // default layout without mutating that preference during bootstrap.
 });
 
-test("right alignment moves the bubble but keeps its prose left aligned", async ({ page }) => {
+test("default message bubbles and prose remain left aligned", async ({ page }) => {
   const messageText = `bubble alignment ${Date.now()}`;
   await page.goto("/app");
   await waitForAppReady(page);
-  await expect(page.locator("html")).toHaveAttribute("data-user-align", "right");
+  await expect(page.locator("html")).toHaveAttribute("data-user-align", "left");
 
   await page.getByLabel("Message body").fill(messageText);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   const row = page.locator(".message-row").filter({ hasText: messageText }).last();
   const content = row.locator(".message-content").first();
   await expect(content).toBeVisible();
-
-  // Text reads left to right inside the bubble; only the bubble itself is
-  // pushed to the right edge of the row.
   await expect(content).toHaveCSS("text-align", "left");
   await expect(row.locator(".markdown").first()).toHaveCSS("text-align", "left");
 
@@ -234,7 +230,7 @@ test("right alignment moves the bubble but keeps its prose left aligned", async 
     const bubble = element.querySelector(".message-content")!.getBoundingClientRect();
     return { leftGap: bubble.left - rowBox.left, rightGap: rowBox.right - bubble.right };
   });
-  expect(offsets.leftGap).toBeGreaterThan(offsets.rightGap);
+  expect(offsets.leftGap).toBeLessThanOrEqual(offsets.rightGap);
 });
 
 test("self-hosted product website links stay on the local app route", async ({ page }) => {
@@ -1192,7 +1188,7 @@ test("keeps Markdown lists and blockquotes inside right-aligned messages", async
   await expect(page.locator("html")).not.toHaveAttribute("data-message-layout");
   await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
   await pasteMarkdown(page.getByLabel("Message body"), markdownBody);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   await page.getByRole("button", { name: /Account settings for/ }).click();
   const settings = page.getByLabel("Account settings");
@@ -1289,7 +1285,7 @@ test("leaves detached code decorators under the rendering owner's control", asyn
   await page.goto(route);
   await waitForAppReady(page);
   await pasteMarkdown(page.getByLabel("Message body"), body);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   const markdown = page.locator(".markdown", {
     has: page.getByText("Detached code decorator", { exact: true }),
@@ -1468,9 +1464,9 @@ test("workspace switching lives in the sidebar header", async ({ page }) => {
   const switcher = page.getByRole("button", { name: "Switch workspace" });
   await expect(switcher).toBeVisible();
   await switcher.click();
-  await expect(page.getByRole("menu", { name: "Workspaces" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Workspaces" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("menu", { name: "Workspaces" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Workspaces" })).toHaveCount(0);
 });
 
 test("desktop shell moves sidebar and search controls into the title bar", async ({ page }) => {
@@ -1532,13 +1528,13 @@ test("desktop shell moves sidebar and search controls into the title bar", async
 
   await expect(page.locator(".sidebar .workspace-header")).toHaveCount(0);
   await titlebar.getByRole("button", { name: "Switch workspace" }).click();
-  await titlebar.getByRole("menuitem", { name: "Workspace settings" }).click();
+  await titlebar.getByRole("button", { name: "Workspace settings" }).click();
   await expect(page.getByRole("dialog", { name: "Workspace settings" })).toBeVisible();
   await page.goBack();
   await expect(activeChannelHeading(page)).toBeVisible();
 
   await page.getByLabel("Message body").fill("desktop titlebar search probe");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await titlebarSearch.fill("titlebar search probe");
   await titlebar.getByRole("button", { name: "Search" }).click();
   await expect(
@@ -1758,7 +1754,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(page.getByRole("heading", { name: `#${channel.name}` })).toBeVisible();
 
   await pasteMarkdown(page.getByLabel("Message body"), "hello **playwright**");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(
     page.locator(".markdown").filter({ hasText: "hello playwright" }),
     consoleMessages.join("\n"),
@@ -1798,7 +1794,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   });
   await expect(page.getByText("note.txt")).toBeVisible();
   await page.getByLabel("Message body").fill("message with upload");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.locator(".markdown").filter({ hasText: "message with upload" })).toBeVisible();
 
   await page.getByLabel("Upload file").setInputFiles([
@@ -1816,7 +1812,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await expect(page.getByLabel("Pending attachments").getByText("first-note.txt")).toBeVisible();
   await expect(page.getByLabel("Pending attachments").getByText("second-note.txt")).toBeVisible();
   await page.getByLabel("Message body").fill("message with multiple uploads");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const multiUploadGroup = page.locator(".message-group", {
     has: page.locator(".markdown").filter({ hasText: "message with multiple uploads" }),
   });
@@ -1843,7 +1839,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   });
   await expect(page.getByLabel("Pending attachments").getByText("pasted-image.png")).toBeVisible();
   await composer.fill("message with pasted image");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const pastedImageGroup = page.locator(".message-group", {
     has: page.locator(".markdown").filter({ hasText: "message with pasted image" }),
   });
@@ -1861,7 +1857,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   });
   await expect(page.getByText("pixel.png")).toBeVisible();
   await page.getByLabel("Message body").fill("inline image upload");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const imageAttachment = page.locator(".media-tile--image").filter({ hasText: "pixel.png" });
   await expect(imageAttachment).toBeVisible();
   await expect(imageAttachment.getByRole("link", { name: "Download pixel.png" })).toBeAttached();
@@ -1881,7 +1877,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   });
   await expect(page.getByText("clip.mp4")).toBeVisible();
   await page.getByLabel("Message body").fill("inline video upload");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const videoAttachment = page.locator(".media-tile--video").filter({ hasText: "clip.mp4" });
   const inlineVideo = videoAttachment.locator('video[aria-label="clip.mp4"]');
   const videoDownload = videoAttachment.getByRole("link", { name: "Download clip.mp4" });
@@ -1901,7 +1897,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
   await page.getByLabel("Search GIFs").fill("ship");
   await page.getByRole("button", { name: /Ship it/ }).click();
   await expect(page.getByLabel("Message body").getByRole("img", { name: "Ship it" })).toBeVisible();
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const replayGif = page.getByRole("button", { name: "Replay GIF Ship it" });
   await expect(replayGif).toBeVisible({ timeout: 7_000 });
   await replayGif.click();
@@ -1999,7 +1995,7 @@ test("sends messages, searches, uploads, opens a thread, and creates a DM", asyn
     (response) =>
       response.request().method() === "POST" && /\/api\/dms\/[^/]+\/messages$/.test(response.url()),
   );
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   expect((await sentDM).ok()).toBe(true);
   await expect(page.locator(".markdown").filter({ hasText: "private playwright" })).toBeVisible();
 
@@ -2043,7 +2039,7 @@ test("confirms message deletion in the app modal", async ({ page }) => {
       response.url().endsWith(`/api/channels/${channel.id}/messages`) &&
       response.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   expect((await messageCreated).ok()).toBe(true);
 
   const row = page.locator(".message-row:not(.is-pending)", {

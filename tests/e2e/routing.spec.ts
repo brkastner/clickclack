@@ -646,7 +646,7 @@ test("creating the first workspace enters the routed app state", async ({ page }
 
   await page.goto("/app");
   await page.getByRole("button", { name: "Switch workspace" }).click();
-  await page.getByRole("menuitem", { name: "New workspace" }).click();
+  await page.getByRole("button", { name: "New workspace" }).click();
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Fresh Workspace");
   await page.getByRole("textbox", { name: "Workspace name" }).press("Enter");
 

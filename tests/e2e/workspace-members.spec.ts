@@ -99,7 +99,7 @@ for (const surface of surfaces) {
         const composer = page.getByLabel(surface === "thread" ? "Reply body" : "Message body");
         await expect(composer).toBeEnabled();
         await composer.fill("Chat remains usable");
-        await expect(composer).toHaveValue("Chat remains usable");
+        await expect(composer).toHaveText("Chat remains usable");
       }
     });
   }
@@ -274,7 +274,9 @@ for (const surface of ["channel", "thread"] as const) {
       .getByRole("button", { name: surface === "thread" ? "Reply" : "Send", exact: true });
     await composer.fill("Newest synthetic message stays visible");
     await submit.click();
-    const newest = page.getByText("Newest synthetic message stays visible", { exact: true });
+    const newest = page.locator("[data-message-id]", {
+      has: page.getByText("Newest synthetic message stays visible", { exact: true }),
+    });
     await expect(newest).toBeVisible();
     await newest.scrollIntoViewIfNeeded();
     const assertClearGeometry = async () => {
@@ -295,6 +297,7 @@ for (const surface of ["channel", "thread"] as const) {
       }
     };
     await assertClearGeometry();
+    await expect(composer).toBeEnabled();
     await page.route(`**${postPath}`, (route) =>
       route.request().method() === "POST"
         ? route.fulfill({ status: 503, json: { error: "Synthetic send failure" } })
@@ -439,6 +442,8 @@ test("member avatars fall back after image failure and retain bot images", async
     const response = await route.fetch();
     const result = await response.json();
     for (const member of result.members) {
+      // Isolate both theme variants from profile changes made by other tests.
+      member.user.avatar_url_light = "";
       member.user.avatar_url = new URL(
         member.user.id === bot.id ? "/favicon.svg" : "/api/synthetic-missing-avatar",
         route.request().url(),
@@ -447,6 +452,7 @@ test("member avatars fall back after image failure and retain bot images", async
     }
     await route.fulfill({ response, json: result });
   });
+  await page.route("**/api/synthetic-missing-avatar", (route) => route.abort());
   await page.goto(`/app/${data.workspace.route_id}/settings/members`);
   const human = page.locator(".ws-members__row", { hasText: "Avatar proof" });
   await expect(human.locator(".ws-members__avatar")).toHaveText("A");

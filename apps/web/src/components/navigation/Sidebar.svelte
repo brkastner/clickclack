@@ -390,7 +390,7 @@
       </nav>
     {/if}
 
-    <section class="sidebar-people-row" aria-label="Recent people">
+    <section id="sidebar-people-list" class="sidebar-people-row" aria-label="Recent people">
       {#each displayedRecentPeople as person (person.id)}
           {@const conversation = directConversationForUser(directConversations, person.id, currentUser?.id)}
           {@const unread = conversation?.unread_count || 0}

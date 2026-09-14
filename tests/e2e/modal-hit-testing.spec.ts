@@ -1,6 +1,21 @@
 import { expect, test, type Locator } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
+import type { Channel, Workspace } from "../../apps/web/src/lib/types";
+
+async function fixture(page: import("@playwright/test").Page) {
+  const workspaceResponse = await page.request.post("/api/workspaces", {
+    data: { name: `Modal owner ${randomUUID()}` },
+  });
+  expect(workspaceResponse.ok()).toBe(true);
+  const { workspace }: { workspace: Workspace } = await workspaceResponse.json();
+  const channelResponse = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
+    data: { name: "modal-owner" },
+  });
+  expect(channelResponse.ok()).toBe(true);
+  const { channel }: { channel: Channel } = await channelResponse.json();
+  return `/app/${workspace.route_id}/${channel.route_id}`;
+}
 
 async function expectTopmost(locator: Locator) {
   await expect(locator).toBeVisible();
@@ -19,20 +34,20 @@ async function expectTopmost(locator: Locator) {
 }
 
 test("shared create dialogs stay above their close backdrops", async ({ page }) => {
-  await page.goto("/app");
+  await page.goto(await fixture(page));
   await waitForAppReady(page);
 
   const channelName = `modal-stack-${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-  await page.getByRole("button", { name: "Create channel" }).click();
+  await page.getByRole("button", { name: "Create channel", exact: true }).click();
   const channelDialog = page.locator(".profile-modal", {
-    has: page.getByRole("heading", { name: "Create channel" }),
+    has: page.getByRole("heading", { name: "Create channel", exact: true }),
   });
   const channelInput = channelDialog.getByLabel("Channel name");
   await expectTopmost(channelInput);
   await channelInput.fill(channelName);
   await expect(channelDialog).toBeVisible();
 
-  const createChannel = channelDialog.getByRole("button", { name: "Create channel" });
+  const createChannel = channelDialog.getByRole("button", { name: "Create channel", exact: true });
   await expectTopmost(createChannel);
   await createChannel.click();
   await expect(channelDialog).toBeHidden();
@@ -52,7 +67,7 @@ test("shared create dialogs stay above their close backdrops", async ({ page }) 
 });
 
 test("channel creation shows failures and retains the name for retry", async ({ page }) => {
-  await page.goto("/app");
+  await page.goto(await fixture(page));
   await waitForAppReady(page);
   let attempts = 0;
   await page.route("**/api/workspaces/*/channels", async (route) => {
@@ -65,9 +80,9 @@ test("channel creation shows failures and retains the name for retry", async ({ 
     }
   });
   const name = `retry-channel-${randomUUID().slice(0, 8)}`;
-  await page.getByRole("button", { name: "Create channel" }).click();
+  await page.getByRole("button", { name: "Create channel", exact: true }).click();
   const dialog = page.locator(".profile-modal", {
-    has: page.getByRole("heading", { name: "Create channel" }),
+    has: page.getByRole("heading", { name: "Create channel", exact: true }),
   });
   const input = dialog.getByLabel("Channel name");
   await input.fill(name);

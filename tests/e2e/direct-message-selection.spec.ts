@@ -357,7 +357,7 @@ test("a profile DM start releases a superseded workspace create form", async ({ 
   });
   try {
     await page.getByRole("button", { name: "Switch workspace" }).click();
-    await page.getByRole("menuitem", { name: "New workspace" }).click();
+    await page.getByRole("button", { name: "New workspace" }).click();
     const input = page.getByLabel("Workspace name");
     const name = `Superseded ${randomUUID().slice(0, 8)}`;
     await input.fill(name);

@@ -75,12 +75,14 @@
   });
 
   $effect(() => {
-    const removers = (["profile-dark", "profile-light"] as const).map((target) =>
-      desktop?.onPasteFiles(target, (payload) => {
-        void uploadAvatar(desktopTarget(target), browserFilesFromDesktop(payload));
-      }),
-    );
-    return () => removers.forEach((remove) => remove?.());
+    const removers = typeof desktop?.onPasteFiles === "function"
+      ? (["profile-dark", "profile-light"] as const).map((target) =>
+          desktop.onPasteFiles(target, (payload) => {
+            void uploadAvatar(desktopTarget(target), browserFilesFromDesktop(payload));
+          }),
+        )
+      : [];
+    return () => removers.forEach((remove) => remove());
   });
 
   onDestroy(() => {

@@ -615,10 +615,7 @@ test("keeps artifact and message actions clickable as scrolling settles", async 
   await expect(viewer.getByRole("heading", { name: "Scrolled artifact" })).toBeVisible();
   await viewer.getByRole("button", { name: "Close artifact viewer" }).click();
 
-  await row.hover();
-  await clickAfterScroll(row.getByRole("button", { name: "React with 👍" }));
-  await expect(row.getByRole("button", { name: "👍 — 1 reaction" })).toBeVisible();
-
+  // Quick-reaction hover buttons were retired; exercise the current action menu.
   await row.hover();
   await clickAfterScroll(row.getByRole("button", { name: "More actions" }));
   await expect(row.getByRole("menu", { name: "More actions" })).toBeVisible();

@@ -30,7 +30,7 @@ async function openReactionChannel(page: Page, open = true) {
 
 async function sendMessage(page: Page, body: string, matchText = body): Promise<Locator> {
   await page.getByLabel("Message body").fill(body);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const row = page.locator(".message-row:not(.is-pending)", { hasText: matchText });
   await expect(row).toBeVisible();
   return row;

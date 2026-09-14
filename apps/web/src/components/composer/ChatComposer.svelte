@@ -257,27 +257,12 @@
           class: "composer-editor__content",
           role: "textbox",
           "aria-label": ariaLabel,
+          "aria-disabled": options.disabled ? "true" : "false",
           "aria-multiline": "true",
         },
         handleKeyDown: (_view, event) => handleKeydown(event),
         handlePaste: (_view, event) => handlePaste(event),
         handleDOMEvents: {
-          beforeinput: (_view, event) => {
-            const inputEvent = event as InputEvent;
-            if (
-              inputEvent.inputType !== "insertText" ||
-              inputEvent.isComposing ||
-              !inputEvent.data ||
-              inputEvent.data.length <= 1
-            ) {
-              return false;
-            }
-            const editor = editorInstance;
-            if (!editor) return false;
-            event.preventDefault();
-            editor.view.dispatch(editor.state.tr.insertText(inputEvent.data));
-            return true;
-          },
           focus: () => {
             handleFocus();
             return false;
@@ -297,16 +282,39 @@
         refreshActiveToken(current);
         refreshFormatState(current);
       },
+      onSelectionUpdate: ({ editor: current }) => {
+        refreshActiveToken(current);
+        refreshFormatState(current);
+      },
     });
     editorInstance = mountedEditor;
     input = mountedEditor.view.dom;
     refreshActiveToken(mountedEditor);
     refreshFormatState(mountedEditor);
+    const ownerDocument = mountedEditor.view.dom.ownerDocument;
+    const refreshNativeSelection = () => {
+      const selection = ownerDocument.getSelection();
+      const dom = mountedEditor.view.dom;
+      if (!mountedEditor.isFocused || mountedEditor.view.composing || !selection?.focusNode || !dom.contains(selection.focusNode)) return;
+      if (!selection.isCollapsed) {
+        activeToken = null;
+        return;
+      }
+      const position = mountedEditor.view.posAtDOM(selection.focusNode, selection.focusOffset);
+      if (position >= 0 && position <= mountedEditor.state.doc.content.size) {
+        if (mountedEditor.state.selection.empty && position !== mountedEditor.state.selection.from) {
+          mountedEditor.commands.setTextSelection(position);
+        }
+        refreshActiveToken(mountedEditor);
+      }
+    };
+    ownerDocument.addEventListener("selectionchange", refreshNativeSelection);
 
     return {
       update(next: EditorActionOptions) {
         const editable = !next.disabled;
         if (mountedEditor.isEditable !== editable) mountedEditor.setEditable(editable, false);
+        mountedEditor.view?.dom?.setAttribute("aria-disabled", next.disabled ? "true" : "false");
         if (mountedEditor.getMarkdown() !== next.value) {
           mountedEditor.commands.setContent(next.value, {
             contentType: "markdown",
@@ -321,6 +329,7 @@
         }
       },
       destroy() {
+        ownerDocument.removeEventListener("selectionchange", refreshNativeSelection);
         input = null;
         editorInstance = null;
         formatState = emptyFormatState();
@@ -335,14 +344,18 @@
   });
 
   $effect(() => {
-    const removeFiles = desktop?.onPasteFiles("composer", (payload) => {
-      if (!disabled && !voiceMode && editorInstance?.isFocused && onPasteFiles) {
-        onPasteFiles(browserFilesFromDesktop(payload));
-      }
-    });
-    const removeText = desktop?.onPasteText((text) => {
-      if (editorInstance?.isFocused) insertPastedText(text, true);
-    });
+    const removeFiles = typeof desktop?.onPasteFiles === "function"
+      ? desktop.onPasteFiles("composer", (payload) => {
+          if (!disabled && !voiceMode && editorInstance?.isFocused && onPasteFiles) {
+            onPasteFiles(browserFilesFromDesktop(payload));
+          }
+        })
+      : undefined;
+    const removeText = typeof desktop?.onPasteText === "function"
+      ? desktop.onPasteText((text) => {
+          if (editorInstance?.isFocused) insertPastedText(text, true);
+        })
+      : undefined;
     return () => {
       removeFiles?.();
       removeText?.();
@@ -381,8 +394,8 @@
       activeToken = null;
       return;
     }
-    const selectionHead = selection.$from;
     const { from } = selection;
+    const selectionHead = selection.$from;
     const before = selectionHead.parent.textBetween(
       0,
       selectionHead.parentOffset,

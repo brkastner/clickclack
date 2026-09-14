@@ -83,7 +83,7 @@
     type="button"
     class="workspace-switcher-trigger"
     aria-label="Switch workspace"
-    aria-haspopup="menu"
+    aria-haspopup="dialog"
     aria-expanded={open}
     onclick={() => (open = !open)}
   >
@@ -104,14 +104,13 @@
   </button>
 
   {#if open}
-    <div class="workspace-switcher-popover" role="menu" aria-label="Workspaces">
+    <nav class="workspace-switcher-popover" aria-label="Workspaces">
       <div class="workspace-switcher-list">
         {#each workspaces as workspace (workspace.id)}
           <a
             class="workspace-switcher-item"
             class:active={workspace.id === selectedWorkspaceID}
             aria-current={workspace.id === selectedWorkspaceID ? "page" : undefined}
-            role="menuitem"
             href={hrefForWorkspace(workspace.id)}
             onclick={(event) => {
               if (!shouldHandleClientNavigation(event)) return;
@@ -143,13 +142,12 @@
         </a>
         <button
           type="button"
-          role="menuitem"
           onclick={() => {
             open = false;
             onOpenWorkspaceSettings();
           }}
         >Workspace settings</button>
-        <button type="button" role="menuitem" onclick={toggleWorkspaceCreate}>New workspace</button>
+        <button type="button" onclick={toggleWorkspaceCreate}>New workspace</button>
       </div>
 
       {#if showWorkspaceCreate}
@@ -172,6 +170,6 @@
           {#if workspaceCreateError}<p class="profile-status" role="alert">{workspaceCreateError}</p>{/if}
         </form>
       {/if}
-    </div>
+    </nav>
   {/if}
 </div>

@@ -71,7 +71,7 @@ for (const scenario of ["receipt", "older page", "empty channel"] as const) {
     expect(receipt.status()).toBe(201);
     const own: Message = (await receipt.json()).message;
     await expect(page.locator(`[data-message-id="${own.id}"]`)).toBeVisible();
-    await expect(composer).toHaveValue("");
+    await expect(composer).toHaveText("");
     await expect(composer).toBeEnabled();
     await expect
       .poll(() => held.some((item) => item.event.payload.message_id === own.id))

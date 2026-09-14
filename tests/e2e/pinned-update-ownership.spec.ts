@@ -93,7 +93,7 @@ for (const mutation of ["edit", "deletion"] as const) {
         );
       } else {
         await expect(panel.locator(`[data-message-id="${message.id}"]`)).toHaveCount(0);
-        await expect(panel.getByText("No pinned messages", { exact: true })).toBeVisible();
+        await expect(panel.getByText("No pinned messages yet", { exact: true })).toBeVisible();
       }
     } finally {
       holdPins = false;
