@@ -869,6 +869,18 @@ test("coalesces durable agent activity and applies activity preferences", async 
 });
 
 test("aligns self and other messages independently", async ({ page }) => {
+  // Keep account refreshes in sync with this test's explicit layout phases.
+  let fixtureMessageLayout = "";
+  await page.route("**/api/me", async (route) => {
+    if (!["GET", "PATCH"].includes(route.request().method())) return route.continue();
+    const response = await route.fetch();
+    const payload = await response.json();
+    payload.user.appearance_preferences = {
+      ...payload.user.appearance_preferences,
+      message_layout: fixtureMessageLayout,
+    };
+    await route.fulfill({ response, json: payload });
+  });
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
   const workspaceId = workspaces.workspaces[0].id;
@@ -1051,6 +1063,7 @@ test("aligns self and other messages independently", async ({ page }) => {
   for (const body of [selfMessage, humanMessage, agentMessage]) {
     await expect.poll(() => messageTextAlign(body)).toMatch(/^(left|start)$/);
   }
+  fixtureMessageLayout = "outlined";
   await page.evaluate(() => {
     localStorage.setItem("clickclack:message-layout:v1", "outlined");
     document.documentElement.setAttribute("data-message-layout", "outlined");
