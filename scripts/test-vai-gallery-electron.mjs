@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { _electron as electron, expect } from "@playwright/test";
 const webRequire = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const desktopRequire = createRequire(new URL("../apps/desktop/package.json", import.meta.url));
 const { createServer } = await import(webRequire.resolve("vite"));
 const { svelte } = await import(webRequire.resolve("@sveltejs/vite-plugin-svelte"));
 const root = fileURLToPath(new URL("../apps/web/tests/electron/vai-gallery", import.meta.url));
+const execFileAsync = promisify(execFile);
 const server = await createServer({
   configFile: false,
   root,
@@ -93,7 +96,19 @@ try {
     return route.fulfill({ json });
   });
   await page.goto(server.resolvedUrls.local[0]);
-  await expect(page.getByRole("combobox")).toBeEnabled();
+  const colorMode = process.env.GALLERY_COLOR_MODE;
+  if (colorMode === "light" || colorMode === "dark") {
+    await page.evaluate((mode) => { document.documentElement.dataset.colorMode = mode; }, colorMode);
+  }
+  const sourceSelect = page.getByRole("combobox");
+  await expect(sourceSelect).toBeEnabled();
+  if (colorMode) {
+    await expect(sourceSelect).toHaveCSS("color-scheme", colorMode);
+    const optionColors = await sourceSelect.locator("option").evaluateAll((options) =>
+      options.map((option) => ({ background: getComputedStyle(option).backgroundColor, color: getComputedStyle(option).color })),
+    );
+    assert.ok(optionColors.every((option) => option.background !== "rgba(0, 0, 0, 0)" && option.color !== "rgba(0, 0, 0, 0)"));
+  }
   if (process.env.GALLERY_NARROW === "true") {
     console.log("narrow bounds", await app.evaluate(({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0];
@@ -111,7 +126,16 @@ try {
     });
     await writeFile(`${screenshotDir}/${name}`, Buffer.from(data, "base64"));
   };
-  await page.getByRole("combobox").selectOption("bot");
+  if (process.env.GALLERY_CAPTURE_OPEN_SELECT === "true") {
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].focus());
+    await sourceSelect.click();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const screenshotPath = `${screenshotDir}/gallery-${colorMode || "system"}-open-dropdown.png`;
+    await execFileAsync("grim", [screenshotPath]);
+    await page.keyboard.press("Escape");
+    console.log(`native open select captured: ${screenshotPath}`);
+  }
+  await sourceSelect.selectOption("bot");
   await expect(page.locator(".output-card")).toHaveCount(2);
   await expect(page.locator(".output-card img")).toBeVisible();
   await expect(page.locator("video")).toBeVisible();

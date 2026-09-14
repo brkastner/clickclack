@@ -8,6 +8,7 @@ app.whenReady().then(() => {
     width: option("gallery-width", 1100),
     height: option("gallery-height", 800),
     show: true,
+    alwaysOnTop: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   window.loadURL("about:blank");

@@ -197,7 +197,10 @@
   .output-gallery__controls { display: flex; align-items: end; flex-wrap: wrap; gap: .5rem; }
   label { display: grid; gap: .3rem; color: var(--muted); font-size: .76rem; font-weight: 650; text-transform: lowercase; }
   select, .output-gallery__button { min-height: 2.35rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
-  select { min-width: min(18rem, calc(100vw - 3rem)); padding: 0 .7rem; cursor: pointer; }
+  select { min-width: min(18rem, calc(100vw - 3rem)); padding: 0 .7rem; cursor: pointer; color-scheme: light dark; }
+  :global(:root[data-color-mode="light"]) select { color-scheme: light; }
+  :global(:root[data-color-mode="dark"]) select { color-scheme: dark; }
+  select option { background: var(--panel-2); color: var(--text); }
   .output-gallery__button { padding: 0 .8rem; cursor: pointer; }
   .output-gallery__button:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--accent); background: var(--hover-strong); }
   .output-gallery__button--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); font-weight: 700; }
