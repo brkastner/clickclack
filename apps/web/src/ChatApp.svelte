@@ -174,6 +174,7 @@
   // v2 drops the old build's poisoned value, which rewrote every session to right.
   const USER_ALIGN_STORAGE_KEY = "clickclack:user-align:v2";
   const OTHER_ALIGN_STORAGE_KEY = "clickclack:other-align:v1";
+  const COMPOSER_DRAFT_STORAGE_PREFIX = "clickclack:composer-draft:v1:";
   const appSessionStartedAt = Date.now();
   const integratedTitleBar = desktop?.integratedTitleBar === true;
   let homeLink: HomeLink = DEFAULT_HOME_LINK;
@@ -258,6 +259,42 @@
   let artifactModalInertElements = new Set<HTMLElement>();
   let messageBody = "";
   let voiceSession: BrowserVoiceSession | null = null;
+
+  type StoredComposerDraft = { body: string; uploads: Upload[] };
+
+  function composerDraftStorageKey(destinationID: string) {
+    return user && selectedWorkspaceID && destinationID
+      ? `${COMPOSER_DRAFT_STORAGE_PREFIX}${user.id}:${selectedWorkspaceID}:${destinationID}`
+      : "";
+  }
+
+  function persistComposerDraft() {
+    const key = composerDraftStorageKey(currentConversationKey());
+    if (!key) return;
+    const draft = { body: messageBody, uploads: readyUploads(pendingAttachments) };
+    try {
+      if (draft.body || draft.uploads.length) sessionStorage.setItem(key, JSON.stringify(draft));
+      else sessionStorage.removeItem(key);
+    } catch { /* Draft recovery is optional when session storage is unavailable. */ }
+  }
+
+  function restoreComposerDraft(destinationID: string) {
+    const key = composerDraftStorageKey(destinationID);
+    if (!key) return;
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as StoredComposerDraft;
+      if (typeof draft.body === "string") messageBody = draft.body;
+      if (Array.isArray(draft.uploads)) pendingAttachments = pendingAttachmentsForUploads(draft.uploads.slice(0, MAX_MESSAGE_ATTACHMENTS), newNonce);
+      sessionStorage.removeItem(key);
+    } catch { /* An invalid saved draft must not prevent opening the conversation. */ }
+  }
+
+  function clearStoredComposerDraft(destinationID: string) {
+    const key = composerDraftStorageKey(destinationID);
+    try { if (key) sessionStorage.removeItem(key); } catch { /* Optional storage. */ }
+  }
   let voiceState: VoiceState = { status: "idle" };
   let remoteVoiceStream: MediaStream | null = null;
   let voiceInputStream: MediaStream | null = null;
@@ -1030,6 +1067,7 @@
   }
 
   onDestroy(() => {
+    persistComposerDraft();
     galleryRevealSerial++;
     galleryRevealAbort?.abort();
     cancelVoiceFiller();
@@ -1442,6 +1480,7 @@
         markConversationReadOnOpen(targetID);
         rememberLastChannel(workspace.id, targetID);
         clearRoutePanelState();
+        restoreComposerDraft(targetID);
         consumeQueuedGalleryAttachments(targetID);
         if (sameConversation) {
           updateActiveMessageWindowFlags(targetID);
@@ -1463,6 +1502,7 @@
         selectedChannelID = "";
         markConversationReadOnOpen(targetID);
         clearRoutePanelState();
+        restoreComposerDraft(targetID);
         consumeQueuedGalleryAttachments(targetID);
         if (sameConversation) {
           updateActiveMessageWindowFlags(targetID);
@@ -3110,6 +3150,7 @@
       viewKey: currentConversationKey(),
     };
     messageBody = "";
+    clearStoredComposerDraft(currentConversationKey());
     if (quote) clearReplyTarget();
     revokePendingAttachmentPreviews(pendingAttachments);
     pendingAttachments = [];

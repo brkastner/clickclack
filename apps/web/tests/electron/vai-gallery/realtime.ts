@@ -1,3 +1,5 @@
+export class WorkspaceUnavailableError extends Error {}
+
 export function connectRealtime(options: {
   onOpen?: () => void;
   onEvent: (event: { type: string }) => void;
