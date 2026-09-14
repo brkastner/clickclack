@@ -27,6 +27,14 @@
   let expandedVideo = $state<Upload>();
   let expandedOpener: HTMLElement | null = null;
   let galleryGap = $state(16);
+  let masonry = $state<Record<string, { left: number; top: number }>>({});
+  let masonryWidth = $state(0);
+  let masonryHeight = $state(0);
+  let masonryGrid = $state<HTMLElement | null>(null);
+  let masonrySignature = "";
+  let masonryQueued = false;
+  let masonrySettling = true;
+  let masonryResizeObserver: ResizeObserver | undefined;
   let revision = $state(0);
   let initializing = $state(true);
   let validating = $state(false);
@@ -126,10 +134,69 @@
       await goto(`/app/${encodeURIComponent(workspace.id)}/${encodeURIComponent(target)}`);
     } catch { if (alive && serial === navigation) error = "This source is unavailable or access has changed. Refresh the gallery."; }
   }
+  function tileKey(item: { message: Message; upload: Upload }) { return `${item.message.id}:${item.upload.id}`; }
+  function queueMasonry() {
+    if (masonryQueued) return;
+    masonryQueued = true;
+    requestAnimationFrame(async () => {
+      masonryQueued = false;
+      if (!masonryGrid) return;
+      const gap = galleryGap;
+      const available = masonryGrid.clientWidth;
+      if (!available) return;
+      const columns = Math.max(1, Math.floor((available + gap) / (272 + gap)));
+      const width = (available - gap * (columns - 1)) / columns;
+      const signature = `${columns}:${Math.round(width * 100) / 100}:${gap}`;
+      const reflow = signature !== masonrySignature;
+      masonrySignature = signature;
+      masonryWidth = width;
+      await tick();
+      const tiles = Array.from(masonryGrid.querySelectorAll<HTMLElement>("[data-gallery-tile]"));
+      for (const tile of tiles) masonryResizeObserver?.observe(tile);
+      const positions: Record<string, { left: number; top: number }> = reflow ? {} : { ...masonry };
+      const bottoms = Array.from({ length: columns }, () => 0);
+      for (const tile of tiles) {
+        const key = tile.dataset.galleryTile!;
+        const position = positions[key];
+        if (position) {
+          const column = Math.min(columns - 1, Math.round(position.left / (width + gap)));
+          bottoms[column] = Math.max(bottoms[column], position.top + tile.offsetHeight + gap);
+        }
+      }
+      for (const tile of tiles) {
+        const key = tile.dataset.galleryTile!;
+        if (positions[key]) continue;
+        const column = bottoms.reduce((shortest, bottom, index) => bottom < bottoms[shortest] ? index : shortest, 0);
+        positions[key] = { left: column * (width + gap), top: bottoms[column] };
+        bottoms[column] += tile.offsetHeight + gap;
+      }
+      masonry = positions;
+      masonryHeight = Math.max(0, ...bottoms.map((bottom) => Math.max(0, bottom - gap)));
+    });
+  }
+  function masonryStyle(item: { message: Message; upload: Upload }) {
+    const position = masonry[tileKey(item)];
+    return `width:${masonryWidth}px;${position ? `transform:translate(${position.left}px,${position.top}px)` : ""}`;
+  }
+  $effect(() => {
+    if (!masonryGrid) return;
+    const settleTimer = setTimeout(() => { masonrySettling = false; }, 1_000);
+    masonryResizeObserver = new ResizeObserver(() => {
+      if (masonrySettling) masonrySignature = "";
+      queueMasonry();
+    });
+    const mutations = new MutationObserver(() => queueMasonry());
+    masonryResizeObserver.observe(masonryGrid);
+    mutations.observe(masonryGrid, { childList: true, subtree: true });
+    queueMasonry();
+    return () => { clearTimeout(settleTimer); masonryResizeObserver?.disconnect(); masonryResizeObserver = undefined; mutations.disconnect(); };
+  });
   async function setGalleryGap(value: number) {
     capturePosition();
     galleryGap = value;
     try { localStorage.setItem("clickclack:gallery-gap", String(value)); } catch { /* A temporary gap is still usable. */ }
+    await tick();
+    queueMasonry();
     await tick();
     restorePosition();
   }
@@ -244,12 +311,10 @@
   {#if initializing || validating}<p class="output-gallery__notice" role="status">checking gallery…</p>
   {:else if !sourceID}<p class="output-gallery__notice">select the bot account whose media you want to browse.</p>
   {:else}
-    <div class="output-grid" style={`--gallery-gap: ${galleryGap}px`}>
-      {#each mediaPages as pageMedia, pageIndex (pageIndex)}
-        <div class="output-grid__block" data-gallery-block={pageIndex}>
-          {#each pageMedia as item, itemIndex (`${item.message.id}:${item.upload.id}`)}
-            <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={pageIndex === 0 && itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpandImage={expandImage} onExpandVideo={expandVideo} />
-          {/each}
+    <div class="output-grid" bind:this={masonryGrid} style={`--gallery-gap: ${galleryGap}px; height: ${masonryHeight}px`}>
+      {#each media as item, itemIndex (tileKey(item))}
+        <div class="output-grid__tile" data-gallery-tile={tileKey(item)} style={masonryStyle(item)}>
+          <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpandImage={expandImage} onExpandVideo={expandVideo} />
         </div>
       {/each}
     </div>
@@ -288,10 +353,8 @@
   .output-gallery__button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .output-gallery__button:disabled, select:disabled { cursor: not-allowed; opacity: .55; }
   .output-gallery__notice { max-width: 44rem; margin: 3rem auto; color: var(--muted); text-align: center; }
-  .output-grid { display: grid; gap: var(--gallery-gap, 1rem); margin: 0 auto; max-width: 110rem; align-items: start; }
-  /* Blocks deliberately do not share a CSS column flow: a new page starts below
-     the prior one instead of repacking its tiles. */
-  .output-grid__block { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: var(--gallery-gap, 1rem); align-items: start; }
+  .output-grid { position: relative; margin: 0 auto; max-width: 110rem; }
+  .output-grid__tile { position: absolute; top: 0; left: 0; min-width: 0; transition: none; }
   .output-gallery__more { display: flex; justify-content: center; padding: 1.5rem; }
   .output-gallery__queue { position: fixed; z-index: 4; right: 1rem; bottom: 1rem; display: flex; max-width: min(34rem, calc(100vw - 2rem)); flex-wrap: wrap; align-items: center; gap: .45rem; padding: .65rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-2); box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
   .output-gallery__queued { max-width: 9rem; overflow: hidden; border: 0; background: transparent; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -299,5 +362,5 @@
   .output-gallery__chooser, .output-gallery__video-viewer { max-width: min(50rem, 100%); max-height: calc(100vh - 2rem); overflow: auto; padding: 1rem; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel); color: var(--text); }
   .output-gallery__chooser h2 { margin-top: 0; } .output-gallery__destinations { display: grid; max-height: 50vh; margin: 1rem 0; overflow: auto; gap: .35rem; } .output-gallery__destinations button { padding: .6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; } .output-gallery__destinations button:hover { background: var(--hover-strong); }
   .output-gallery__video-viewer { display: grid; gap: .75rem; width: min(90vw, 80rem); } .output-gallery__video-viewer video { display: block; width: 100%; max-height: calc(100vh - 8rem); object-fit: contain; }
-  @media (max-width: 720px) { .output-gallery__header { align-items: stretch; flex-direction: column; } .output-gallery__controls { align-items: stretch; } label { flex: 1 1 100%; } select { width: 100%; } .output-gallery__button { flex: 1; } .output-grid__block { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) { .output-gallery__header { align-items: stretch; flex-direction: column; } .output-gallery__controls { align-items: stretch; } label { flex: 1 1 100%; } select { width: 100%; } .output-gallery__button { flex: 1; } }
 </style>

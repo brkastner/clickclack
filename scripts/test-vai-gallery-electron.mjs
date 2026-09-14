@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, rm } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { _electron as electron, expect } from "@playwright/test";
@@ -28,11 +28,13 @@ const server = await createServer({
   },
 });
 let app;
+const userDataDir = "/tmp/clickclack-gallery-electron-profile";
 try {
+  await rm(userDataDir, { recursive: true, force: true });
   await server.listen();
   app = await electron.launch({
     executablePath: desktopRequire("electron"),
-    args: ["--no-sandbox", "--ozone-platform=x11", `--gallery-width=${process.env.GALLERY_WIDTH || 1100}`, `--gallery-height=${process.env.GALLERY_HEIGHT || 800}`, `${root}/main.cjs`],
+    args: ["--no-sandbox", "--ozone-platform=x11", `--user-data-dir=${userDataDir}`, `--gallery-width=${process.env.GALLERY_WIDTH || 1100}`, `--gallery-height=${process.env.GALLERY_HEIGHT || 800}`, `${root}/main.cjs`],
     // Electron checks the ozone backend before renderer startup. Explicit X11
     // keeps this visual test private under Xvfb instead of touching Wayland.
     env: { ...process.env, WAYLAND_DISPLAY: "", ELECTRON_DISABLE_SECURITY_WARNINGS: "true" },
@@ -164,6 +166,19 @@ try {
     await page.screenshot({ path: `${screenshotDir}/gallery-narrow-page.png`, fullPage: true, animations: "disabled", timeout: 10_000 });
   }
   console.log("desktop captured");
+  const initialMasonry = await page.locator('[data-output-id]').evaluateAll((cards) => cards.slice(0, 4).map((card) => {
+    const bounds = card.getBoundingClientRect();
+    return { id: card.getAttribute("data-output-id"), left: bounds.left, top: bounds.top, bottom: bounds.bottom };
+  }));
+  const [portrait, firstShort, secondShort, nextTile] = initialMasonry;
+  if (Math.abs(portrait.left - firstShort.left) > 1) {
+    assert.ok(
+      nextTile.top < portrait.bottom - 1 && [firstShort.left, secondShort.left].some((left) => Math.abs(nextTile.left - left) < 1),
+      "the next tile must pack below a short column rather than wait below the portrait row",
+    );
+  } else {
+    assert.ok(nextTile.top > portrait.bottom, "a narrow one-column gallery must retain sequential order");
+  }
   const imageOpener = page.getByLabel("Open image from #outputs").first();
   await imageOpener.focus();
   await imageOpener.click();
@@ -193,13 +208,26 @@ try {
   await expect(page.locator('[data-test-source=""]')).toContainText("/app/workspace/dm");
   await page.getByRole("button", { name: "Return to gallery" }).click({ force: true });
   await expect(page.locator(".output-card")).toHaveCount(60);
-  const tilePositions = () => page.locator('[data-gallery-block="0"] [data-output-id]').evaluateAll((cards) => cards.slice(0, 3).map((card) => ({ id: card.getAttribute("data-output-id"), x: card.offsetLeft, y: card.offsetTop })));
+  const tilePositions = () => page.locator('[data-output-id]').evaluateAll((cards) => cards.slice(0, 60).map((card) => ({ id: card.getAttribute("data-output-id"), x: card.offsetLeft, y: card.offsetTop })));
   const firstBlockPositions = await tilePositions();
+  const columnBottoms = await page.locator('[data-output-id]').evaluateAll((cards) => {
+    const byColumn = new Map();
+    for (const card of cards) {
+      const bounds = card.getBoundingClientRect();
+      byColumn.set(Math.round(bounds.left), Math.max(byColumn.get(Math.round(bounds.left)) ?? 0, bounds.bottom));
+    }
+    return [...byColumn.entries()].map(([left, bottom]) => ({ left, bottom }));
+  });
   const loadOlder = page.getByRole("button", { name: "load older media" });
   await expect(loadOlder).toBeEnabled();
   await loadOlder.evaluate((button) => button.click());
   await expect(page.locator(".output-card")).toHaveCount(65);
   assert.deepEqual(await tilePositions(), firstBlockPositions, "appending a page must not move old masonry tiles");
+  const appendedBounds = await page.locator('[data-output-id="output-60"]').evaluate((card) => card.getBoundingClientRect().toJSON());
+  assert.ok(
+    Math.abs(appendedBounds.top - Math.min(...columnBottoms.map((column) => column.bottom)) - 16) < 3,
+    "appended tiles must start at an available column bottom, not below the previous page's tallest tile",
+  );
   lateMetadata = true;
   await page.evaluate(() => window.dispatchEvent(new Event("gallery-test-invalidate")));
   await expect.poll(() => page.locator('[data-output-id="output-0"] img').getAttribute("width")).toBe("640");
