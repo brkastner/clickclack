@@ -3,10 +3,13 @@
   import { goto } from "$app/navigation";
   import { sourceConversationID } from "../../lib/chat/message-source-navigation";
   import { api } from "../../lib/api";
+  import { uploadURL } from "../../lib/uploads";
   import type { Channel, DirectConversation, Message, Upload, User, Workspace } from "../../lib/types";
   import { listAllWorkspaceMembers } from "../../lib/workspace-members";
   import { connectRealtime } from "../../lib/realtime.svelte";
   import { OutputGallerySession, outputBots, boundOutputBot, outputSourceKey, galleryReturn, rememberGallery, revealGallerySource, clearGalleryReturn, type OutputPage } from "../../lib/output-gallery";
+  import { MAX_MESSAGE_ATTACHMENTS } from "../../lib/attachments";
+  import { enqueueGalleryAttachment, galleryAttachmentQueue, removeGalleryAttachment, clearGalleryAttachments, setGalleryAttachmentDestination } from "../../lib/gallery-attachment-queue";
   import OutputCard from "./OutputCard.svelte";
   let { workspaceID }: { workspaceID: string } = $props();
   let workspace = $state<Workspace>();
@@ -15,6 +18,12 @@
   let sourceID = $state("");
   let session = $state<OutputGallerySession>();
   let labels = $state<Record<string, string>>({});
+  let channels = $state<Channel[]>([]);
+  let directs = $state<DirectConversation[]>([]);
+  let queue = $state<Upload[]>([]);
+  let choosingDestination = $state(false);
+  let expanded = $state<Upload>();
+  let expandedOpener: HTMLElement | null = null;
   let revision = $state(0);
   let initializing = $state(true);
   let validating = $state(false);
@@ -107,6 +116,25 @@
       await goto(`/app/${encodeURIComponent(workspace.id)}/${encodeURIComponent(target)}`);
     } catch { if (alive && serial === navigation) error = "This source is unavailable or access has changed. Refresh the gallery."; }
   }
+  function addToQueue(upload: Upload) {
+    if (!user || !workspace) return;
+    queue = enqueueGalleryAttachment(user.id, workspace.id, upload, MAX_MESSAGE_ATTACHMENTS).uploads;
+  }
+  function removeFromQueue(uploadID: string) {
+    if (!user || !workspace) return;
+    queue = removeGalleryAttachment(user.id, workspace.id, uploadID).uploads;
+  }
+  function clearQueue() {
+    if (!user || !workspace) return;
+    clearGalleryAttachments(user.id, workspace.id); queue = [];
+  }
+  async function chooseDestination(destinationID: string) {
+    if (!user || !workspace || !setGalleryAttachmentDestination(user.id, workspace.id, destinationID)) return;
+    choosingDestination = false;
+    await goto(`/app/${encodeURIComponent(workspace.id)}/${encodeURIComponent(destinationID)}`);
+  }
+  function expand(upload: Upload) { expandedOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null; expanded = upload; }
+  function closeExpanded() { expanded = undefined; void tick().then(() => expandedOpener?.focus({ preventScroll: true })); }
   async function latest() {
     const owner = session;
     const serial = navigation;
@@ -126,14 +154,16 @@
         user = me.user; workspace = ws.workspaces.find((w) => w.id === workspaceID || w.route_id === workspaceID);
         if (!workspace) throw new Error("Workspace unavailable");
         const scope = workspace.id;
-        const [members, channels, directs] = await Promise.all([
+        const [members, loadedChannels, loadedDirects] = await Promise.all([
           listAllWorkspaceMembers({ workspaceID: scope, role: "bot", signal: controller.signal }),
           api<{ channels: Channel[] }>(`/api/workspaces/${scope}/channels`, { signal: controller.signal }),
           api<{ conversations: DirectConversation[] }>(`/api/dms?workspace_id=${scope}`, { signal: controller.signal }),
         ]);
         if (!alive) return;
         bots = outputBots(members.map((m) => m.user));
-        labels = Object.fromEntries([...channels.channels.map((c) => [c.id, `#${c.name}`]), ...directs.conversations.map((d) => [d.id, d.members.filter((m) => m.id !== user?.id).map((m) => m.display_name).join(", ") || "Direct conversation"])]);
+        channels = loadedChannels.channels; directs = loadedDirects.conversations;
+        labels = Object.fromEntries([...channels.map((c) => [c.id, `#${c.name}`]), ...directs.map((d) => [d.id, d.members.filter((m) => m.id !== user?.id).map((m) => m.display_name).join(", ") || "Direct conversation"])]);
+        queue = galleryAttachmentQueue(user.id, scope).uploads;
         const saved = galleryReturn;
         if (saved?.userID === user.id && saved.workspaceID === scope && boundOutputBot(bots, saved.sourceID)) {
           sourceID = saved.sourceID; session = saved.session;
@@ -182,11 +212,20 @@
   {:else}
     <div class="output-grid">
       {#each media as item, index (`${item.message.id}:${item.upload.id}`)}
-        <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={index < 12} onOpen={(value) => void open(value)} />
+        <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={index < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpand={expand} />
       {/each}
     </div>
     {#if !busy && !pageError && !media.length}<p class="output-gallery__notice">no images or videos from this account yet.</p>{/if}
     {#if more}<div class="output-gallery__more"><button class="output-gallery__button" disabled={busy} onclick={() => void run(() => session!.load(true))}>{busy ? "loading…" : "load older media"}</button></div>{/if}
+  {/if}
+  {#if queue.length}
+    <aside class="output-gallery__queue" aria-label="Pending gallery attachments"><strong>{queue.length} pending</strong><button class="output-gallery__button" onclick={() => (choosingDestination = true)}>add to message…</button><button class="output-gallery__button" onclick={clearQueue}>clear</button>{#each queue as upload (upload.id)}<button class="output-gallery__queued" onclick={() => removeFromQueue(upload.id)} aria-label={`Remove ${upload.filename} from pending attachments`}>{upload.filename} ×</button>{/each}</aside>
+  {/if}
+  {#if choosingDestination}
+    <div class="output-gallery__scrim" role="presentation" onclick={() => (choosingDestination = false)}><section class="output-gallery__chooser" role="dialog" aria-modal="true" aria-label="Choose destination" onclick={(event) => event.stopPropagation()}><h2>add {queue.length} pending item{queue.length === 1 ? "" : "s"} to</h2><p>Choose the conversation whose draft should receive these uploads. Nothing will be sent.</p><div class="output-gallery__destinations">{#each channels as channel (channel.id)}<button onclick={() => void chooseDestination(channel.id)}>#{channel.name}</button>{/each}{#each directs as direct (direct.id)}<button onclick={() => void chooseDestination(direct.id)}>{labels[direct.id]}</button>{/each}</div><button class="output-gallery__button" onclick={() => (choosingDestination = false)}>cancel</button></section></div>
+  {/if}
+  {#if expanded}
+    <div class="output-gallery__scrim" role="presentation" onclick={closeExpanded} onkeydown={(event) => event.key === "Escape" && closeExpanded()}><section class="output-gallery__lightbox" role="dialog" aria-modal="true" aria-label={`Expanded ${expanded.filename}`} tabindex="-1" onclick={(event) => event.stopPropagation()}>{#if /^video\//i.test(expanded.content_type)}<video src={uploadURL(expanded)} controls autoplay playsinline aria-label={expanded.filename}><track kind="captions" /></video>{:else}<img src={uploadURL(expanded)} alt={expanded.filename} />{/if}<button class="output-gallery__button" autofocus onclick={closeExpanded}>close</button></section></div>
   {/if}
 </section>
 <style>
@@ -210,5 +249,11 @@
   .output-gallery__notice { max-width: 44rem; margin: 3rem auto; color: var(--muted); text-align: center; }
   .output-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 1rem; margin: 0 auto; max-width: 110rem; align-items: start; }
   .output-gallery__more { display: flex; justify-content: center; padding: 1.5rem; }
+  .output-gallery__queue { position: fixed; z-index: 4; right: 1rem; bottom: 1rem; display: flex; max-width: min(34rem, calc(100vw - 2rem)); flex-wrap: wrap; align-items: center; gap: .45rem; padding: .65rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-2); box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
+  .output-gallery__queued { max-width: 9rem; overflow: hidden; border: 0; background: transparent; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .output-gallery__scrim { position: fixed; z-index: 10; inset: 0; display: grid; padding: 1rem; background: rgb(0 0 0 / .7); place-items: center; }
+  .output-gallery__chooser, .output-gallery__lightbox { max-width: min(50rem, 100%); max-height: calc(100vh - 2rem); overflow: auto; padding: 1rem; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel); color: var(--text); }
+  .output-gallery__chooser h2 { margin-top: 0; } .output-gallery__destinations { display: grid; max-height: 50vh; margin: 1rem 0; overflow: auto; gap: .35rem; } .output-gallery__destinations button { padding: .6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; } .output-gallery__destinations button:hover { background: var(--hover-strong); }
+  .output-gallery__lightbox { display: grid; gap: .75rem; } .output-gallery__lightbox img, .output-gallery__lightbox video { display: block; max-width: min(90vw, 80rem); max-height: calc(100vh - 8rem); object-fit: contain; }
   @media (max-width: 720px) { .output-gallery__header { align-items: stretch; flex-direction: column; } .output-gallery__controls { align-items: stretch; } label { flex: 1 1 100%; } select { width: 100%; } .output-gallery__button { flex: 1; } .output-grid { grid-template-columns: 1fr; } }
 </style>

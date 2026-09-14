@@ -1,6 +1,7 @@
 <script lang="ts">
   import { revealMessageSource, sourceConversationID } from "./lib/chat/message-source-navigation";
   import { galleryReturn, gallerySource, consumeGallerySource, clearGalleryReturn } from "./lib/output-gallery";
+  import { consumeGalleryAttachments, retainGalleryAttachments } from "./lib/gallery-attachment-queue";
 
   import { afterNavigate, goto } from "$app/navigation";
   import { onDestroy, onMount, tick } from "svelte";
@@ -1441,6 +1442,7 @@
         markConversationReadOnOpen(targetID);
         rememberLastChannel(workspace.id, targetID);
         clearRoutePanelState();
+        consumeQueuedGalleryAttachments(targetID);
         if (sameConversation) {
           updateActiveMessageWindowFlags(targetID);
           connectPendingRealtime(workspace.id);
@@ -1461,6 +1463,7 @@
         selectedChannelID = "";
         markConversationReadOnOpen(targetID);
         clearRoutePanelState();
+        consumeQueuedGalleryAttachments(targetID);
         if (sameConversation) {
           updateActiveMessageWindowFlags(targetID);
           connectPendingRealtime(workspace.id);
@@ -3963,6 +3966,25 @@
     const files = [...(input.files || [])];
     input.value = "";
     await enqueueFiles(files);
+  }
+
+  function consumeQueuedGalleryAttachments(destinationID: string) {
+    if (!user || !selectedWorkspaceID || !destinationID) return;
+    const uploads = consumeGalleryAttachments(user.id, selectedWorkspaceID, destinationID);
+    if (!uploads.length) return;
+    const missing = uploads.filter((upload) => !pendingAttachments.some((attachment) => attachment.upload?.id === upload.id));
+    if (pendingAttachments.length + missing.length > MAX_MESSAGE_ATTACHMENTS) {
+      retainGalleryAttachments(user.id, selectedWorkspaceID, uploads);
+      composerNotice = {
+        kind: "error",
+        text: `This message cannot accept ${missing.length} queued gallery attachment${missing.length === 1 ? "" : "s"}. Remove attachments and try again.`,
+      };
+      return;
+    }
+    pendingAttachments = [...pendingAttachments, ...pendingAttachmentsForUploads(missing, newNonce)];
+    composerNotice = null;
+    activeComposerContext = "message";
+    void tick().then(() => messageInput?.focus());
   }
 
   function addAttachmentToMessage(upload: Upload) {
