@@ -43,7 +43,7 @@ try {
   const workspace = { id: "workspace", route_id: "w", name: "Synthetic workspace" };
   const screenshotDir = process.env.GALLERY_SCREENSHOT_DIR || "/tmp/clickclack-gallery-visual";
   await import("node:fs/promises").then(({ mkdir }) => mkdir(screenshotDir, { recursive: true }));
-  const messages = Array.from({ length: 35 }, (_, i) => ({
+  const messages = Array.from({ length: 65 }, (_, i) => ({
     id: `output-${i}`,
     workspace_id: workspace.id,
     channel_id: "channel",
@@ -58,14 +58,19 @@ try {
     ...(i === 31
       ? { parent_message_id: "output-34", thread_root_id: "output-34", thread_seq: 2 }
       : {}),
-    ...(i === 0
-      ? { attachments: [{ id: "image", filename: "image.png", content_type: "image/png", byte_size: 12, width: 320, height: 180 }] }
-      : i === 31
-        ? { attachments: [{ id: "video", filename: "video.mp4", content_type: "video/mp4", byte_size: 12, width: 320, height: 180 }] }
-        : {}),
+    attachments: [{
+      id: `media-${i}`,
+      filename: i % 2 ? `video-${i}.mp4` : `image-${i}.png`,
+      content_type: i % 2 ? "video/mp4" : "image/png",
+      byte_size: 12,
+      // Varied portrait/landscape fixture dimensions exercise reserved frames.
+      width: i % 3 === 0 ? 180 : 320,
+      height: i % 3 === 0 ? 320 : 180,
+    }],
   }));
   let olderFails = true;
   let deleted = false;
+  let lateMetadata = false;
   const limits = [];
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -82,12 +87,16 @@ try {
         has_more: false,
       };
     else if (path.endsWith("/channels")) json = { channels: [{ id: "channel", name: "outputs" }] };
-    else if (path === "/api/dms") json = { conversations: [] };
+    else if (path === "/api/dms") json = { conversations: [{ id: "dm", members: [user, bot] }] }; 
     else if (path.endsWith("/outputs")) {
       limits.push(url.searchParams.get("limit"));
       const media = messages.filter((message) => message.attachments?.some((upload) => /^(image|video)\//.test(upload.content_type)));
       const limit = Number(url.searchParams.get("limit"));
-      json = { outputs: media.slice(0, limit).filter((m) => !deleted || m.id !== "output-0"), next_cursor: null };
+      const offset = url.searchParams.get("cursor") === "older" ? limit : 0;
+      const outputs = media.slice(offset, offset + limit)
+        .filter((m) => !deleted || m.id !== "output-0")
+        .map((m) => lateMetadata && m.id === "output-0" ? { ...m, attachments: m.attachments?.map((upload) => ({ ...upload, width: 640, height: 120 })) } : m);
+      json = { outputs, next_cursor: offset + limit < media.length ? "older" : null };
     } else if (path.startsWith("/api/uploads/")) {
       return route.fulfill({ contentType: "image/png", body: await readFile(`${root}/preview.png`) });
     } else if (path.startsWith("/api/messages/"))
@@ -136,29 +145,56 @@ try {
     console.log(`native open select captured: ${screenshotPath}`);
   }
   await sourceSelect.selectOption("bot");
-  await expect(page.locator(".output-card")).toHaveCount(2);
-  await expect(page.locator(".output-card img")).toBeVisible();
-  await expect(page.locator("video")).toBeVisible();
-  await expect.poll(() => page.locator(".output-card img").evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect(page.locator(".output-card")).toHaveCount(60);
+  await expect(page.locator(".output-card img").first()).toBeVisible();
+  await expect(page.locator("video").first()).toBeVisible();
+  await expect.poll(() => page.locator(".output-card img").first().evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
   await new Promise((resolve) => setTimeout(resolve, 300));
   await captureScreenshot("gallery-desktop.png");
   if (process.env.GALLERY_NARROW === "true") {
     await page.screenshot({ path: `${screenshotDir}/gallery-narrow-page.png`, fullPage: true, animations: "disabled", timeout: 10_000 });
   }
   console.log("desktop captured");
+  const imageOpener = page.getByLabel("Open image from #outputs").first();
+  await imageOpener.focus();
+  await imageOpener.click();
+  await expect(page.getByRole("dialog", { name: /Expanded image-0/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: /Expanded image-0/ })).toHaveCount(0);
+  await expect(imageOpener).toBeFocused();
+  await imageOpener.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add to pending message" }).click();
+  await page.locator("video").first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Add to pending message" }).click();
+  await expect(page.getByLabel("Pending gallery attachments")).toContainText("2 pending");
+  await page.getByRole("button", { name: "add to message…" }).click();
+  await expect(page.getByRole("dialog", { name: "Choose destination" })).toBeVisible();
+  await page.getByRole("button", { name: "VAI" }).click();
+  await expect(page.locator('[data-test-source=""]')).toContainText("/app/workspace/dm");
+  await page.getByRole("button", { name: "Return to gallery" }).click({ force: true });
+  await expect(page.locator(".output-card")).toHaveCount(60);
+  const tilePositions = () => page.locator('[data-gallery-block="0"] [data-output-id]').evaluateAll((cards) => cards.slice(0, 3).map((card) => ({ id: card.getAttribute("data-output-id"), x: card.offsetLeft, y: card.offsetTop })));
+  const firstBlockPositions = await tilePositions();
+  await page.getByRole("button", { name: "load older media" }).click();
+  await expect(page.locator(".output-card")).toHaveCount(65);
+  assert.deepEqual(await tilePositions(), firstBlockPositions, "appending a page must not move old masonry tiles");
+  lateMetadata = true;
+  await page.evaluate(() => window.dispatchEvent(new Event("gallery-test-invalidate")));
+  await expect.poll(() => page.locator('[data-output-id="output-0"] img').getAttribute("width")).toBe("640");
+  assert.deepEqual(await tilePositions(), firstBlockPositions, "late metadata must not move old masonry tiles");
   await page.locator('[data-output-focus="output-31"]').focus();
   await page.keyboard.press("Enter");
   await expect(page.locator('[data-test-source="output-31"]')).toContainText(
     "/app/workspace/channel",
   );
   await page.getByRole("button", { name: "Return to gallery" }).click({ force: true });
-  await expect(page.locator(".output-card")).toHaveCount(2);
+  await expect(page.locator(".output-card")).toHaveCount(65);
   await expect(page.locator('[data-output-focus="output-31"]')).toBeFocused();
   await page.getByRole("button", { name: "latest" }).click({ force: true });
   await expect(page.locator('[data-test-source="output-0"]')).toBeVisible();
   assert.ok(limits.includes("1"));
   await page.getByRole("button", { name: "Return to gallery" }).click({ force: true });
-  await expect(page.locator(".output-card")).toHaveCount(2);
+  await expect(page.locator(".output-card")).toHaveCount(65);
   deleted = true;
   await page.evaluate(() => window.dispatchEvent(new Event("gallery-test-invalidate")));
   await expect(page.locator('[data-output-id="output-0"]')).toHaveCount(0);

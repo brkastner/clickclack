@@ -13,6 +13,9 @@
   let menuButton: HTMLButtonElement;
   const mediaURL = $derived(uploadURL(upload));
   const isVideo = $derived(upload.content_type.toLowerCase().startsWith("video/"));
+  // Reserve this card's frame once. Later metadata revalidation must not make
+  // already-rendered tiles reshuffle their page block.
+  let reservedRatio = $state(upload.width && upload.height ? `${upload.width} / ${upload.height}` : "4 / 3");
   const alt = $derived(isVideo ? "" : `Image from ${label}`);
   function showMenu(event: MouseEvent | KeyboardEvent) { event.preventDefault(); menu = true; void tick(); }
   function closeMenu() { menu = false; void tick().then(() => menuButton?.focus({ preventScroll: true })); }
@@ -23,7 +26,7 @@
 </script>
 
 <article class="output-card" data-output-id={message.id}>
-  <div class="output-card__media">
+  <div class="output-card__media" style={`aspect-ratio: ${reservedRatio}`}> 
     {#if isVideo}
       <video src={mediaURL} preload="metadata" playsinline controls controlslist="nodownload" aria-label={`Video from ${label}`} oncontextmenu={showMenu} onkeydown={keydown}><track kind="captions" /></video>
     {:else}
@@ -50,7 +53,7 @@
 
 <style>
   .output-card { position: relative; min-width: 0; overflow: visible; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
-  .output-card__media { display: grid; min-height: 12rem; max-height: min(48vh,31rem); background: var(--bg); place-items: center; }
+  .output-card__media { display: grid; min-height: 12rem; max-height: min(48vh,31rem); overflow: hidden; background: var(--bg); place-items: center; }
   .output-card__expand { display:block; width:100%; padding:0; border:0; background:transparent; cursor:zoom-in; }
   img, video { display:block; width:100%; height:100%; max-height:min(48vh,31rem); object-fit:contain; background:var(--bg); }
   footer { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.7rem .8rem; border-top:1px solid var(--line); }

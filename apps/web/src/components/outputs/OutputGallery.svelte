@@ -36,7 +36,10 @@
   let pendingRevalidation = false;
   let alive = true;
   const outputs = $derived.by(() => { void revision; return session?.outputs ?? []; });
-  const media = $derived.by(() => outputs.flatMap((message) => mediaAttachments(message).map((upload) => ({ message, upload }))));
+  // Each fetched page is its own masonry block. Appending a page therefore never
+  // rebalances or moves cards that the reader has already seen.
+  const mediaPages = $derived.by(() => { void revision; return (session?.pages ?? []).map((page) => page.outputs.flatMap((message) => mediaAttachments(message).map((upload) => ({ message, upload })))); });
+  const media = $derived.by(() => mediaPages.flat());
   function mediaAttachments(message: Message): Upload[] {
     return (message.attachments ?? []).filter((upload) => /^(image|video)\//i.test(upload.content_type));
   }
@@ -117,9 +120,12 @@
       await goto(`/app/${encodeURIComponent(workspace.id)}/${encodeURIComponent(target)}`);
     } catch { if (alive && serial === navigation) error = "This source is unavailable or access has changed. Refresh the gallery."; }
   }
-  function setGalleryGap(value: number) {
+  async function setGalleryGap(value: number) {
+    capturePosition();
     galleryGap = value;
     try { localStorage.setItem("clickclack:gallery-gap", String(value)); } catch { /* A temporary gap is still usable. */ }
+    await tick();
+    restorePosition();
   }
   function addToQueue(upload: Upload) {
     if (!user || !workspace) return;
@@ -152,6 +158,13 @@
   }
   onMount(() => {
     let realtime: ReturnType<typeof connectRealtime> | undefined;
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    const resizeObserver = new ResizeObserver(() => {
+      capturePosition();
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { void tick().then(restorePosition); }, 0);
+    });
+    if (scroll) resizeObserver.observe(scroll);
     void (async () => {
       try {
         const [me, ws] = await Promise.all([api<{ user: User }>("/api/me", { signal: controller.signal }), api<{ workspaces: Workspace[] }>("/api/workspaces", { signal: controller.signal })]);
@@ -191,10 +204,10 @@
         } });
       } catch { if (alive) { error = "Could not load the workspace gallery. Reload to retry."; initializing = false; } }
     })();
-    return () => { alive = false; navigation++; sourceAbort?.abort(); controller.abort(); session?.cancel(); realtime?.close(); };
+    return () => { alive = false; clearTimeout(resizeTimer); resizeObserver.disconnect(); navigation++; sourceAbort?.abort(); controller.abort(); session?.cancel(); realtime?.close(); };
   });
 </script>
-<svelte:window onfocus={() => void revalidate()} ononline={() => void revalidate()} />
+<svelte:window onfocus={() => void revalidate()} ononline={() => void revalidate()} onkeydown={(event) => { if (expanded && event.key === "Escape") { event.preventDefault(); closeExpanded(); } }} />
 <section class="output-gallery" bind:this={scroll} onscroll={(event) => { if (alive && session && !initializing && !validating) session.scrollTop = event.currentTarget.scrollTop; }}>
   <header class="output-gallery__header">
     <div><h1>gallery</h1><p>{workspace?.name ?? "workspace"} · images and videos from a selected bot</p></div>
@@ -205,7 +218,7 @@
           {#each bots as bot (bot.id)}<option value={bot.id}>{bot.display_name}{bot.handle ? ` (@${bot.handle})` : ""}</option>{/each}
         </select>
       </label>
-      <label>spacing <input type="range" min="4" max="40" step="2" value={galleryGap} aria-label="gallery spacing" oninput={(event) => setGalleryGap(Number(event.currentTarget.value))} /></label>
+      <label>spacing <input type="range" min="4" max="40" step="2" value={galleryGap} aria-label="gallery spacing" oninput={(event) => void setGalleryGap(Number(event.currentTarget.value))} /></label>
       {#if sourceID}
         <button class="output-gallery__button" disabled={busy} onclick={() => void run(() => session!.load())}>refresh</button>
         <button class="output-gallery__button output-gallery__button--primary" disabled={busy} onclick={() => void latest()}>latest</button>
@@ -217,9 +230,13 @@
   {#if initializing || validating}<p class="output-gallery__notice" role="status">checking gallery…</p>
   {:else if !sourceID}<p class="output-gallery__notice">select the bot account whose media you want to browse.</p>
   {:else}
-    <div class="output-grid" style={`gap: ${galleryGap}px`}>
-      {#each media as item, index (`${item.message.id}:${item.upload.id}`)}
-        <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={index < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpand={expand} />
+    <div class="output-grid" style={`--gallery-gap: ${galleryGap}px`}>
+      {#each mediaPages as pageMedia, pageIndex (pageIndex)}
+        <div class="output-grid__block" data-gallery-block={pageIndex}>
+          {#each pageMedia as item, itemIndex (`${item.message.id}:${item.upload.id}`)}
+            <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={pageIndex === 0 && itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpand={expand} />
+          {/each}
+        </div>
       {/each}
     </div>
     {#if !busy && !pageError && !media.length}<p class="output-gallery__notice">no images or videos from this account yet.</p>{/if}
@@ -254,7 +271,10 @@
   .output-gallery__button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .output-gallery__button:disabled, select:disabled { cursor: not-allowed; opacity: .55; }
   .output-gallery__notice { max-width: 44rem; margin: 3rem auto; color: var(--muted); text-align: center; }
-  .output-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 1rem; margin: 0 auto; max-width: 110rem; align-items: start; }
+  .output-grid { display: grid; gap: var(--gallery-gap, 1rem); margin: 0 auto; max-width: 110rem; align-items: start; }
+  /* Blocks deliberately do not share a CSS column flow: a new page starts below
+     the prior one instead of repacking its tiles. */
+  .output-grid__block { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: var(--gallery-gap, 1rem); align-items: start; }
   .output-gallery__more { display: flex; justify-content: center; padding: 1.5rem; }
   .output-gallery__queue { position: fixed; z-index: 4; right: 1rem; bottom: 1rem; display: flex; max-width: min(34rem, calc(100vw - 2rem)); flex-wrap: wrap; align-items: center; gap: .45rem; padding: .65rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-2); box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
   .output-gallery__queued { max-width: 9rem; overflow: hidden; border: 0; background: transparent; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -262,5 +282,5 @@
   .output-gallery__chooser, .output-gallery__lightbox { max-width: min(50rem, 100%); max-height: calc(100vh - 2rem); overflow: auto; padding: 1rem; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel); color: var(--text); }
   .output-gallery__chooser h2 { margin-top: 0; } .output-gallery__destinations { display: grid; max-height: 50vh; margin: 1rem 0; overflow: auto; gap: .35rem; } .output-gallery__destinations button { padding: .6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; } .output-gallery__destinations button:hover { background: var(--hover-strong); }
   .output-gallery__lightbox { display: grid; gap: .75rem; } .output-gallery__lightbox img, .output-gallery__lightbox video { display: block; max-width: min(90vw, 80rem); max-height: calc(100vh - 8rem); object-fit: contain; }
-  @media (max-width: 720px) { .output-gallery__header { align-items: stretch; flex-direction: column; } .output-gallery__controls { align-items: stretch; } label { flex: 1 1 100%; } select { width: 100%; } .output-gallery__button { flex: 1; } .output-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) { .output-gallery__header { align-items: stretch; flex-direction: column; } .output-gallery__controls { align-items: stretch; } label { flex: 1 1 100%; } select { width: 100%; } .output-gallery__button { flex: 1; } .output-grid__block { grid-template-columns: 1fr; } }
 </style>
