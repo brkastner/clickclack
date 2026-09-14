@@ -663,7 +663,7 @@ for (const kind of ["channel", "dm"] as const) {
     await expect(page.getByRole("button", { name: "Retry", exact: true })).toHaveCount(0);
     await expectInTimeline(page, message);
     await page.screenshot({ path: testInfo.outputPath("confirmed-send-refresh.png") });
-    await expect(page.getByLabel("Message body", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Message body", { exact: true })).toHaveText("");
     await page.unroute(`**${path}/messages*`);
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");

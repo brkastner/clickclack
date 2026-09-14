@@ -444,25 +444,6 @@ func normalizeAvatarURLPatch(input *string) (*string, error) {
 	return &normalized, nil
 }
 
-func normalizeUserProfile(displayNameInput, handleInput, avatarURLInput string) (string, string, string, error) {
-	displayName := strings.TrimSpace(displayNameInput)
-	if displayName == "" {
-		return "", "", "", errors.New("display_name is required")
-	}
-	if len(displayName) > 80 {
-		return "", "", "", errors.New("display_name is too long")
-	}
-	handle, err := normalizeHandle(handleInput)
-	if err != nil {
-		return "", "", "", err
-	}
-	avatarURL, err := normalizeAvatarURL(avatarURLInput)
-	if err != nil {
-		return "", "", "", err
-	}
-	return displayName, handle, avatarURL, nil
-}
-
 func profileUpdateError(err error) error {
 	if strings.Contains(err.Error(), "idx_users_handle") || strings.Contains(err.Error(), "users.handle") {
 		return errors.New("handle is already taken")

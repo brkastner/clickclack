@@ -1129,28 +1129,6 @@ func (s *Server) publishBotDeleted(deleted store.DeletedBot) {
 	}
 }
 
-func (s *Server) publishBotUpdated(ctx context.Context, bot store.User) {
-	workspaces, err := s.store.ListWorkspaces(ctx, bot.ID)
-	if err != nil {
-		return
-	}
-	updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, workspace := range workspaces {
-		s.hub.Publish(store.Event{
-			Type:        "bot.updated",
-			WorkspaceID: workspace.ID,
-			CreatedAt:   updatedAt,
-			Payload: map[string]string{
-				"bot_user_id":      bot.ID,
-				"display_name":     bot.DisplayName,
-				"handle":           bot.Handle,
-				"avatar_url":       bot.AvatarURL,
-				"avatar_url_light": bot.AvatarURLLight,
-			},
-		})
-	}
-}
-
 func (s *Server) publishBotMembershipRemoved(workspaceID, botUserID string) {
 	s.hub.Publish(store.Event{
 		Type:        "bot.membership_removed",

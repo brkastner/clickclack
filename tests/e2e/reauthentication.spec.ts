@@ -265,6 +265,7 @@ test("a late workspace denial cannot replace a newer workspace navigation", asyn
   const targetPath = conversationPath("chat", target);
   await page.goto(targetPath);
   await waitForAppReady(page);
+  await page.getByRole("button", { name: "Switch workspace", exact: true }).click();
   await page
     .getByRole("navigation", { name: "Workspaces" })
     .getByRole("link", { name: removed.workspace.name, exact: true })

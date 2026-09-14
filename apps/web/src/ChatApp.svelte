@@ -1477,7 +1477,6 @@
           !workspaceChanged && selectedChannelID === targetID && !selectedDirectID && viewKey === targetID;
         selectedChannelID = targetID;
         selectedDirectID = "";
-        markConversationReadOnOpen(targetID);
         rememberLastChannel(workspace.id, targetID);
         clearRoutePanelState();
         restoreComposerDraft(targetID);
@@ -1500,7 +1499,6 @@
           !workspaceChanged && selectedDirectID === targetID && !selectedChannelID && viewKey === targetID;
         selectedDirectID = targetID;
         selectedChannelID = "";
-        markConversationReadOnOpen(targetID);
         clearRoutePanelState();
         restoreComposerDraft(targetID);
         consumeQueuedGalleryAttachments(targetID);
@@ -1896,7 +1894,6 @@
 
   async function selectChannel(channelID: string) {
     mobileNavOpen = false;
-    markConversationReadOnOpen(channelID);
     rememberLastChannel(selectedWorkspaceID, channelID);
     const targetPath = appHref(selectedWorkspaceID, channelID);
     if (
@@ -4081,7 +4078,6 @@
 
   async function selectDirectConversation(conversationID: string) {
     mobileNavOpen = false;
-    markConversationReadOnOpen(conversationID);
     const targetPath = appHref(selectedWorkspaceID, conversationID);
     if (
       conversationID === selectedDirectID &&
@@ -5031,6 +5027,7 @@
     runPanelOpen = false;
     if (pinnedPanelOpen) {
       pinnedPanelOpen = false;
+      commitSelectedRoute();
       return;
     }
     if (!selectedChannelID || selectedDirectID) return;

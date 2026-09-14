@@ -1088,11 +1088,11 @@
   padding-right: 75px;
 }
 
-/* A right-aligned current-user group carries its prose with it. Other
-   participants keep left-to-right prose even when their bubble is moved. */
+/* Alignment settings move a bubble, not its reading direction. Keep prose
+   left-aligned for both participant classes when a group is positioned right. */
 :root[data-user-align="right"] .message-group.is-self .message-content {
   margin-left: auto;
-  text-align: right;
+  text-align: left;
 }
 
 :root[data-other-align="right"] .message-group:not(.is-self) .message-content {
@@ -2383,6 +2383,7 @@
 }
 
 .media-tile--image img {
+  height: auto;
   max-height: 320px;
 }
 
@@ -2807,7 +2808,7 @@
 :root[data-message-layout="outlined"][data-other-align="right"]
   .message-group:not(.is-self)
   .markdown {
-  text-align: start;
+  text-align: left;
 }
 
 :root[data-message-layout="outlined"][data-user-align="right"] .message-group.is-self .thread-hint,
@@ -3153,11 +3154,11 @@
   border-radius: 12px;
   background: color-mix(in srgb, var(--panel-2) 58%, transparent);
   box-shadow: none;
-  text-align: right;
+  text-align: left;
 }
 
 .message-group.is-self .message-content .markdown {
-  text-align: right;
+  text-align: left;
 }
 
 /* The accepted message pass defaults self messages to the right, but the

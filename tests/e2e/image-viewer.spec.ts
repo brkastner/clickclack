@@ -167,6 +167,27 @@ test("opens an unopened image menu in place and adds it to the draft", async ({ 
   await page.getByLabel("Message body").fill(`newer images ${suffix}`);
   await page.getByRole("button", { name: "Send", exact: true }).click();
 
+  const newerRow = page.locator(".message-row").filter({ hasText: `newer images ${suffix}` });
+  await expect(newerRow).not.toHaveClass(/is-pending/);
+  // Finish upload hydration and image layout before measuring menu-induced scrolling.
+  await expect
+    .poll(() =>
+      newerRow
+        .locator(".media-tile--image img")
+        .evaluateAll(
+          (images) =>
+            images.length > 0 &&
+            images.every(
+              (image) =>
+                image instanceof HTMLImageElement &&
+                image.complete &&
+                image.naturalWidth > 0 &&
+                image.getAttribute("height") === "1",
+            ),
+        ),
+    )
+    .toBe(true);
+
   const filename = files[0]!.name;
   const imageRow = page.locator(".message-row").filter({ hasText: messageText });
   const deferredImage = imageRow.getByRole("button", { name: `Load preview for ${filename}` });
@@ -174,7 +195,11 @@ test("opens an unopened image menu in place and adds it to the draft", async ({ 
   await expect(deferredImage).toBeVisible();
   const clickPoint = await deferredImage.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
-    return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
+    // MouseEvent client coordinates are integers; use the dispatched values in assertions.
+    return {
+      x: Math.trunc(bounds.left + bounds.width / 2),
+      y: Math.trunc(bounds.top + bounds.height / 2),
+    };
   });
   const scrollTopBefore = await page
     .locator(".messages-scroll")
@@ -242,6 +267,11 @@ test("pages through image attachments with controls and arrow keys", async ({ pa
   const imageRow = page.locator(".message-row").filter({ hasText: messageText });
   const firstImage = imageRow.getByRole("button", { name: `Open image ${firstFilename}` });
   await expect(firstImage).toBeVisible();
+  // Wait for persisted dimensions so an optimistic upload cannot hide a collapsed thumbnail.
+  await expect(firstImage.locator("img")).toHaveAttribute("height", "1");
+  await expect
+    .poll(async () => (await firstImage.boundingBox())?.height ?? 0)
+    .toBeGreaterThanOrEqual(24);
   await firstImage.click();
 
   let dialog = page.getByRole("dialog", { name: `Image viewer: ${firstFilename}` });

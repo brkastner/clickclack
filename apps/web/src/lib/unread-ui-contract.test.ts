@@ -22,7 +22,7 @@ test("keeps the unread overlay above elevated virtualized message rows", () => {
   );
 });
 
-test("marks channels and direct conversations read when they are opened", () => {
+test("preserves unread state while opening channels and direct conversations", () => {
   const applyRoute =
     chatApp.match(
       /async function applyRoute[\s\S]*?\n  async function ensureResolvedRouteTargetLoaded/u,
@@ -40,13 +40,9 @@ test("marks channels and direct conversations read when they are opened", () => 
       /function markConversationReadOnOpen[\s\S]*?\n  function markActiveViewRead/u,
     )?.[0] ?? "";
 
-  assert.equal(
-    applyRoute.match(/markConversationReadOnOpen\(targetID\);/gu)?.length,
-    2,
-    "channel and direct route branches must both mark their target read",
-  );
-  assert.match(selectChannel, /markConversationReadOnOpen\(channelID\);/u);
-  assert.match(selectDirect, /markConversationReadOnOpen\(conversationID\);/u);
+  assert.doesNotMatch(applyRoute, /markConversationReadOnOpen\(targetID\);/u);
+  assert.doesNotMatch(selectChannel, /markConversationReadOnOpen\(channelID\);/u);
+  assert.doesNotMatch(selectDirect, /markConversationReadOnOpen\(conversationID\);/u);
   assert.match(markConversationReadOnOpen, /latestReadSeqForKey\(key\)/u);
   assert.match(markConversationReadOnOpen, /markDirectRead\(key, seq\)/u);
   assert.match(markConversationReadOnOpen, /markChannelRead\(key, seq\)/u);

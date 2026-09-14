@@ -27,7 +27,9 @@ func (s *Store) ListOutputPage(ctx context.Context, page store.OutputPageRequest
 	if err != nil {
 		return store.OutputPage{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+	// memberRoleTx takes a key-share lock to protect the authorization check;
+	// PostgreSQL does not permit that lock in a read-only transaction.
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return store.OutputPage{}, err
 	}

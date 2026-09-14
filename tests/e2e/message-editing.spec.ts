@@ -39,7 +39,7 @@ async function createOwnedMessage(page: Page, label: string) {
   await waitForAppReady(page);
   const body = `${label} ${suffix}`;
   await page.getByLabel("Message body").fill(body);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const row = page.locator(".message-row:not(.is-pending)", { hasText: body });
   await expect(row).toBeVisible();
   return { body, row };
@@ -88,7 +88,7 @@ test("message editing leaves composing shortcuts with the input method", async (
     await expect(editor).not.toBeVisible();
     await expect(row.locator(".markdown")).toHaveText(draft);
     await expect(quote).toBeVisible();
-    await expect(composer).toHaveValue("Keep this quoted draft");
+    await expect(composer).toHaveText("Keep this quoted draft");
   }
   await openTimelineEditor(row);
   await editor.fill("Discarded edit");
@@ -208,7 +208,7 @@ test("message edits persist in channels and threads", async ({ page }) => {
 | --- | --- |
 | Edit | preserved |`;
   await page.getByLabel("Message body").fill(originalBody);
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   let channelRow = page.locator(".message-row:not(.is-pending)", { hasText: originalBody });
   await expect(channelRow).toBeVisible();
   const channelMessageID = await channelRow.getAttribute("data-message-id");

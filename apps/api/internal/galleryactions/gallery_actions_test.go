@@ -2,6 +2,7 @@ package galleryactions
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,100 @@ func TestValidateDescriptors(t *testing.T) {
 		})
 	}
 }
+func TestValidateDescriptorsRejectsBoundariesAndInvalidFieldCombinations(t *testing.T) {
+	duplicate := valid()
+	duplicate = append(duplicate, duplicate[0])
+	if err := ValidateDescriptors(duplicate); err == nil {
+		t.Fatal("accepted duplicate action ID")
+	}
+	tooMany := make([]Descriptor, MaxActions+1)
+	if err := ValidateDescriptors(tooMany); err == nil {
+		t.Fatal("accepted too many actions")
+	}
+	if err := ValidateDescriptors(nil); err == nil {
+		t.Fatal("accepted nil actions")
+	}
+	for _, tc := range []struct {
+		name   string
+		mutate func([]Descriptor)
+	}{
+		{"blank action label", func(d []Descriptor) { d[0].Label = " \t" }},
+		{"duplicate media type", func(d []Descriptor) { d[0].AcceptedMediaTypes = []string{"image/png", "image/png"} }},
+		{"invalid media type", func(d []Descriptor) { d[0].AcceptedMediaTypes = []string{"image/*"} }},
+		{"invalid schema revision", func(d []Descriptor) { d[0].SchemaRevision = 0 }},
+		{"duplicate field ID", func(d []Descriptor) { d[0].Fields = append(d[0].Fields, d[0].Fields[0]) }},
+		{"number inverted bounds", func(d []Descriptor) { *d[0].Fields[0].Min = 11 }},
+		{"number invalid step", func(d []Descriptor) { zero := 0.0; d[0].Fields[0].Step = &zero }},
+		{"boolean bounds", func(d []Descriptor) { d[0].Fields[0].Kind = "boolean" }},
+		{"select requires choices", func(d []Descriptor) { d[0].Fields[1].Choices = nil }},
+		{"invalid choice upload ID", func(d []Descriptor) { d[0].Fields[1].Choices[0].UploadID = "not/an/id" }},
+		{"images require integral bounded limits", func(d []Descriptor) {
+			d[0].Fields = []Field{{ID: "images", Kind: "images", Label: "Images", Min: ptr(.5), Max: ptr(2), Choices: []Choice{}}}
+		}},
+		{"non-finite bound", func(d []Descriptor) { *d[0].Fields[0].Max = math.Inf(1) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := valid()
+			tc.mutate(d)
+			if err := ValidateDescriptors(d); err == nil {
+				t.Fatal("accepted invalid descriptor")
+			}
+		})
+	}
+}
+
+func TestValidateValuesRequiresDeclaredTypedAndBoundedValues(t *testing.T) {
+	step := 0.5
+	fields := []Field{
+		{ID: "enabled", Kind: "boolean", Label: "Enabled"},
+		{ID: "amount", Kind: "number", Label: "Amount", Min: ptr(0), Max: ptr(2), Step: &step},
+		{ID: "format", Kind: "select", Label: "Format", Choices: []Choice{{ID: "png", Label: "PNG"}}},
+		{ID: "images", Kind: "images", Label: "Images", Min: ptr(1), Max: ptr(2), Choices: []Choice{{ID: "one", Label: "One"}, {ID: "two", Label: "Two"}}},
+	}
+	validValues := map[string]any{"enabled": true, "amount": 1.5, "format": "png", "images": []any{"one"}}
+	if err := ValidateValues(fields, validValues); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		values map[string]any
+	}{
+		{"missing key", map[string]any{"enabled": true, "amount": 1.5, "format": "png"}},
+		{"extra key", map[string]any{"enabled": true, "amount": 1.5, "format": "png", "images": []any{"one"}, "extra": true}},
+		{"wrong boolean type", map[string]any{"enabled": "true", "amount": 1.5, "format": "png", "images": []any{"one"}}},
+		{"unaligned number", map[string]any{"enabled": true, "amount": 1.25, "format": "png", "images": []any{"one"}}},
+		{"unknown selection", map[string]any{"enabled": true, "amount": 1.5, "format": "jpg", "images": []any{"one"}}},
+		{"duplicate image", map[string]any{"enabled": true, "amount": 1.5, "format": "png", "images": []any{"one", "one"}}},
+		{"unknown image", map[string]any{"enabled": true, "amount": 1.5, "format": "png", "images": []any{"missing"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateValues(fields, tc.values); err == nil {
+				t.Fatal("accepted invalid values")
+			}
+		})
+	}
+}
+
+func TestDecodeRejectsTrailingJSONAndFieldSpecificWireProperties(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		data   string
+		target any
+	}{
+		{"trailing JSON", `{"id":"x"} {}`, &map[string]any{}},
+		{"null root", `null`, &map[string]any{}},
+		{"boolean step", `{"id":"enabled","kind":"boolean","label":"Enabled","step":1}`, &Field{}},
+		{"number choices", `{"id":"amount","kind":"number","label":"Amount","choices":[]}`, &Field{}},
+		{"choice unknown property", `{"id":"png","label":"PNG","callback":"https://evil.invalid"}`, &Choice{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := Decode([]byte(tc.data), tc.target); err == nil {
+				t.Fatal("accepted invalid wire input")
+			}
+		})
+	}
+}
+
 func TestSubmissionDigestIsPayloadBoundAndStable(t *testing.T) {
 	a := SubmissionDigest("s", "retry-1", "{\"x\":1}")
 	if a != SubmissionDigest("s", "retry-1", "{\"x\":1}") {

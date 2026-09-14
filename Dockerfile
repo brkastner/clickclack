@@ -2,6 +2,8 @@ FROM node:26-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f
 ARG CLICKCLACK_WEB_VERSION=dev
 ENV CLICKCLACK_WEB_VERSION=$CLICKCLACK_WEB_VERSION
 WORKDIR /src
+# node-pty falls back to node-gyp when no matching prebuilt binary is available.
+RUN apk add --no-cache python3 make g++
 RUN npm install -g pnpm@11.25.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json

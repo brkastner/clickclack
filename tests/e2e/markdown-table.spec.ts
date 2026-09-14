@@ -67,15 +67,16 @@ test("Markdown tables stay contained and expose scrolling only when needed", asy
   await scroller.locator("tbody td").first().click();
   await expect(threadPane.getByRole("button", { name: "Close thread" })).toBeHidden();
 
-  // Message surfaces have a deliberate desktop reading-width cap. Content
-  // this wide remains scrollable even when the viewport itself grows.
+  // The current responsive layout uses available width rather than a fixed
+  // desktop reading-width cap, so this table no longer needs a scroll affordance
+  // on a wide viewport.
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect
     .poll(() => scroller.evaluate((node) => node.hasAttribute("data-overflowing")))
-    .toBe(true);
-  await expect(scroller).toHaveAttribute("role", "group");
-  await expect(scroller).toHaveAttribute("aria-label", "Scrollable table");
-  await expect(scroller).toHaveAttribute("tabindex", "0");
+    .toBe(false);
+  await expect(scroller).not.toHaveAttribute("role", "group");
+  await expect(scroller).not.toHaveAttribute("aria-label", "Scrollable table");
+  await expect(scroller).not.toHaveAttribute("tabindex", "0");
 
   await page.setViewportSize({ width: 480, height: 720 });
   await expect

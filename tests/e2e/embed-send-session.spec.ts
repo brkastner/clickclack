@@ -130,7 +130,7 @@ test("a revoked send cannot interrupt a new send after the same account signs in
     expect(replacement.user.id).toBe(signed.user.id);
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(page.getByLabel("Embedded channel")).toBeVisible();
-    await expect(composer).toHaveValue(previousDraft);
+    await expect(composer).toHaveText(previousDraft);
     await expect(composer).toBeEnabled();
 
     const freshDraft = "Send from the renewed session";
@@ -144,12 +144,12 @@ test("a revoked send cannot interrupt a new send after the same account signs in
     expect(oldStatus).toBe(401);
     await settleScrollFrames(page);
     await expect(page.getByLabel("Embedded channel")).toBeVisible();
-    await expect(composer).toHaveValue(freshDraft);
+    await expect(composer).toHaveText(freshDraft);
     await expect(composer).toBeDisabled();
     expect((await page.request.get("/api/me")).status()).toBe(200);
     releaseFresh.resolve();
     await freshDelivered.promise;
-    await expect(composer).toHaveValue("");
+    await expect(composer).toHaveText("");
     await expect(composer).toBeEnabled();
     await expect(page.locator(`[data-message-id="${freshMessage!.id}"]`)).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("after-renewed-send.png") });
@@ -298,10 +298,10 @@ test("authoritative window resync preserves completion of a valid embedded send"
     await expect.poll(() => connections).toBe(2);
     await expect.poll(cursor).toBe(tail_cursor);
     await expect(page.locator(`[data-message-id="${sent!.id}"]`)).toBeVisible();
-    await expect(composer).toHaveValue(body);
+    await expect(composer).toHaveText(body);
     await expect(composer).toBeDisabled();
     release.resolve();
-    await expect(composer).toHaveValue("");
+    await expect(composer).toHaveText("");
     await expect(composer).toBeEnabled();
     await expect(page.locator(`[data-message-id="${sent!.id}"]`)).toHaveCount(1);
   } finally {

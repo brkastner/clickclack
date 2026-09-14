@@ -57,7 +57,7 @@ test("keeps the DM sidebar spinner live until the agent's final response", async
   const dmRow = page.locator(".sidebar .dm-row", { hasText: bot.display_name });
   const working = dmRow.getByRole("status", { name: `Agent is working in ${bot.display_name}` });
   await page.getByLabel("Message body").fill("Please work on this");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   await sendRequested;
   await expect(working).toBeVisible();
 

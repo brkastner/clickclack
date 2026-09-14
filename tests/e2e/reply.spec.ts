@@ -8,7 +8,7 @@ test("inline quote-reply renders, jumps, and survives source delete", async ({ p
 
   // Send the original message we'll reply to.
   await page.getByLabel("Message body").fill("the quoted original");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const original = page.locator(".markdown").filter({ hasText: "the quoted original" }).first();
   await expect(original).toBeVisible();
 
@@ -26,7 +26,7 @@ test("inline quote-reply renders, jumps, and survives source delete", async ({ p
   await expect(page.getByLabel("Replying to message")).toBeVisible();
 
   await page.getByLabel("Message body").fill("responding inline");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const replyRow = page.locator(".message-row", {
     has: page.locator(".markdown").filter({ hasText: "responding inline" }),
   });

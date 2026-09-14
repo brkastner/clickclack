@@ -26,7 +26,7 @@ test("the workspace create form opens and is not clipped by the switcher", async
   await waitForAppReady(page);
 
   await page.getByRole("button", { name: "Switch workspace" }).click();
-  await page.getByRole("menuitem", { name: "New workspace" }).click();
+  await page.getByRole("button", { name: "New workspace" }).click();
 
   // Regression: nested scroll containers can clip a popover even though its
   // form still has a layout box. The switcher must keep the form hittable.
@@ -57,7 +57,7 @@ test("workspace creation shows failures and retains the name for retry", async (
   });
   const name = `Retry workspace ${randomUUID().slice(0, 8)}`;
   await page.getByRole("button", { name: "Switch workspace" }).click();
-  await page.getByRole("menuitem", { name: "New workspace" }).click();
+  await page.getByRole("button", { name: "New workspace" }).click();
   const input = page.getByLabel("Workspace name");
   await input.fill(name);
   await input.press("Enter");
@@ -65,6 +65,7 @@ test("workspace creation shows failures and retains the name for retry", async (
   await expect(input).toHaveValue(name);
   await input.press("Enter");
   await expect(input).toBeHidden();
+  await page.getByRole("button", { name: "Switch workspace", exact: true }).click();
   await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   expect(attempts).toBe(2);
 });

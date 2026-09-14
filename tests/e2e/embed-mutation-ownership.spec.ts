@@ -94,7 +94,7 @@ for (const mutation of ["edit", "delete"] as const) {
       const { message: own }: { message: Message } = await receipt.json();
       const row = page.locator(`[data-message-id="${own.id}"]`);
       await expect(row).toContainText(originalBody);
-      await expect(composer).toHaveValue("");
+      await expect(composer).toHaveText("");
       await snapshotEntered.promise;
       expect(snapshot!.messages.find((message) => message.id === own.id)?.body).toBe(originalBody);
       await expect.poll(() => heldCreate?.event.payload.message_id).toBe(own.id);
@@ -260,8 +260,8 @@ test("embedded send receipt preserves an edit already applied through realtime",
     await settleScrollFrames(page);
     await page.screenshot({ path: testInfo.outputPath("after-post-receipt.png") });
     await expect(row.locator(".markdown")).toHaveText(editedBody);
-    await expect(composer).toHaveValue("");
-    await expect(composer).toBeEnabled();
+    await expect(composer).toHaveText("");
+    await expect(composer).toHaveAttribute("aria-disabled", "false");
   } finally {
     releaseReceipt.resolve();
     await page.unrouteAll({ behavior: "wait" });

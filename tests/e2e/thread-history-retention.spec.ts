@@ -98,7 +98,7 @@ test("rich native history stays bounded, preserves reading anchors and reloads t
     expect(frames.rows).toBe(300);
     expect(frames.maxFrameMs).toBeLessThan(1000);
     await page.getByLabel("Reply body").fill("Retain this history draft");
-    await expect(page.getByLabel("Reply body")).toHaveValue("Retain this history draft");
+    await expect(page.getByLabel("Reply body")).toHaveText("Retain this history draft");
 
     await page.getByRole("button", { name: "Load older replies", exact: true }).click();
     await expect(
@@ -120,7 +120,7 @@ test("rich native history stays bounded, preserves reading anchors and reloads t
     await expect(page.locator(".thread > header strong").first()).toContainText("368 replies");
     await expect.poll(async () => Math.abs((await anchor.boundingBox())!.y - y)).toBeLessThan(3);
     await expect.poll(() => page.locator(".reply-list .reply").count()).toBeLessThanOrEqual(300);
-    await expect(page.getByLabel("Reply body")).toHaveValue("Retain this history draft");
+    await expect(page.getByLabel("Reply body")).toHaveText("Retain this history draft");
 
     // The discarded tail is reachable through the same edge control, without a middle gap.
     const newer = page.getByRole("button", { name: "Load newer replies", exact: true });

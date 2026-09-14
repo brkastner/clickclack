@@ -1,4 +1,21 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
+
+async function setComposerText(composer: Locator, text: string) {
+  await composer.focus();
+  await composer.press("Control+A");
+  await composer.press("Backspace");
+  await composer.pressSequentially(text);
+}
+
+async function selectComposerText(composer: Locator, prefixLength: number, length: number) {
+  await composer.focus();
+  await composer.press("Control+End");
+  const suffixLength = "before selected after".length - prefixLength - length;
+  for (let index = 0; index < suffixLength; index += 1) await composer.press("ArrowLeft");
+  for (let index = 0; index < length; index += 1) await composer.press("Shift+ArrowLeft");
+  await expect(composer).toHaveText("before selected after");
+  expect(await composer.evaluate(() => window.getSelection()?.toString())).toBe("selected");
+}
 
 test("embedded composer formats selections and inserts GIFs in a narrow panel", async ({
   page,
@@ -20,33 +37,73 @@ test("embedded composer formats selections and inserts GIFs in a narrow panel", 
   await page.setViewportSize({ width: 320, height: 600 });
   await page.goto(`/embed/channel/${workspace.route_id}/${channel.route_id}`);
   const composer = page.getByLabel("Message body");
-  const toggle = page.getByRole("button", { name: "GIF picker", exact: true });
-  await composer.fill("ship it");
+  const toggle = page.getByRole("button", { name: "Add GIF", exact: true });
+  await setComposerText(composer, "ship it");
   await toggle.click();
   await page.screenshot({ path: testInfo.outputPath("composer-controls.png") });
   await toggle.click();
+  const formattingToggle = page.getByRole("button", { name: "Toggle formatting tools" });
+  await formattingToggle.click();
 
-  for (const [button, wrapped] of [
-    ["Bold", "**selected**"],
-    ["Italic", "_selected_"],
-    ["Code", "`selected`"],
-    ["Code block", "\n```\nselected\n```\n"],
-    ["Link", "[selected](https://)"],
+  for (const { button, formatted, markdown } of [
+    { button: "Bold", formatted: "strong", markdown: "before **selected** after" },
+    { button: "Italic", formatted: "em", markdown: "before *selected* after" },
+    { button: "Inline code", formatted: "code", markdown: "before `selected` after" },
+    {
+      button: "Code block",
+      formatted: "pre code",
+      markdown: "```\nbefore selected after\n```",
+    },
+    {
+      button: "Link",
+      formatted: "a",
+      markdown: "before [selected](https://example.test/selected) after",
+    },
   ]) {
-    await composer.fill("before selected after");
-    await composer.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(7, 15));
-    await page.getByRole("button", { name: button, exact: true }).click();
-    await expect(composer).toHaveValue(`before ${wrapped} after`);
+    await setComposerText(composer, "before selected after");
+    await selectComposerText(composer, "before ".length, "selected".length);
+    if (button === "Link")
+      page.once("dialog", (dialog) => dialog.accept("https://example.test/selected"));
+    const formatButton = page
+      .getByRole("toolbar")
+      .getByRole("button", { name: button, exact: true });
+    if (!(await formatButton.isVisible())) await formattingToggle.click();
+    await formatButton.click();
+    // A block format applies to the paragraph; inline marks apply only to the range.
+    await expect(composer.locator(formatted)).toHaveText(
+      button === "Code block" ? "before selected after" : "selected",
+    );
+    await expect(composer).toContainText("before");
+    await expect(composer).toContainText("after");
+    if (button === "Link") {
+      await expect(composer.locator("a")).toHaveAttribute("href", "https://example.test/selected");
+    }
+    const sent = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        request.url().endsWith(`/api/channels/${channel.id}/messages`),
+    );
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    const request = await sent;
+    expect(request.postDataJSON()).toMatchObject({ body: markdown });
+    const response = await request.response();
+    expect(response?.ok()).toBe(true);
+    await response?.finished();
+    await expect(composer).toBeEditable();
+    await expect(composer).toHaveText("");
   }
 
-  await composer.fill("before after");
-  await composer.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(7, 7));
-  await page.getByRole("button", { name: "Bold", exact: true }).click();
-  await expect(composer).toHaveValue("before **text**after");
+  await setComposerText(composer, "before after");
+  await composer.press("Control+End");
+  for (let index = 0; index < "after".length; index += 1) await composer.press("ArrowLeft");
+  const boldButton = page.getByRole("button", { name: "Bold", exact: true });
+  if (!(await boldButton.isVisible())) await formattingToggle.click();
+  await boldButton.click();
   await composer.pressSequentially("new");
-  await expect(composer).toHaveValue("before **new**after");
+  await expect(composer.locator("strong")).toHaveText("new");
+  await expect(composer).toHaveText("before newafter");
 
-  await composer.fill("ship it");
+  await setComposerText(composer, "ship it");
   await toggle.click();
   const picker = page.getByRole("dialog", { name: "GIF picker panel" });
   await expect(picker).toBeVisible();
@@ -73,7 +130,7 @@ test("embedded composer formats selections and inserts GIFs in a narrow panel", 
     await page.getByLabel("Search GIFs").dispatchEvent("keydown", { key: "Escape", ...composing });
     await expect(picker).toBeVisible();
     await expect(page.getByLabel("Search GIFs")).toHaveValue("ship");
-    await expect(composer).toHaveValue("ship it");
+    await expect(composer).toHaveText("ship it");
   }
   const composition = await page.context().newCDPSession(page);
   await page.getByLabel("Search GIFs").fill("s");
@@ -84,7 +141,7 @@ test("embedded composer formats selections and inserts GIFs in a narrow panel", 
   });
   await page.getByLabel("Search GIFs").press("Enter");
   await expect(picker).toBeVisible();
-  await expect(composer).toHaveValue("ship it");
+  await expect(composer).toHaveText("ship it");
   await composition.send("Input.imeSetComposition", {
     text: "",
     selectionStart: 0,
@@ -93,10 +150,14 @@ test("embedded composer formats selections and inserts GIFs in a narrow panel", 
   await composition.detach();
   await page.getByLabel("Search GIFs").fill("ship");
   await page.getByLabel("Search GIFs").press("Enter");
-  await expect(composer).toHaveValue("ship it");
+  await expect(composer).toHaveText("ship it");
   await picker.getByRole("button", { name: /Ship it/ }).click();
   await expect(picker).not.toBeVisible();
-  await expect(composer).toHaveValue(/^ship it\n!\[Ship it\]\(https:\/\/media.giphy.com\/.+\)$/);
+  await expect(composer).toHaveText("ship it");
+  const draftGif = composer.getByRole("img", { name: "Ship it" });
+  await expect(draftGif).toBeVisible();
+  await expect(draftGif).toHaveAttribute("src", /^https:\/\/media\.giphy\.com\//);
+  const gifURL = await draftGif.getAttribute("src");
   await expect(composer).toBeFocused();
   await toggle.click();
   await page.getByLabel("Search GIFs").press("Escape");
@@ -108,13 +169,16 @@ test("embedded composer formats selections and inserts GIFs in a narrow panel", 
     releaseSend = resolve;
   });
   await page.route(`**/api/channels/${channel.id}/messages`, async (route) => {
-    if (route.request().method() === "POST") await sendGate;
+    if (route.request().method() === "POST") {
+      expect(route.request().postDataJSON().body).toContain(`![Ship it](${gifURL})`);
+      await sendGate;
+    }
     await route.continue();
   });
   await toggle.click();
   await page.getByRole("button", { name: "Send", exact: true }).click();
   try {
-    await expect(composer).toBeDisabled();
+    await expect(composer).toHaveAttribute("contenteditable", "false");
     await expect(picker).not.toBeVisible();
     for (const button of await page.locator(".composer-toolbar button").all()) {
       await expect(button).toBeDisabled();
@@ -122,7 +186,7 @@ test("embedded composer formats selections and inserts GIFs in a narrow panel", 
   } finally {
     releaseSend();
   }
-  await expect(composer).toHaveValue("");
+  await expect(composer).toHaveText("");
   const sentGif = page.locator(".markdown").getByRole("img", { name: "Ship it" });
   await expect(sentGif).toBeVisible();
   await sentGif.click();
@@ -218,7 +282,7 @@ test("embedded channel loads, sends idempotently, and follows realtime updates",
     (request) =>
       request.method() === "POST" && request.url().includes(`/api/channels/${channel.id}/messages`),
   );
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
   const sendRequest = await requestPromise;
   const sendPayload = sendRequest.postDataJSON() as { body: string; nonce?: string };
   expect(sendPayload.body).toBe(uiBody);

@@ -189,6 +189,33 @@ Frontend responsibilities:
 
 Frontend should not own durable chat truth.
 
+### Chronological bot activity (KAS-753)
+
+**Status: Selected for implementation. This documentation change does not implement, verify or deploy it.**
+
+Preserve the supplied conversation order when rendering durable bot activity.
+The current `coalesceAgentActivity` collects a turn's activity at its first row,
+which moves later activity ahead of intervening messages. Emit commentary in
+place and coalesce only contiguous `agent_tool` rows with the existing
+conversation/author/turn key. Commentary, ordinary messages, and key changes
+end a tool block, even when commentary is hidden.
+
+Preserve first-row IDs, tool parsing, duplicate counts, visibility flags, and
+existing finality/staleness rules. Keep turn-wide finality bookkeeping separate
+from positioning. Do not sort timestamps, mutate input messages, or change
+persistence or protocol semantics. Keep the existing `ChatApp.svelte` interface.
+Scope is the coalescer, its tests, and obsolete anchoring comments, not a
+workflow-panel redesign, producer change, or schema migration.
+
+The [selected implementation plan](docs/drafts/chronological-bot-activity.md)
+preserves the full selected summary, ordered steps, and validation verbatim.
+Cover interleaved human/bot/turn activity and late rows without relocating
+ordinary messages, visibility combinations, missing turn IDs, author and
+conversation isolation, duplicate tools, stale turns, and trailing live blocks.
+Run the focused activity tests, web tests, and web typecheck. Verify ordering,
+adjacent tool collapse, and stable earlier rows in ClickClack Electron.
+Deployment completion checks must pass before claiming the change is live.
+
 ### Sidebar hero rendering correction
 
 **Status: Selected for implementation; not implemented or deployed by this documentation change.**
