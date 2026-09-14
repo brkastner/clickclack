@@ -3,7 +3,7 @@
   import { goto } from "$app/navigation";
   import { sourceConversationID } from "../../lib/chat/message-source-navigation";
   import { api } from "../../lib/api";
-  import { uploadURL } from "../../lib/uploads";
+  import { uploadURL, imageViewerItems } from "../../lib/uploads";
   import type { Channel, DirectConversation, Message, Upload, User, Workspace } from "../../lib/types";
   import { listAllWorkspaceMembers } from "../../lib/workspace-members";
   import { connectRealtime } from "../../lib/realtime.svelte";
@@ -11,6 +11,7 @@
   import { MAX_MESSAGE_ATTACHMENTS } from "../../lib/attachments";
   import { enqueueGalleryAttachment, galleryAttachmentQueue, removeGalleryAttachment, clearGalleryAttachments, setGalleryAttachmentDestination } from "../../lib/gallery-attachment-queue";
   import OutputCard from "./OutputCard.svelte";
+  import ImageViewer from "../media/ImageViewer.svelte";
   let { workspaceID }: { workspaceID: string } = $props();
   let workspace = $state<Workspace>();
   let user = $state<User>();
@@ -22,7 +23,8 @@
   let directs = $state<DirectConversation[]>([]);
   let queue = $state<Upload[]>([]);
   let choosingDestination = $state(false);
-  let expanded = $state<Upload>();
+  let expandedImageIndex = $state<number | undefined>();
+  let expandedVideo = $state<Upload>();
   let expandedOpener: HTMLElement | null = null;
   let galleryGap = $state(16);
   let revision = $state(0);
@@ -40,6 +42,10 @@
   // rebalances or moves cards that the reader has already seen.
   const mediaPages = $derived.by(() => { void revision; return (session?.pages ?? []).map((page) => page.outputs.flatMap((message) => mediaAttachments(message).map((upload) => ({ message, upload })))); });
   const media = $derived.by(() => mediaPages.flat());
+  // Keep the viewer's order identical to the ordered gallery, including every
+  // loaded page; videos retain their own player rather than being coerced into images.
+  const imageUploads = $derived(media.filter((item) => /^image\//i.test(item.upload.content_type)).map((item) => item.upload));
+  const viewerItems = $derived(imageViewerItems(imageUploads));
   function mediaAttachments(message: Message): Upload[] {
     return (message.attachments ?? []).filter((upload) => /^(image|video)\//i.test(upload.content_type));
   }
@@ -144,8 +150,16 @@
     choosingDestination = false;
     await goto(`/app/${encodeURIComponent(workspace.id)}/${encodeURIComponent(destinationID)}`);
   }
-  function expand(upload: Upload) { expandedOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null; expanded = upload; }
-  function closeExpanded() { expanded = undefined; void tick().then(() => expandedOpener?.focus({ preventScroll: true })); }
+  function expandImage(upload: Upload) {
+    const index = imageUploads.findIndex((item) => item.id === upload.id);
+    if (index < 0) return;
+    expandedImageIndex = index;
+  }
+  function expandVideo(upload: Upload) {
+    expandedOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    expandedVideo = upload;
+  }
+  function closeExpandedVideo() { expandedVideo = undefined; void tick().then(() => expandedOpener?.focus({ preventScroll: true })); }
   async function latest() {
     const owner = session;
     const serial = navigation;
@@ -207,7 +221,7 @@
     return () => { alive = false; clearTimeout(resizeTimer); resizeObserver.disconnect(); navigation++; sourceAbort?.abort(); controller.abort(); session?.cancel(); realtime?.close(); };
   });
 </script>
-<svelte:window onfocus={() => void revalidate()} ononline={() => void revalidate()} onkeydown={(event) => { if (expanded && event.key === "Escape") { event.preventDefault(); closeExpanded(); } }} />
+<svelte:window onfocus={() => void revalidate()} ononline={() => void revalidate()} onkeydown={(event) => { if (expandedVideo && event.key === "Escape") { event.preventDefault(); closeExpandedVideo(); } }} />
 <section class="output-gallery" bind:this={scroll} onscroll={(event) => { if (alive && session && !initializing && !validating) session.scrollTop = event.currentTarget.scrollTop; }}>
   <header class="output-gallery__header">
     <div><h1>gallery</h1><p>{workspace?.name ?? "workspace"} · images and videos from a selected bot</p></div>
@@ -234,7 +248,7 @@
       {#each mediaPages as pageMedia, pageIndex (pageIndex)}
         <div class="output-grid__block" data-gallery-block={pageIndex}>
           {#each pageMedia as item, itemIndex (`${item.message.id}:${item.upload.id}`)}
-            <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={pageIndex === 0 && itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpand={expand} />
+            <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={pageIndex === 0 && itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpandImage={expandImage} onExpandVideo={expandVideo} />
           {/each}
         </div>
       {/each}
@@ -248,8 +262,11 @@
   {#if choosingDestination}
     <div class="output-gallery__scrim" role="presentation" onclick={() => (choosingDestination = false)}><section class="output-gallery__chooser" role="dialog" aria-modal="true" aria-label="Choose destination" onclick={(event) => event.stopPropagation()}><h2>add {queue.length} pending item{queue.length === 1 ? "" : "s"} to</h2><p>Choose the conversation whose draft should receive these uploads. Nothing will be sent.</p><div class="output-gallery__destinations">{#each channels as channel (channel.id)}<button onclick={() => void chooseDestination(channel.id)}>#{channel.name}</button>{/each}{#each directs as direct (direct.id)}<button onclick={() => void chooseDestination(direct.id)}>{labels[direct.id]}</button>{/each}</div><button class="output-gallery__button" onclick={() => (choosingDestination = false)}>cancel</button></section></div>
   {/if}
-  {#if expanded}
-    <div class="output-gallery__scrim" role="presentation" onclick={closeExpanded} onkeydown={(event) => event.key === "Escape" && closeExpanded()}><section class="output-gallery__lightbox" role="dialog" aria-modal="true" aria-label={`Expanded ${expanded.filename}`} tabindex="-1" onclick={(event) => event.stopPropagation()}>{#if /^video\//i.test(expanded.content_type)}<video src={uploadURL(expanded)} controls autoplay playsinline aria-label={expanded.filename}><track kind="captions" /></video>{:else}<img src={uploadURL(expanded)} alt={expanded.filename} />{/if}<button class="output-gallery__button" autofocus onclick={closeExpanded}>close</button></section></div>
+  {#if expandedImageIndex !== undefined}
+    <ImageViewer items={viewerItems} initialIndex={expandedImageIndex} onClose={() => (expandedImageIndex = undefined)} />
+  {/if}
+  {#if expandedVideo}
+    <div class="output-gallery__scrim" role="presentation" onclick={closeExpandedVideo} onkeydown={(event) => event.key === "Escape" && closeExpandedVideo()}><section class="output-gallery__video-viewer" role="dialog" aria-modal="true" aria-label={`Expanded ${expandedVideo.filename}`} tabindex="-1" onclick={(event) => event.stopPropagation()}><video src={uploadURL(expandedVideo)} controls autoplay playsinline aria-label={expandedVideo.filename}><track kind="captions" /></video><button class="output-gallery__button" autofocus onclick={closeExpandedVideo}>close</button></section></div>
   {/if}
 </section>
 <style>
@@ -279,8 +296,8 @@
   .output-gallery__queue { position: fixed; z-index: 4; right: 1rem; bottom: 1rem; display: flex; max-width: min(34rem, calc(100vw - 2rem)); flex-wrap: wrap; align-items: center; gap: .45rem; padding: .65rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-2); box-shadow: 0 8px 24px rgb(0 0 0 / .25); }
   .output-gallery__queued { max-width: 9rem; overflow: hidden; border: 0; background: transparent; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .output-gallery__scrim { position: fixed; z-index: 10; inset: 0; display: grid; padding: 1rem; background: rgb(0 0 0 / .7); place-items: center; }
-  .output-gallery__chooser, .output-gallery__lightbox { max-width: min(50rem, 100%); max-height: calc(100vh - 2rem); overflow: auto; padding: 1rem; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel); color: var(--text); }
+  .output-gallery__chooser, .output-gallery__video-viewer { max-width: min(50rem, 100%); max-height: calc(100vh - 2rem); overflow: auto; padding: 1rem; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel); color: var(--text); }
   .output-gallery__chooser h2 { margin-top: 0; } .output-gallery__destinations { display: grid; max-height: 50vh; margin: 1rem 0; overflow: auto; gap: .35rem; } .output-gallery__destinations button { padding: .6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; } .output-gallery__destinations button:hover { background: var(--hover-strong); }
-  .output-gallery__lightbox { display: grid; gap: .75rem; } .output-gallery__lightbox img, .output-gallery__lightbox video { display: block; max-width: min(90vw, 80rem); max-height: calc(100vh - 8rem); object-fit: contain; }
+  .output-gallery__video-viewer { display: grid; gap: .75rem; width: min(90vw, 80rem); } .output-gallery__video-viewer video { display: block; width: 100%; max-height: calc(100vh - 8rem); object-fit: contain; }
   @media (max-width: 720px) { .output-gallery__header { align-items: stretch; flex-direction: column; } .output-gallery__controls { align-items: stretch; } label { flex: 1 1 100%; } select { width: 100%; } .output-gallery__button { flex: 1; } .output-grid__block { grid-template-columns: 1fr; } }
 </style>

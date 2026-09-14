@@ -32,8 +32,10 @@ try {
   await server.listen();
   app = await electron.launch({
     executablePath: desktopRequire("electron"),
-    args: ["--no-sandbox", `--gallery-width=${process.env.GALLERY_WIDTH || 1100}`, `--gallery-height=${process.env.GALLERY_HEIGHT || 800}`, `${root}/main.cjs`],
-    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: "true" },
+    args: ["--no-sandbox", "--ozone-platform=x11", `--gallery-width=${process.env.GALLERY_WIDTH || 1100}`, `--gallery-height=${process.env.GALLERY_HEIGHT || 800}`, `${root}/main.cjs`],
+    // Electron checks the ozone backend before renderer startup. Explicit X11
+    // keeps this visual test private under Xvfb instead of touching Wayland.
+    env: { ...process.env, WAYLAND_DISPLAY: "", ELECTRON_DISABLE_SECURITY_WARNINGS: "true" },
   });
   const page = await app.firstWindow();
   const errors = [];
@@ -64,8 +66,10 @@ try {
       content_type: i % 2 ? "video/mp4" : "image/png",
       byte_size: 12,
       // Varied portrait/landscape fixture dimensions exercise reserved frames.
-      width: i % 3 === 0 ? 180 : 320,
-      height: i % 3 === 0 ? 320 : 180,
+      ...(i === 0 || i === 2 ? {} : {
+        width: i % 3 === 0 ? 180 : 320,
+        height: i % 3 === 0 ? 320 : 180,
+      }),
     }],
   }));
   let olderFails = true;
@@ -98,7 +102,9 @@ try {
         .map((m) => lateMetadata && m.id === "output-0" ? { ...m, attachments: m.attachments?.map((upload) => ({ ...upload, width: 640, height: 120 })) } : m);
       json = { outputs, next_cursor: offset + limit < media.length ? "older" : null };
     } else if (path.startsWith("/api/uploads/")) {
-      return route.fulfill({ contentType: "image/png", body: await readFile(`${root}/preview.png`) });
+      const id = path.split("/").at(-1);
+      const fixture = id === "media-0" ? "portrait.svg" : id === "media-2" ? "landscape.svg" : "preview.png";
+      return route.fulfill({ contentType: fixture.endsWith("svg") ? "image/svg+xml" : "image/png", body: await readFile(`${root}/${fixture}`) });
     } else if (path.startsWith("/api/messages/"))
       json = { message: messages.find((m) => m.id === path.split("/").at(-1)) };
     else return route.fulfill({ status: 404 });
@@ -149,6 +155,9 @@ try {
   await expect(page.locator(".output-card img").first()).toBeVisible();
   await expect(page.locator("video").first()).toBeVisible();
   await expect.poll(() => page.locator(".output-card img").first().evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect.poll(() => page.locator('[data-output-id="output-2"] img').evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect.poll(() => page.locator('[data-output-id="output-0"] img').evaluate((image) => image.getBoundingClientRect().height > image.getBoundingClientRect().width)).toBe(true);
+  await expect.poll(() => page.locator('[data-output-id="output-2"] img').evaluate((image) => image.getBoundingClientRect().width > image.getBoundingClientRect().height)).toBe(true);
   await new Promise((resolve) => setTimeout(resolve, 300));
   await captureScreenshot("gallery-desktop.png");
   if (process.env.GALLERY_NARROW === "true") {
@@ -158,9 +167,20 @@ try {
   const imageOpener = page.getByLabel("Open image from #outputs").first();
   await imageOpener.focus();
   await imageOpener.click();
-  await expect(page.getByRole("dialog", { name: /Expanded image-0/ })).toBeVisible();
+  const viewer = page.getByRole("dialog", { name: /Image viewer:/ });
+  await expect(viewer).toBeVisible();
+  await expect(viewer.getByLabel("Image 1 of 30")).toBeVisible();
+  await expect.poll(() => viewer.locator("img").evaluate((image) => {
+    const bounds = image.getBoundingClientRect();
+    return bounds.width <= innerWidth && bounds.height <= innerHeight && bounds.height > bounds.width;
+  })).toBe(true);
+  await viewer.getByLabel("Next image").click();
+  await expect(viewer.getByLabel("Image 2 of 30")).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await expect(viewer.getByLabel("Image 3 of 30")).toBeVisible();
+  await captureScreenshot("gallery-image-viewer.png");
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: /Expanded image-0/ })).toHaveCount(0);
+  await expect(viewer).toHaveCount(0);
   await expect(imageOpener).toBeFocused();
   await imageOpener.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Add to pending message" }).click();
@@ -175,7 +195,9 @@ try {
   await expect(page.locator(".output-card")).toHaveCount(60);
   const tilePositions = () => page.locator('[data-gallery-block="0"] [data-output-id]').evaluateAll((cards) => cards.slice(0, 3).map((card) => ({ id: card.getAttribute("data-output-id"), x: card.offsetLeft, y: card.offsetTop })));
   const firstBlockPositions = await tilePositions();
-  await page.getByRole("button", { name: "load older media" }).click();
+  const loadOlder = page.getByRole("button", { name: "load older media" });
+  await expect(loadOlder).toBeEnabled();
+  await loadOlder.evaluate((button) => button.click());
   await expect(page.locator(".output-card")).toHaveCount(65);
   assert.deepEqual(await tilePositions(), firstBlockPositions, "appending a page must not move old masonry tiles");
   lateMetadata = true;

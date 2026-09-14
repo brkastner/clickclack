@@ -3,20 +3,28 @@
   import { uploadURL } from "../../lib/uploads";
   import type { Message, Upload } from "../../lib/types";
 
-  let { message, upload, label, eager, onOpen, onAddToMessage, onExpand }: {
+  let { message, upload, label, eager, onOpen, onAddToMessage, onExpandImage, onExpandVideo }: {
     message: Message; upload: Upload; label: string; eager: boolean;
     onOpen: (message: Message) => void;
     onAddToMessage: (upload: Upload) => void;
-    onExpand: (upload: Upload) => void;
+    onExpandImage: (upload: Upload) => void;
+    onExpandVideo: (upload: Upload) => void;
   } = $props();
   let menu = $state(false);
   let menuButton: HTMLButtonElement;
   const mediaURL = $derived(uploadURL(upload));
   const isVideo = $derived(upload.content_type.toLowerCase().startsWith("video/"));
-  // Reserve this card's frame once. Later metadata revalidation must not make
-  // already-rendered tiles reshuffle their page block.
-  let reservedRatio = $state(upload.width && upload.height ? `${upload.width} / ${upload.height}` : "4 / 3");
+  // Server metadata is authoritative when present. Without it, let the media
+  // establish its natural ratio rather than putting a portrait in a 4:3 crop.
+  let reservedRatio = $state(upload.width && upload.height ? `${upload.width} / ${upload.height}` : "");
+  const mediaStyle = $derived(reservedRatio ? `aspect-ratio: ${reservedRatio}` : "");
   const alt = $derived(isVideo ? "" : `Image from ${label}`);
+  function resolveImageRatio(image: HTMLImageElement) {
+    if (!reservedRatio && image.naturalWidth && image.naturalHeight) reservedRatio = `${image.naturalWidth} / ${image.naturalHeight}`;
+  }
+  function resolveVideoRatio(video: HTMLVideoElement) {
+    if (!reservedRatio && video.videoWidth && video.videoHeight) reservedRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  }
   function showMenu(event: MouseEvent | KeyboardEvent) { event.preventDefault(); menu = true; void tick(); }
   function closeMenu() { menu = false; void tick().then(() => menuButton?.focus({ preventScroll: true })); }
   function keydown(event: KeyboardEvent) {
@@ -26,19 +34,19 @@
 </script>
 
 <article class="output-card" data-output-id={message.id}>
-  <div class="output-card__media" style={`aspect-ratio: ${reservedRatio}`}> 
+  <div class="output-card__media" style={mediaStyle}>
     {#if isVideo}
-      <video src={mediaURL} preload="metadata" playsinline controls controlslist="nodownload" aria-label={`Video from ${label}`} oncontextmenu={showMenu} onkeydown={keydown}><track kind="captions" /></video>
+      <video src={mediaURL} preload="metadata" playsinline controls controlslist="nodownload" aria-label={`Video from ${label}`} onloadedmetadata={(event) => resolveVideoRatio(event.currentTarget)} oncontextmenu={showMenu} onkeydown={keydown}><track kind="captions" /></video>
     {:else}
-      <button class="output-card__expand" type="button" aria-label={`Open image from ${label}`} onclick={() => onExpand(upload)} oncontextmenu={showMenu} onkeydown={keydown}>
-        <img src={mediaURL} {alt} loading={eager ? "eager" : "lazy"} decoding="async" width={upload.width || undefined} height={upload.height || undefined} />
+      <button class="output-card__expand" type="button" aria-label={`Open image from ${label}`} onclick={() => onExpandImage(upload)} oncontextmenu={showMenu} onkeydown={keydown}>
+        <img src={mediaURL} {alt} loading={eager ? "eager" : "lazy"} decoding="async" width={upload.width || undefined} height={upload.height || undefined} onload={(event) => resolveImageRatio(event.currentTarget)} />
       </button>
     {/if}
   </div>
   <footer>
     <div class="output-card__meta"><span>{label}</span><time datetime={message.created_at}>{new Date(message.created_at).toLocaleString()}</time></div>
     <div class="output-card__actions">
-      {#if isVideo}<button type="button" class="output-card__source" aria-label={`Open video from ${label}`} onclick={() => onExpand(upload)}>expand</button>{/if}
+      {#if isVideo}<button type="button" class="output-card__source" aria-label={`Open video from ${label}`} onclick={() => onExpandVideo(upload)}>expand</button>{/if}
       <button bind:this={menuButton} type="button" class="output-card__source" aria-label={`Media options for ${upload.filename}`} aria-haspopup="menu" aria-expanded={menu} aria-keyshortcuts="Shift+F10" onclick={() => (menu = !menu)} onkeydown={keydown}>options</button>
       <button type="button" class="output-card__source" data-output-focus={message.id} onclick={() => onOpen(message)}>open source</button>
     </div>
@@ -53,9 +61,9 @@
 
 <style>
   .output-card { position: relative; min-width: 0; overflow: visible; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
-  .output-card__media { display: grid; min-height: 12rem; max-height: min(48vh,31rem); overflow: hidden; background: var(--bg); place-items: center; }
+  .output-card__media { display: grid; min-width: 0; background: var(--bg); place-items: center; }
   .output-card__expand { display:block; width:100%; padding:0; border:0; background:transparent; cursor:zoom-in; }
-  img, video { display:block; width:100%; height:100%; max-height:min(48vh,31rem); object-fit:contain; background:var(--bg); }
+  img, video { display:block; width:100%; height:auto; max-width:100%; object-fit:contain; background:var(--bg); }
   footer { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.7rem .8rem; border-top:1px solid var(--line); }
   .output-card__meta { min-width:0; color:var(--muted); font-size:.76rem; } .output-card__meta span,time { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .output-card__actions { display:flex; gap:.35rem; flex:none; }
