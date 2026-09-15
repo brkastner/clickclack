@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Added sharing into ClickClack from Android's share sheet. The app claims
+  links, text, and images, one or several at a time; shared content fills the
+  composer of the open conversation and waits there rather than being sent, so
+  posting it stays deliberate. Shared bytes cross the bridge in chunks, because
+  the web app is loaded from a real server origin and can read neither the
+  `content://` URI the share sheet produced nor Capacitor's own file route,
+  which sends no CORS header; chunking keeps memory flat and adds no size limit
+  below the server's upload ceiling.
+- Branded the Android app with the kasmos mark: adaptive launcher icon, splash
+  art, and the launcher label. The app id and both URL schemes are unchanged, so
+  every deep link already issued still resolves.
 - Took the content type of a file pasted from a file manager from the file's own bytes instead of its extension. Images saved from sites that serve WebP are routinely written with a `.jpg` name, and the desktop paste handler checked the bytes against the type the extension claimed, so every misnamed file was discarded without a message. Copying ten such images produced a single attachment, the one file whose extension happened to be honest. A file whose contents are not a supported image is still rejected.
 - Derived the upload idempotency nonce from the file's contents rather than from a random value minted when the file joins the composer. The server already answers a repeated nonce with the upload it is holding instead of storing the bytes again, but the old nonce only ever matched a retry of one composer entry, so a file that left the composer and was added again uploaded a second time and left the first copy attached to nothing. The nonce is scoped to the workspace, because the server treats a nonce belonging to an upload in another workspace as a conflict.
 - Split per-user workspace upload quotas into two tiers so posting attachments no longer exhausts a budget that never refilled. Uploads referenced by a live message are released from the tight orphan tier and counted only against a much larger total tier, and deleting a message returns its upload to the orphan tier. Previously the quota counted every upload a user had ever made, so accounts that post attachments regularly, bots in particular, were permanently blocked once they reached the limit. Configure the new ceiling with `CLICKCLACK_UPLOAD_TOTAL_QUOTA_BYTES` and `CLICKCLACK_UPLOAD_TOTAL_QUOTA_COUNT`. Profile avatars and workspace icons reference their upload by URL rather than through a message attachment, and are excluded from the orphan tier for as long as they remain in use.

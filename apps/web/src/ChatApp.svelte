@@ -57,6 +57,8 @@
   } from "./lib/uploads";
   import { registerDismissLayer } from "./lib/dismissal";
   import { isNativeMobile } from "./lib/native";
+  import { onSharedContent, releaseShare, resolveShare } from "./lib/native-share";
+  import type { SharedPayload } from "./lib/native-share";
   import {
     beginNativeGitHubSignIn,
     onNativeSignInStatus,
@@ -753,6 +755,9 @@
     const stopNativeSignInStatus = onNativeSignInStatus((status) => {
       nativeAuthStatus = nativeSignInMessage(status);
     });
+    const stopSharedContent = onSharedContent((share) => {
+      void receiveSharedContent(share);
+    });
     mobileNavMedia.addEventListener("change", handleMobileNavBreakpoint);
     return () => {
       mobileNavMedia.removeEventListener("change", handleMobileNavBreakpoint);
@@ -760,6 +765,7 @@
       stopDesktopQuickCompose?.();
       releaseDismissLayer();
       stopNativeSignInStatus();
+      stopSharedContent();
     };
   });
 
@@ -4040,6 +4046,47 @@
       }
     }
     await Promise.all(Array.from({ length: Math.min(2, uploadKeys.length) }, uploadNext));
+  }
+
+  /**
+   * Take what the operating system's share sheet handed the app.
+   *
+   * The share lands in whatever conversation is already open. Choosing a
+   * destination is a picker this does not have yet, and dropping someone into a
+   * conversation they did not pick would be worse than leaving the payload in
+   * the composer they are looking at, where sending it is still deliberate.
+   *
+   * Nothing is sent. Shared content fills the composer and waits, because a
+   * share sheet is an intent to compose, not an intent to post.
+   */
+  async function receiveSharedContent(share: SharedPayload) {
+    const resolved = await resolveShare(share);
+    // The shell holds the only copy until this returns, so release only after
+    // the files are in hand.
+    await releaseShare(share.id);
+    if (resolved.text) {
+      messageBody = messageBody ? `${messageBody}\n${resolved.text}` : resolved.text;
+    }
+    if (resolved.files.length > 0) {
+      if (selectedWorkspaceID) {
+        await enqueueFiles(resolved.files);
+      } else {
+        // Signed out, or no workspace chosen yet: there is nowhere to upload to,
+        // and silently discarding someone's photo is not acceptable.
+        composerNotice = {
+          kind: "error",
+          text: "Open a conversation before sharing files into ClickClack.",
+        };
+      }
+    }
+    const skipped = share.items.length - resolved.files.length;
+    if (skipped > 0) {
+      composerNotice = {
+        kind: "error",
+        text: `${skipped} shared file${skipped === 1 ? " could" : "s could"} not be read.`,
+      };
+    }
+    focusActiveComposer();
   }
 
   async function uploadFiles(event: Event) {

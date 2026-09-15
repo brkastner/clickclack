@@ -7,13 +7,16 @@ import { fileURLToPath } from "node:url";
 import {
   androidActivityPath,
   androidManifestHasDeepLink,
+  androidManifestHasShareIntent,
   copyResources,
   renderAndroidActivity,
+  SHARE_INTENTS,
   withAndroidAppName,
   withAndroidAuthIntentFilter,
   withIOSURLSchemes,
   withAndroidCustomURLScheme,
   withAndroidDeepLinkIntentFilter,
+  withAndroidShareIntentFilters,
   withIOSURLScheme,
 } from "./configure-native.mjs";
 
@@ -215,6 +218,41 @@ test("the launcher label is branded without touching the app id or scheme", () =
 test("a strings.xml without an activity label gains one", () => {
   const minimal = "<resources>\n</resources>\n";
   assert.match(withAndroidAppName(minimal, "касии"), /title_activity_main">касии</);
+});
+
+test("the share sheet is claimed for plain text and images", () => {
+  const patched = withAndroidShareIntentFilters(MANIFEST);
+  for (const intent of SHARE_INTENTS) {
+    assert.ok(androidManifestHasShareIntent(patched, intent), `missing ${intent.mimeType}`);
+  }
+  assert.equal((patched.match(/<intent-filter>/g) ?? []).length, 4);
+  assert.match(patched, /android.intent.action.SEND_MULTIPLE/);
+  // The launcher filter must survive, or the app disappears from the drawer.
+  assert.match(patched, /android.intent.category.LAUNCHER/);
+});
+
+test("share filters are not duplicated on a second run", () => {
+  const once = withAndroidShareIntentFilters(MANIFEST);
+  assert.equal(withAndroidShareIntentFilters(once), once);
+});
+
+test("each MIME type is claimed by its own filter", () => {
+  // Android intersects a filter's actions, categories and data, so one filter
+  // holding both actions and both types would also claim SEND_MULTIPLE of
+  // text/plain, which nothing handles.
+  const patched = withAndroidShareIntentFilters(MANIFEST);
+  const blocks = patched.match(/<intent-filter>[\s\S]*?<\/intent-filter>/g) ?? [];
+  for (const block of blocks) {
+    assert.ok((block.match(/<data /g) ?? []).length <= 1, "a filter claims two data types");
+    assert.ok((block.match(/<action /g) ?? []).length <= 1, "a filter claims two actions");
+  }
+});
+
+test("a partially patched manifest gains only what it is missing", () => {
+  const withText = withAndroidShareIntentFilters(MANIFEST, [SHARE_INTENTS[0]]);
+  const full = withAndroidShareIntentFilters(withText);
+  assert.equal((full.match(/text\/plain/g) ?? []).length, 1);
+  assert.equal((full.match(/image\/\*/g) ?? []).length, 2);
 });
 
 test("branded resources are copied over the template and then left alone", (t) => {

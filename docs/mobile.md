@@ -34,6 +34,10 @@ a separate build of the product that can drift from it.
 - **System chrome that follows the board.** The status bar tracks the active
   color mode, including the system-follows setting, and the keyboard resizes the
   web view so the composer rides above it instead of being covered by it.
+- **Sharing into ClickClack.** ClickClack appears in Android's share sheet for
+  links, text, and images, one or several at a time. Shared content fills the
+  composer of the conversation already open and waits there — a share sheet is
+  an intent to compose, not an intent to post — so sending it stays deliberate.
 - **In-app stays in-app.** Navigation is confined to the configured server;
   every other link opens in the system browser.
 
@@ -79,8 +83,30 @@ CLICKCLACK_SERVER_URL=https://chat.example.com pnpm mobile:sync
 `mobile:ios`/`mobile:android` and `mobile:sync` run
 `scripts/configure-native.mjs`, which registers the app's URL schemes in the iOS
 `Info.plist` and the Android manifest — `clickclack://` for conversation links
-and `chat.clickclack.desktop:` for the sign-in callback. It is idempotent, so
-the native projects stay disposable: delete them and regenerate at any time.
+and `chat.clickclack.desktop:` for the sign-in callback — claims the Android
+share sheet, installs the branded launcher and splash art, sets the launcher
+label, and installs the app's own Java. It is idempotent, so the native
+projects stay disposable: delete them and regenerate at any time.
+
+## Branding
+
+The launcher icon and splash art are rendered from one source mark,
+`apps/mobile/assets/brand/kasmos-k.png`, into `apps/mobile/native/android/res`,
+which is tracked. `configure-native.mjs` copies that over Capacitor's own art,
+so installing the brand needs no image tooling and `pnpm mobile:sync` works on
+a machine that has never rendered it.
+
+Regenerating is a separate step, needed only when the source mark changes, and
+it requires ImageMagick:
+
+```sh
+node apps/mobile/scripts/generate-android-brand.mjs
+pnpm mobile:sync
+```
+
+The app id and both URL schemes are deliberately not part of the branding. The
+server, the desktop client, and every deep link already issued address this app
+by those rather than by its name, so only the label changes.
 
 ## Sign in
 
@@ -205,6 +231,21 @@ credentials of its own. Sessions live in the web view's cookie store for the
 configured origin, exactly as they do in a browser.
 
 ## Limits
+
+Sharing has no destination picker: the payload lands in the conversation that
+is already open, and shared files need a workspace to upload to, so sharing
+while signed out or before a workspace is chosen reports that rather than
+discarding the payload. The app claims only `text/plain` and `image/*` from the
+share sheet. Every other type is left to the apps that handle it, because the
+composer's upload path accepts images and claiming more would put ClickClack in
+share sheets for files it would then refuse.
+
+Shared bytes cross the bridge in 1 MB chunks rather than as one base64 string.
+The web app is served from a real server origin, so it can read neither the
+`content://` URI the share sheet produced nor Capacitor's `_capacitor_file_`
+route, which sends no `Access-Control-Allow-Origin` header and is therefore
+cross-origin. Chunking keeps memory flat and imposes no size limit below the
+server's own upload ceiling.
 
 The shell requires a reachable server; there is no offline mode, and a build
 without a server URL shows a short page saying so. Sign in with OpenClaw ID is

@@ -43,6 +43,12 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Registration has to precede super.onCreate: BridgeActivity builds the
+        // bridge there, and a plugin added afterwards is not in it. The share
+        // plugin must exist by then for another reason too — BridgeActivity
+        // replays the launch intent as soon as the bridge is created, and that
+        // replay is how a cold-start share arrives.
+        registerPlugin(ShareTargetPlugin.class);
         super.onCreate(savedInstanceState);
         Bridge bridge = getBridge();
         // BridgeActivity.onCreate returns early without a bridge when the
