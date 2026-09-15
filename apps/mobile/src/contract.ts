@@ -9,7 +9,20 @@
  */
 
 export const APP_ID = "chat.clickclack.mobile";
-export const APP_NAME = "ClickClack";
+
+/**
+ * The launcher label. Only the label is branded: the app id and both URL
+ * schemes stay as they are, because the server, the desktop client, and every
+ * already-issued deep link address this app by those and not by its name.
+ */
+export const APP_NAME = "касии";
+
+/**
+ * The shell's chrome color, shared by the native background, the splash field,
+ * and the adaptive icon's background layer so the app never flashes a color the
+ * web app does not use.
+ */
+export const BRAND_BACKGROUND = "#131419";
 
 /**
  * Deep-link scheme. This intentionally matches the desktop client's legacy

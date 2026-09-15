@@ -1,5 +1,11 @@
 import type { CapacitorConfig } from "@capacitor/cli";
-import { APP_ID, APP_NAME, mobileServerConfig, serverURLFromEnv } from "./src/contract.ts";
+import {
+  APP_ID,
+  APP_NAME,
+  BRAND_BACKGROUND,
+  mobileServerConfig,
+  serverURLFromEnv,
+} from "./src/contract.ts";
 
 const server = mobileServerConfig(serverURLFromEnv(process.env));
 
@@ -12,10 +18,10 @@ const config: CapacitorConfig = {
   server,
   android: {
     allowMixedContent: false,
-    backgroundColor: "#131419",
+    backgroundColor: BRAND_BACKGROUND,
   },
   ios: {
-    backgroundColor: "#131419",
+    backgroundColor: BRAND_BACKGROUND,
     // "always" keeps the scroll view from double-counting the status bar inset,
     // which otherwise leaves a gap above the channel header.
     contentInset: "always",
@@ -30,7 +36,7 @@ const config: CapacitorConfig = {
       resizeOnFullScreen: true,
     },
     SplashScreen: {
-      backgroundColor: "#131419",
+      backgroundColor: BRAND_BACKGROUND,
       // The web app is remote, so never make splash dismissal depend on web-side
       // code: an older self-hosted server would leave the shell stuck on it.
       launchAutoHide: true,

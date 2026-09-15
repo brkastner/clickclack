@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   androidActivityPath,
   androidManifestHasDeepLink,
+  copyResources,
   renderAndroidActivity,
+  withAndroidAppName,
   withAndroidAuthIntentFilter,
   withIOSURLSchemes,
   withAndroidCustomURLScheme,
@@ -197,4 +200,52 @@ test("the shipped activity closes the port gap it exists for", () => {
   assert.match(TEMPLATE, /equalsIgnoreCase\(allowed\.getHost\(\)\)/);
   // Default ports must resolve so https://host and https://host:443 agree.
   assert.match(TEMPLATE, /"http"\.equalsIgnoreCase\(url\.getScheme\(\)\) \? 80 : 443/);
+});
+
+test("the launcher label is branded without touching the app id or scheme", () => {
+  const patched = withAndroidAppName(STRINGS, "касии");
+  assert.match(patched, /<string name="app_name">касии<\/string>/);
+  // The activity carries its own label, and Android shows that one in Recents.
+  assert.match(patched, /<string name="title_activity_main">касии<\/string>/);
+  assert.equal(withAndroidAppName(patched, "касии"), patched);
+  // Renaming the app must not disturb what addresses it.
+  assert.match(patched, /<string name="custom_url_scheme">chat\.clickclack\.mobile<\/string>/);
+});
+
+test("a strings.xml without an activity label gains one", () => {
+  const minimal = "<resources>\n</resources>\n";
+  assert.match(withAndroidAppName(minimal, "касии"), /title_activity_main">касии</);
+});
+
+test("branded resources are copied over the template and then left alone", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clickclack-res-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const source = path.join(dir, "native");
+  const destination = path.join(dir, "res");
+  fs.mkdirSync(path.join(source, "mipmap-mdpi"), { recursive: true });
+  fs.writeFileSync(path.join(source, "mipmap-mdpi/ic_launcher.png"), "branded");
+  fs.mkdirSync(path.join(destination, "mipmap-mdpi"), { recursive: true });
+  fs.writeFileSync(path.join(destination, "mipmap-mdpi/ic_launcher.png"), "capacitor");
+  fs.writeFileSync(path.join(destination, "mipmap-mdpi/keep.png"), "untouched");
+
+  assert.deepEqual(
+    copyResources(source, destination).map((file) => path.relative(destination, file)),
+    [path.join("mipmap-mdpi", "ic_launcher.png")],
+  );
+  const installed = path.join(destination, "mipmap-mdpi/ic_launcher.png");
+  assert.equal(fs.readFileSync(installed, "utf8"), "branded");
+  // Resources the brand does not define stay where Capacitor put them.
+  assert.equal(
+    fs.readFileSync(path.join(destination, "mipmap-mdpi/keep.png"), "utf8"),
+    "untouched",
+  );
+  // A second pass reports no work, which is what makes `pnpm sync` cheap.
+  assert.deepEqual(copyResources(source, destination), []);
+});
+
+test("copying a brand that was never generated is not an error", () => {
+  assert.deepEqual(
+    copyResources(path.join(os.tmpdir(), "clickclack-missing-brand"), os.tmpdir()),
+    [],
+  );
 });

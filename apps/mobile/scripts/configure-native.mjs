@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 /**
- * Register the ClickClack deep-link scheme in the generated native projects.
+ * Brand the generated native projects and register what they must claim.
  *
- * `cap add` writes the stock Capacitor templates, which register the app id as
- * the custom URL scheme on Android and register nothing at all on iOS. Both need
- * `clickclack://`, the scheme the desktop client and server-issued notification
- * links already use. Running this after `cap add` or `cap sync` is idempotent,
- * so the native projects stay disposable and reproducible.
+ * `cap add` writes the stock Capacitor templates: they register the app id as
+ * the custom URL scheme on Android, register nothing at all on iOS, and ship
+ * Capacitor's own launcher art. This installs the
+ * ClickClack schemes, the tracked brand resources, and the launcher label over
+ * them. Running it after `cap add` or `cap sync` is
+ * idempotent, so the native projects stay disposable and reproducible.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   APP_ID,
+  APP_NAME,
   APP_URL_SCHEME,
   APP_URL_SCHEMES,
   AUTH_URL_SCHEME,
@@ -22,16 +24,38 @@ import {
 
 const IOS_URL_NAME = `${APP_ID}.deeplink`;
 
-/** Point Capacitor's `custom_url_scheme` string at the ClickClack scheme. */
-export function withAndroidCustomURLScheme(stringsXML, scheme = APP_URL_SCHEME) {
-  const entry = /(<string\s+name="custom_url_scheme">)([^<]*)(<\/string>)/;
+/**
+ * Set a string resource, adding it when the template has no such entry. Both
+ * the URL scheme and the launcher label are ordinary strings.xml entries, so
+ * they share this.
+ */
+export function withAndroidString(stringsXML, name, value) {
+  const entry = new RegExp(`(<string\\s+name="${name}">)([^<]*)(</string>)`);
   if (entry.test(stringsXML)) {
-    return stringsXML.replace(entry, `$1${scheme}$3`);
+    return stringsXML.replace(entry, `$1${value}$3`);
   }
   const closing = stringsXML.lastIndexOf("</resources>");
   if (closing === -1) throw new Error("strings.xml has no <resources> element");
-  const line = `    <string name="custom_url_scheme">${scheme}</string>\n`;
+  const line = `    <string name="${name}">${value}</string>\n`;
   return `${stringsXML.slice(0, closing)}${line}${stringsXML.slice(closing)}`;
+}
+
+/** Point Capacitor's `custom_url_scheme` string at the ClickClack scheme. */
+export function withAndroidCustomURLScheme(stringsXML, scheme = APP_URL_SCHEME) {
+  return withAndroidString(stringsXML, "custom_url_scheme", scheme);
+}
+
+/**
+ * Brand the launcher label. `cap add` writes the name from capacitor.config,
+ * but `cap sync` does not revisit strings.xml, so a name change after the
+ * project exists would otherwise only reach a freshly recreated one.
+ */
+export function withAndroidAppName(stringsXML, name = APP_NAME) {
+  return withAndroidString(
+    withAndroidString(stringsXML, "app_name", name),
+    "title_activity_main",
+    name,
+  );
 }
 
 /**
@@ -47,8 +71,11 @@ export function androidManifestHasDeepLink(manifestXML, scheme = APP_URL_SCHEME)
   );
 }
 
-export function withAndroidDeepLinkIntentFilter(manifestXML, scheme = APP_URL_SCHEME) {
-  if (androidManifestHasDeepLink(manifestXML, scheme)) return manifestXML;
+/**
+ * Insert one intent filter as the last child of MainActivity. Callers decide
+ * whether the filter is already there; this only places it.
+ */
+function withActivityIntentFilter(manifestXML, lines) {
   const activity = manifestXML.indexOf(".MainActivity");
   if (activity === -1) throw new Error("AndroidManifest.xml has no MainActivity");
   const closing = manifestXML.indexOf("</activity>", activity);
@@ -57,10 +84,7 @@ export function withAndroidDeepLinkIntentFilter(manifestXML, scheme = APP_URL_SC
     "",
     "",
     "            <intent-filter>",
-    '                <action android:name="android.intent.action.VIEW" />',
-    '                <category android:name="android.intent.category.DEFAULT" />',
-    '                <category android:name="android.intent.category.BROWSABLE" />',
-    `                <data android:scheme="${scheme}" />`,
+    ...lines.map((line) => `                ${line}`),
     "            </intent-filter>",
     "",
     "        ",
@@ -69,6 +93,16 @@ export function withAndroidDeepLinkIntentFilter(manifestXML, scheme = APP_URL_SC
   // whitespace so the filter lands between exactly one blank line on each side.
   const head = manifestXML.slice(0, closing).replace(/\s*$/, "");
   return `${head}${filter}${manifestXML.slice(closing)}`;
+}
+
+export function withAndroidDeepLinkIntentFilter(manifestXML, scheme = APP_URL_SCHEME) {
+  if (androidManifestHasDeepLink(manifestXML, scheme)) return manifestXML;
+  return withActivityIntentFilter(manifestXML, [
+    '<action android:name="android.intent.action.VIEW" />',
+    '<category android:name="android.intent.category.DEFAULT" />',
+    '<category android:name="android.intent.category.BROWSABLE" />',
+    `<data android:scheme="${scheme}" />`,
+  ]);
 }
 
 /**
@@ -138,6 +172,32 @@ export function renderAndroidActivity(template, origin, appID = APP_ID) {
   return rendered;
 }
 
+/**
+ * Copy the tracked branded resources over the stock Capacitor art. The files
+ * live under native/android/res in the same layout the project expects, so this
+ * is a plain recursive copy rather than a manifest of special cases. Rendering
+ * them needs ImageMagick; installing them deliberately does not, so `pnpm sync`
+ * works on a machine that has never run the generator.
+ */
+export function copyResources(source, destination) {
+  const copied = [];
+  if (!fs.existsSync(source)) return copied;
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name);
+    const to = path.join(destination, entry.name);
+    if (entry.isDirectory()) {
+      copied.push(...copyResources(from, to));
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    fs.mkdirSync(destination, { recursive: true });
+    if (fs.existsSync(to) && fs.readFileSync(to).equals(fs.readFileSync(from))) continue;
+    fs.copyFileSync(from, to);
+    copied.push(to);
+  }
+  return copied;
+}
+
 function patch(file, transform, label) {
   if (!fs.existsSync(file)) return false;
   const before = fs.readFileSync(file, "utf8");
@@ -155,10 +215,17 @@ function main() {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const android = patch(
     path.join(root, "android/app/src/main/res/values/strings.xml"),
-    (xml) => withAndroidCustomURLScheme(xml),
+    (xml) => withAndroidAppName(withAndroidCustomURLScheme(xml)),
     "android strings.xml",
   );
   if (android) {
+    const res = path.join(root, "android/app/src/main/res");
+    const branded = copyResources(path.join(root, "native/android/res"), res);
+    if (branded.length === 0) {
+      console.log("android res: brand art already installed");
+    } else {
+      console.log(`android res: installed ${branded.length} branded file(s)`);
+    }
     const template = path.join(root, "native/android/MainActivity.java");
     const activity = path.join(root, androidActivityPath());
     if (fs.existsSync(template) && fs.existsSync(activity)) {
