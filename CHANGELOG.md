@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Kept sidebar context stable while work is moving: a collapsed Channels section
+  puts its selected, unread, and currently working channels above the persona
+  shelf, and the sidebar restores its per-workspace scroll position after an
+  automatic page refresh.
 - Added `pnpm mobile:install` for the personal Android deployment path. It
   discovers the server and phone from live Tailscale status, keeps adb on a
   stable tailnet port after the one-time Android pairing ceremony, selects a

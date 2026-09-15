@@ -6,6 +6,7 @@
   import { directConversationForUser, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
   import type { PersonaChannelPins } from "../../lib/personaNavigation";
   import { personaUnreadSummary } from "../../lib/personaUnread";
+  import { collapsedAttentionLeadsPersonas } from "../../lib/sidebar-sections";
   import type { Channel, DirectConversation, User } from "../../lib/types";
   import Avatar from "../avatar/Avatar.svelte";
 
@@ -99,6 +100,9 @@
   const priorityChannels = $derived(visibleChannels.filter((channel) =>
     (channel.id === selectedChannelID && !selectedDirectID) || (channel.unread_count || 0) > 0 || workingConversationIDs.has(channel.id),
   ));
+  const attentionLeadsPersonas = $derived(
+    variant === "active" && collapsedAttentionLeadsPersonas(expanded, priorityChannels.length),
+  );
   const listID = $derived(variant === "archived" ? "sidebar-archived-channels-list" : "sidebar-channels-list");
   const orderInstructionsID = $derived(variant === "archived" ? "archived-channel-order-instructions" : "channel-order-instructions");
 
@@ -285,9 +289,7 @@
   </div>
 {/snippet}
 
-{#if variant === "active" || archivedChannels.length > 0}
-<section class="nav-section sidebar-channel-navigation" class:collapsed={!expanded}>
-  {#if variant === "active"}
+{#snippet personaShelf()}
   <div class="sidebar-profile-groups">
     {#each botGroups as group (group.profile.bot_user_id)}
       {@const conversation = directConversationForUser(directConversations, group.profile.bot_user_id, currentUserID)}
@@ -379,6 +381,12 @@
       </section>
     {/each}
   </div>
+{/snippet}
+
+{#if variant === "active" || archivedChannels.length > 0}
+<section class="nav-section sidebar-channel-navigation" class:collapsed={!expanded}>
+  {#if variant === "active" && !attentionLeadsPersonas}
+    {@render personaShelf()}
   {/if}
 
   {#if variant === "active"}
@@ -416,5 +424,8 @@
     {/if}
     <span class="sr-only" role="status" aria-live="polite">{moveAnnouncement}</span>
   </div>
+  {#if attentionLeadsPersonas}
+    {@render personaShelf()}
+  {/if}
 </section>
 {/if}

@@ -27,7 +27,7 @@
   <output data-testid="events">{JSON.stringify(events)}</output>
   <output data-testid="selection">{selectedChannelID}/{selectedDirectID}</output>
 </div>
-<div style="height: 760px; width: 320px" data-testid="sidebar-shell">
+<div style="height: 320px; width: 320px" data-testid="sidebar-shell">
 <Sidebar {workspaceID} {currentUser} {channels} {selectedChannelID} {selectedDirectID}
   workspaces={[]} createWorkspaceName="" showWorkspaceCreate={false} connected={true} showHeader={false}
   directConversations={[{ id: "dm_one", route_id: "d_one", workspace_id: workspaceID, created_at: "2026-01-01", members: [currentUser, people[0]], unread_count: 3, can_send: true }]}
@@ -39,3 +39,7 @@
   onOpenProfile={noop} onOpenSettings={noop} onSelectWorkspace={noop} onToggleWorkspaceCreate={noop}
   onWorkspaceName={noop} onCreateWorkspace={noop} onOpenWorkspaceSettings={noop} />
 </div>
+
+<style>
+  :global(.sidebar) { height: 320px; }
+</style>

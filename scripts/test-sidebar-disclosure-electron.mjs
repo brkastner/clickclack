@@ -30,6 +30,14 @@ try {
   await expect(alpha).toHaveAttribute("aria-expanded", "true");
   const selection = await page.getByTestId("selection").textContent();
   const unread = await beta.locator('.persona-unread-stack').textContent();
+  const sidebarScroll = page.locator('.sidebar-scroll');
+  const maxScroll = await sidebarScroll.evaluate(el => el.scrollHeight - el.clientHeight);
+  assert.ok(maxScroll > 100, `fixture must overflow, got ${maxScroll}px`);
+  const expectedScrollTop = Math.min(180, maxScroll);
+  await sidebarScroll.evaluate((el, top) => { el.scrollTop = top; }, expectedScrollTop);
+  assert.equal(await sidebarScroll.evaluate(el => el.scrollTop), expectedScrollTop);
+  await page.reload();
+  await expect.poll(() => sidebarScroll.evaluate(el => el.scrollTop)).toBe(expectedScrollTop);
   await alpha.click();
   await expect(alpha).toHaveAttribute("aria-expanded", "false");
   await expect(list).toBeHidden();

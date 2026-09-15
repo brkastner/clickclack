@@ -1,7 +1,15 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { DEFAULT_HOME_LINK, type HomeLink } from "../../lib/home-link";
   import Avatar from "../avatar/Avatar.svelte";
-  import { defaultSections, parseSectionState, sectionStorageKey, type SectionState } from "../../lib/sidebar-sections";
+  import {
+    defaultSections,
+    parseSectionState,
+    parseSidebarScrollTop,
+    sectionStorageKey,
+    sidebarScrollStorageKey,
+    type SectionState,
+  } from "../../lib/sidebar-sections";
   import { directConversationForUser, handleLabel, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
   import { botShelfPreferences, DEFAULT_BOT_SHELF_LIMIT, setBotShelfLimit, setBotShelfOrder } from "../../lib/appearance";
   import { parsePersonaChannelPins, pinnedPersonaChannel, type PersonaChannelPins } from "../../lib/personaNavigation";
@@ -153,6 +161,35 @@
   }
 
   let sections = $state<SectionState>(defaultSections());
+  let sidebarScroll: HTMLDivElement;
+  let restoredScrollWorkspaceID = "";
+
+  function loadSidebarScroll(id: string): number {
+    if (!id) return 0;
+    try {
+      return parseSidebarScrollTop(window.sessionStorage.getItem(sidebarScrollStorageKey(id)));
+    } catch {
+      return 0;
+    }
+  }
+
+  function rememberSidebarScroll() {
+    if (!workspaceID || !sidebarScroll) return;
+    try {
+      window.sessionStorage.setItem(
+        sidebarScrollStorageKey(workspaceID),
+        String(Math.floor(sidebarScroll.scrollTop)),
+      );
+    } catch {
+      // A reload loses the position when storage is unavailable; scrolling still works.
+    }
+  }
+
+  async function restoreSidebarScroll(id: string) {
+    const top = loadSidebarScroll(id);
+    await tick();
+    if (workspaceID === id && sidebarScroll) sidebarScroll.scrollTop = top;
+  }
 
   function loadSections(id: string): SectionState {
     if (!id) return defaultSections();
@@ -186,6 +223,13 @@
 
   $effect(() => {
     sections = loadSections(workspaceID);
+  });
+
+  $effect(() => {
+    const id = workspaceID;
+    if (!id || id === restoredScrollWorkspaceID) return;
+    restoredScrollWorkspaceID = id;
+    void restoreSidebarScroll(id);
   });
 
   const CHANNEL_ORDER_STORAGE_PREFIX = "clickclack:sidebar-channel-order:v1:";
@@ -372,7 +416,7 @@
     </header>
   {/if}
 
-  <div class="sidebar-scroll">
+  <div class="sidebar-scroll" bind:this={sidebarScroll} onscroll={rememberSidebarScroll}>
     {#if WORKSPACE_VIEWS.length > 0}
       <nav class="sidebar-views" aria-label="Workspace views">
         {#each WORKSPACE_VIEWS as view (view.id)}

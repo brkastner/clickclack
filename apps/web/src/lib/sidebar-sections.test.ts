@@ -1,6 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { defaultSections, parseSectionState, sectionStorageKey } from "./sidebar-sections.ts";
+import {
+  collapsedAttentionLeadsPersonas,
+  defaultSections,
+  parseSectionState,
+  parseSidebarScrollTop,
+  sectionStorageKey,
+  sidebarScrollStorageKey,
+} from "./sidebar-sections.ts";
+
+test("collapsed attention channels lead the persona shelf only when present", () => {
+  assert.equal(collapsedAttentionLeadsPersonas(false, 2), true);
+  assert.equal(collapsedAttentionLeadsPersonas(false, 0), false);
+  assert.equal(collapsedAttentionLeadsPersonas(true, 2), false);
+});
+
+test("sidebar scroll offsets are workspace scoped and bounded", () => {
+  assert.notEqual(sidebarScrollStorageKey("one"), sidebarScrollStorageKey("two"));
+  assert.equal(parseSidebarScrollTop("180"), 180);
+  assert.equal(parseSidebarScrollTop("180.9"), 180);
+  for (const raw of [null, "", "nope", "-1", "Infinity", "10000001"]) {
+    assert.equal(parseSidebarScrollTop(raw), 0);
+  }
+});
 
 test("legacy section state preserves flags and defaults personas to expanded", () => {
   assert.deepEqual(parseSectionState('{"channels":false,"directMessages":true}'), {
