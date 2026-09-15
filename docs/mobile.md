@@ -73,6 +73,41 @@ pnpm --filter @clickclack/mobile open:ios
 pnpm --filter @clickclack/mobile open:android
 ```
 
+### Install Android over the tailnet
+
+Kas's Android install path is one command from the repository root:
+
+```sh
+pnpm mobile:install
+```
+
+The command asks Tailscale for the current tailnet rather than storing its DNS
+suffix. It derives the app origin from this machine's Tailscale name on port
+8080, finds the `pixel-10-pro` peer by name, syncs or creates the generated
+Android project, picks the newest installed JDK Gradle accepts, and runs
+`installDebug`. A one-off override is still possible:
+
+```sh
+CLICKCLACK_SERVER_URL=https://another-host:8080 \
+CLICKCLACK_ANDROID_DEVICE=another-phone pnpm mobile:install
+```
+
+Android requires one pairing ceremony for a new computer. Enable **Wireless
+debugging**, choose **Pair device with pairing code**, then use the pairing port
+and the separate connect port shown by Android:
+
+```sh
+adb pair <phone>:<pairing-port>
+adb connect <phone>:<connect-port>
+pnpm mobile:install
+```
+
+The installer sees that temporary connection and moves adbd to the stable
+Tailnet address on port 5555 itself. Later installs need only
+`pnpm mobile:install`, including across Wi-Fi changes. Android stops that fixed
+listener when the phone reboots; after a reboot, enable Wireless debugging and
+make one temporary connection again. The pairing itself persists.
+
 After changing `capacitor.config.ts` or the server URL, re-sync:
 
 ```sh

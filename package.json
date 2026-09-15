@@ -15,6 +15,7 @@
     "dev:desktop": "pnpm --filter @clickclack/desktop dev",
     "mobile:ios": "pnpm --filter @clickclack/mobile add:ios",
     "mobile:android": "pnpm --filter @clickclack/mobile add:android",
+    "mobile:install": "pnpm --filter @clickclack/mobile install:android",
     "mobile:sync": "pnpm --filter @clickclack/mobile sync",
     "fmt": "gofmt -w apps/api && pnpm fmt:ts",
     "fmt:check": "pnpm fmt:go:check && pnpm fmt:ts:check",

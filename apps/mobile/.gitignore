@@ -3,3 +3,4 @@
 # scripts/configure-native.mjs, so they are not tracked here.
 /android/
 /ios/
+/.env.local

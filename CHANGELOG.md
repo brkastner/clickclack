@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added `pnpm mobile:install` for the personal Android deployment path. It
+  discovers the server and phone from live Tailscale status, keeps adb on a
+  stable tailnet port after the one-time Android pairing ceremony, selects a
+  Gradle-compatible JDK, regenerates the native project, and installs the debug
+  build without requiring copied hostnames or build flags.
 - Added sharing into ClickClack from Android's share sheet. The app claims
   links, text, and images, one or several at a time; shared content fills the
   composer of the open conversation and waits there rather than being sent, so
