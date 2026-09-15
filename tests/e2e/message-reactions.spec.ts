@@ -551,6 +551,10 @@ test("touch action sheets remain usable in short landscape viewports", async ({
   const sheet = mobilePage.getByRole("dialog", { name: "Message actions" });
   await expect(sheet).toBeVisible();
 
+  // The sheet rises into place with a 160ms transform animation, and
+  // getBoundingClientRect() reports the transformed box. Measuring before it
+  // settles reads the sheet up to its full 24px travel below the viewport, so
+  // wait the animation out rather than racing it.
   const geometry = await sheet.evaluate(async (element) => {
     await Promise.all(element.getAnimations().map((animation) => animation.finished));
     const box = element.getBoundingClientRect();

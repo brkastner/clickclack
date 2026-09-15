@@ -40,6 +40,7 @@ type Server struct {
 	access                *accessVerifier
 	frontendURL           string
 	homeLinkConfig        HomeLinkConfig
+	appLinkMode           AppLinkMode
 	publicAPIURL          string
 	embedFrameAncestors   []string
 	cookies               authpolicy.CookieNames
@@ -126,6 +127,7 @@ type Options struct {
 	DisableDevAuth      bool
 	PasswordAuthEnabled bool
 	PushNotifier        PushNotifier
+	AppLinkMode         AppLinkMode
 	MetricsEnabled      bool
 	Environment         string
 	Version             string
@@ -162,6 +164,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		access:                newAccessVerifier(options.Access),
 		frontendURL:           strings.TrimSpace(options.FrontendURL),
 		homeLinkConfig:        options.HomeLink.withDefaults(),
+		appLinkMode:           appLinkModeOrDefault(options.AppLinkMode),
 		publicAPIURL:          strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
 		embedFrameAncestors:   append([]string(nil), options.EmbedFrameAncestors...),
 		cookies:               cookieNames,

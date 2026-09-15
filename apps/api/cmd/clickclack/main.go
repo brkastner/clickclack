@@ -139,6 +139,10 @@ func serve(args []string) error {
 	if cfg.PushoverAPIToken != "" {
 		pushNotifier = httpapi.NewPushoverNotifier(cfg.PushoverAPIToken)
 	}
+	appLinkMode, err := httpapi.ParseAppLinkMode(cfg.AppLinkMode)
+	if err != nil {
+		return err
+	}
 	log.Printf("ClickClack listening on %s", displayURL(cfg.Addr))
 	server := httpapi.New(st, realtime.NewHub(), httpapi.Options{
 		OpenClawNotepad:     cfg.OpenClawNotepad,
@@ -169,6 +173,7 @@ func serve(args []string) error {
 			Audience:   cfg.AccessAUD,
 		},
 		PushNotifier:   pushNotifier,
+		AppLinkMode:    appLinkMode,
 		MetricsEnabled: cfg.MetricsEnabled,
 		Environment:    cfg.Environment,
 		Version:        version,

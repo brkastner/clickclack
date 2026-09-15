@@ -41,6 +41,7 @@ const sections = [
     "deployment.md",
     "bot-installs.md",
     "development.md",
+    "mobile.md",
     "releasing.md",
     "sdk.md",
   ]],

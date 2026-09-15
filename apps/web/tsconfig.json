@@ -1,6 +1,8 @@
 {
   "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
+    // Some lib modules import each other with explicit extensions so their
+    // coordinators stay runnable under `node --test`.
     "allowImportingTsExtensions": true,
     "allowJs": false,
     "checkJs": false,

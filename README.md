@@ -39,7 +39,7 @@ Durable chat state and the event log live in the database. WebSockets carry live
 
 | Surface | Use it for | Guide |
 | --- | --- | --- |
-| Web and desktop | Channels, threads, search, uploads, direct messages, moderation, and local agent voice | [Feature index](docs/README.md#whats-in-the-box) |
+| Web, desktop, and mobile | Channels, threads, search, uploads, direct messages, moderation, and local agent voice | [Feature index](docs/README.md#whats-in-the-box) |
 | CLI | Server administration, backups, exports, and scripted chat | [CLI reference](docs/cli.md) |
 | TypeScript SDK | Typed HTTP and realtime clients for bots and integrations | [SDK guide](docs/sdk.md) |
 | REST and WebSocket API | Clients in other languages and direct integrations | [API overview](docs/api/overview.md) |
@@ -59,6 +59,7 @@ The complete documentation is at **[docs.clickclack.chat](https://docs.clickclac
 - [Bots and integrations](docs/features/bots.md)
 - [Desktop apps](docs/desktop.md)
 - [Voice assistant](docs/features/voice.md)
+- [Mobile app](docs/mobile.md)
 - [Data model](docs/data-model.md)
 - [Development](docs/development.md)
 

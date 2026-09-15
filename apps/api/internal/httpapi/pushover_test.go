@@ -46,6 +46,56 @@ func TestPushoverNotifierPostsForm(t *testing.T) {
 	}
 }
 
+func TestPushoverNotifierSendsDeepLink(t *testing.T) {
+	capture := func(notification PushNotification) string {
+		var body string
+		notifier := NewPushoverNotifier("app-token")
+		notifier.Client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			raw, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body = string(raw)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"status":1}`)),
+			}, nil
+		})}
+		if err := notifier.Notify(context.Background(), notification); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	withLink := capture(PushNotification{
+		RecipientKey: "user-key",
+		Message:      "Owner: hello",
+		URL:          "clickclack://open?path=%2Fapp%2Fwsp_1%2Fchn_1",
+		URLTitle:     pushNotificationURLTitle,
+	})
+	for _, want := range []string{
+		"url=clickclack%3A%2F%2Fopen%3Fpath%3D%252Fapp%252Fwsp_1%252Fchn_1",
+		"url_title=Open+in+ClickClack",
+	} {
+		if !strings.Contains(withLink, want) {
+			t.Fatalf("expected form to contain %q, got %q", want, withLink)
+		}
+	}
+
+	// A notification without a link must not send empty url fields: Pushover
+	// rejects those rather than ignoring them.
+	withoutLink := capture(PushNotification{RecipientKey: "user-key", Message: "Owner: hello"})
+	if strings.Contains(withoutLink, "url") {
+		t.Fatalf("expected no url fields, got %q", withoutLink)
+	}
+
+	titleOnly := capture(PushNotification{RecipientKey: "user-key", Message: "hi", URL: "clickclack://app"})
+	if strings.Contains(titleOnly, "url_title") {
+		t.Fatalf("expected no url_title without one set, got %q", titleOnly)
+	}
+}
+
 func TestPushoverNotifierReportsFailures(t *testing.T) {
 	notifier := NewPushoverNotifier("app-token")
 	notifier.Client = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {

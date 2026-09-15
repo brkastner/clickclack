@@ -27,6 +27,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("OPENCLAW_ID_CLIENT_SECRET", "ocid-secret")
 	t.Setenv("OPENCLAW_ID_ISSUER", "https://id.openclaw.test/api/auth")
 	t.Setenv("CLICKCLACK_PUSHOVER_API_TOKEN", "app-token")
+	t.Setenv("CLICKCLACK_APP_LINK_MODE", "web")
 	t.Setenv("CLICKCLACK_R2_ACCOUNT_ID", "account")
 	t.Setenv("CLICKCLACK_R2_ACCESS_KEY_ID", "access")
 	t.Setenv("CLICKCLACK_R2_SECRET_ACCESS_KEY", "secret-access")
@@ -35,7 +36,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.Environment != "fakeco" || !cfg.MetricsEnabled || cfg.PublicURL != "https://clickclack.test" || cfg.PublicAPIURL != "https://api.clickclack.test/services/clickclack/" || len(cfg.EmbedFrameAncestors) != 2 || cfg.EmbedFrameAncestors[0] != "https://control.example.com" || cfg.CookieNamespace != "prod-2" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
+	if cfg.Addr != ":9000" || cfg.Data != "/tmp/clickclack" || cfg.DB != "sqlite:///tmp/clickclack.db" || cfg.Uploads != "r2://clickclack-uploads/prod" || cfg.Environment != "fakeco" || !cfg.MetricsEnabled || cfg.PublicURL != "https://clickclack.test" || cfg.PublicAPIURL != "https://api.clickclack.test/services/clickclack/" || len(cfg.EmbedFrameAncestors) != 2 || cfg.EmbedFrameAncestors[0] != "https://control.example.com" || cfg.CookieNamespace != "prod-2" || cfg.DevBootstrap || cfg.GitHubClientID != "client" || cfg.GitHubClientSecret != "secret" || cfg.GitHubAllowedOrg != "openclaw" || cfg.GitHubModeratorOrg != "openclaw" || cfg.PushoverAPIToken != "app-token" || cfg.AppLinkMode != "web" || cfg.R2AccountID != "account" || cfg.R2AccessKeyID != "access" || cfg.R2SecretAccessKey != "secret-access" || cfg.R2Endpoint != "https://r2.example.com" {
 		t.Fatalf("unexpected env config: %#v", cfg)
 	}
 	if cfg.OpenClawIDClientID != "ocid-client" || cfg.OpenClawIDClientSecret != "ocid-secret" || cfg.OpenClawIDIssuer != "https://id.openclaw.test/api/auth" {
@@ -73,6 +74,7 @@ func TestLoadDefaultsEnvAndFile(t *testing.T) {
 	t.Setenv("OPENCLAW_ID_CLIENT_SECRET", "")
 	t.Setenv("OPENCLAW_ID_ISSUER", "")
 	t.Setenv("CLICKCLACK_PUSHOVER_API_TOKEN", "")
+	t.Setenv("CLICKCLACK_APP_LINK_MODE", "")
 	t.Setenv("CLICKCLACK_R2_ACCOUNT_ID", "")
 	t.Setenv("CLICKCLACK_R2_ACCESS_KEY_ID", "")
 	t.Setenv("CLICKCLACK_R2_SECRET_ACCESS_KEY", "")
