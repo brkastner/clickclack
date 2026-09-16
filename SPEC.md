@@ -191,7 +191,7 @@ Frontend should not own durable chat truth.
 
 ### Chronological bot activity (KAS-753)
 
-**Status: Selected for implementation. This documentation change does not implement, verify or deploy it.**
+**Status: Implemented in commit `5cedf5df` and locally verified. Deployment has not been verified.**
 
 Preserve the supplied conversation order when rendering durable bot activity.
 The current `coalesceAgentActivity` collects a turn's activity at its first row,
@@ -208,12 +208,17 @@ Scope is the coalescer, its tests, and obsolete anchoring comments, not a
 workflow-panel redesign, producer change, or schema migration.
 
 The [selected implementation plan](docs/drafts/chronological-bot-activity.md)
-preserves the full selected summary, ordered steps, and validation verbatim.
-Cover interleaved human/bot/turn activity and late rows without relocating
-ordinary messages, visibility combinations, missing turn IDs, author and
-conversation isolation, duplicate tools, stale turns, and trailing live blocks.
-Run the focused activity tests, web tests, and web typecheck. Verify ordering,
-adjacent tool collapse, and stable earlier rows in ClickClack Electron.
+records the completed implementation, the documentation-only work still needed,
+and the validation required to bring KAS-753 home. The implementation in commit
+`5cedf5df` remains intact at HEAD. Keep `apps/web/src/lib/chat/agent-activity.ts`,
+its tests, and the `ChatApp.svelte` interface unchanged unless validation exposes
+a regression. Limit remaining changes to documentation status reconciliation;
+do not broaden the work into persistence, protocol, producer, schema, or
+workflow-panel changes.
+
+Validate with the focused activity test, the full web test suite, web typecheck,
+and the Electron activity proof. Confirm that `5cedf5df` is an ancestor of HEAD
+and that later commits have not changed the KAS-753 implementation files.
 Deployment completion checks must pass before claiming the change is live.
 
 ### Sidebar hero rendering correction
