@@ -207,19 +207,19 @@ persistence or protocol semantics. Keep the existing `ChatApp.svelte` interface.
 Scope is the coalescer, its tests, and obsolete anchoring comments, not a
 workflow-panel redesign, producer change, or schema migration.
 
-The [selected implementation plan](docs/drafts/chronological-bot-activity.md)
-records the completed implementation, the documentation-only work still needed,
-and the validation required to bring KAS-753 home. The implementation in commit
-`5cedf5df` remains intact at HEAD. Keep `apps/web/src/lib/chat/agent-activity.ts`,
-its tests, and the `ChatApp.svelte` interface unchanged unless validation exposes
-a regression. Limit remaining changes to documentation status reconciliation;
-do not broaden the work into persistence, protocol, producer, schema, or
-workflow-panel changes.
+The [implementation record](docs/drafts/chronological-bot-activity.md)
+confirms that the documentation status reconciliation is complete. The
+implementation in commit `5cedf5df` remains intact at HEAD; the coalescer, its
+tests, and the `ChatApp.svelte` interface were not changed by this
+reconciliation. The change remains limited to the coalescer behavior already
+implemented, without persistence, protocol, producer, schema, or workflow-panel
+changes.
 
-Validate with the focused activity test, the full web test suite, web typecheck,
-and the Electron activity proof. Confirm that `5cedf5df` is an ancestor of HEAD
-and that later commits have not changed the KAS-753 implementation files.
-Deployment completion checks must pass before claiming the change is live.
+Completed local verification comprises the focused activity test, the full web
+test suite, web typecheck, and the Electron activity proof. It also confirms
+that `5cedf5df` is an ancestor of HEAD and that later commits have not changed
+the KAS-753 implementation files. Deployment completion checks must pass before
+claiming the change is live.
 
 ### Sidebar hero rendering correction
 

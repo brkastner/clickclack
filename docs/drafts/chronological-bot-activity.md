@@ -4,21 +4,38 @@ Status: Implemented in commit `5cedf5df` and locally verified. Deployment has no
 
 Specification: [Chronological bot activity](../../SPEC.md#chronological-bot-activity-kas-753).
 
-The selected summary, ordered steps, and validation below are preserved verbatim.
+## Implementation record
 
-## Summary
+KAS-753 was implemented in commit `5cedf5df` and remains intact at HEAD. The
+subsequent documentation status reconciliation is complete: the specification,
+this record, and the messages feature documentation now consistently describe
+chronological in-place rendering as implemented and locally verified, without
+claiming deployment. No coalescer or interface changes were needed.
 
-KAS-753 is already implemented in commit 5cedf5df and remains intact at HEAD. The smallest remaining change is to reconcile the stale documentation that still says the fix is only selected for implementation, while avoiding any coalescer or interface changes.
+## Implemented behavior
 
-## Ordered steps
+- Preserve supplied conversation order by emitting commentary in place.
+- Coalesce only contiguous `agent_tool` rows with the existing
+  conversation/author/turn key.
+- End a tool block at commentary, ordinary-message, and key-change boundaries,
+  including when commentary is hidden.
+- Preserve first-row IDs, tool parsing, duplicate counts, visibility flags, and
+  existing finality and staleness rules.
 
-1. Update the KAS-753 status text in SPEC.md, docs/drafts/chronological-bot-activity.md, and docs/features/messages.md to state that chronological in-place rendering is implemented and locally verified, without claiming deployment.
-2. Leave apps/web/src/lib/chat/agent-activity.ts, its tests, and the ChatApp.svelte interface unchanged unless validation exposes a regression; the current implementation already preserves supplied order and coalesces only contiguous same-key tool rows.
-3. Review the final diff to ensure it contains documentation status reconciliation only and does not broaden scope into persistence, protocol, producer, schema, or workflow-panel changes.
+The implementation does not sort timestamps, mutate input messages, change
+persistence or protocol semantics, or change the `ChatApp.svelte` interface.
 
-## Validation
+## Local verification
 
-1. Run node --test apps/web/src/lib/agent-activity-display.test.ts.
-2. Run pnpm --filter @clickclack/web test and pnpm --filter @clickclack/web typecheck.
-3. Run node scripts/test-agent-activity-electron.mjs to verify human/final boundaries, adjacent tool collapse, and stable earlier rows after late activity is appended.
-4. Confirm commit 5cedf5df is an ancestor of HEAD and that no later commit changed the KAS-753 implementation files.
+Completed local verification covers the focused activity test, full web test
+suite, web typecheck, and Electron activity proof. It also confirms that
+`5cedf5df` is an ancestor of HEAD and that no later commit changed the KAS-753
+implementation files:
+
+1. `node --test apps/web/src/lib/agent-activity-display.test.ts`
+2. `pnpm --filter @clickclack/web test`
+3. `pnpm --filter @clickclack/web typecheck`
+4. `node scripts/test-agent-activity-electron.mjs`
+
+Deployment completion checks are still required before describing KAS-753 as
+live.
