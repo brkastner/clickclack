@@ -21,11 +21,13 @@
   import { uploadURL } from "../../lib/uploads";
   import ReactionsBar from "./ReactionsBar.svelte";
   import DecisionChoices from "./DecisionChoices.svelte";
+  import GitActivityCard from "./GitActivityCard.svelte";
   import {
     isDecisionMessage,
     readDecisionPrompt,
     stripDecisionBlock,
   } from "../../lib/chat/decision-prompt";
+  import { readGitActivity } from "../../lib/chat/git-activity";
   import EmojiPicker, { QUICK_REACTS } from "./EmojiPicker.svelte";
   import MessageActionSheet from "./MessageActionSheet.svelte";
   import CopyLinkFallback from "./CopyLinkFallback.svelte";
@@ -127,6 +129,7 @@
   let decisionPrompt = $derived(
     isDecisionMessage(message) && onDecisionAnswer ? readDecisionPrompt(message.body) : null,
   );
+  let gitActivity = $derived(readGitActivity(message));
   let renderedBody = $derived(
     decisionPrompt === null ? message.body : stripDecisionBlock(message.body),
   );
@@ -223,6 +226,7 @@
       !isDeleted &&
       !isPending &&
       !isFailed &&
+      !gitActivity &&
       Boolean(message.body.trim()),
   );
   let currentMessageAudioKey = $derived(messageAudioKey(message.id, message.body));
@@ -778,12 +782,16 @@
     {:else}
     <TopicBadge {topic} onSelect={onSelectTopic} />
     <QuoteBlock {message} onJump={onJumpToQuote} />
-    <div
-      class="markdown"
-      use:enhanceMarkdown
-      use:enhanceCodeBlockCopy={true}
-      use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
-    >{@html markdown(renderedBody)}</div>
+    {#if gitActivity}
+      <GitActivityCard activity={gitActivity} />
+    {:else}
+      <div
+        class="markdown"
+        use:enhanceMarkdown
+        use:enhanceCodeBlockCopy={true}
+        use:enhanceMentions={{ people: mentionPeople, attentionUserID: mentionAttentionUserID }}
+      >{@html markdown(renderedBody)}</div>
+    {/if}
     {#if decisionPrompt && onDecisionAnswer}
       <DecisionChoices
         prompt={decisionPrompt}
