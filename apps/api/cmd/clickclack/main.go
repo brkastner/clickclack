@@ -172,12 +172,13 @@ func serve(args []string) error {
 			TeamDomain: cfg.AccessTeamDomain,
 			Audience:   cfg.AccessAUD,
 		},
-		PushNotifier:   pushNotifier,
-		AppLinkMode:    appLinkMode,
-		MetricsEnabled: cfg.MetricsEnabled,
-		Environment:    cfg.Environment,
-		Version:        version,
-		Commit:         commit,
+		PushNotifier:          pushNotifier,
+		AppLinkMode:           appLinkMode,
+		MetricsEnabled:        cfg.MetricsEnabled,
+		Environment:           cfg.Environment,
+		LocalGalleryCallbacks: cfg.LocalGalleryCallbacks,
+		Version:               version,
+		Commit:                commit,
 	})
 	if uploads != nil {
 		if err := server.CleanupPendingUploadObjects(ctx, 0); err != nil {

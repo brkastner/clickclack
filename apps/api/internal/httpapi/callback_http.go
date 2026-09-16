@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/netip"
 	"time"
+
+	"github.com/openclaw/clickclack/apps/api/internal/config"
 )
 
 const callbackTimeout = 3 * time.Second
@@ -82,6 +84,18 @@ func (d *callbackDialer) DialContext(ctx context.Context, network, address strin
 		dialErrors = append(dialErrors, dialErr)
 	}
 	return nil, fmt.Errorf("connect to callback host: %w", errors.Join(dialErrors...))
+}
+
+func localGalleryCallbackMap(callbacks []config.LocalGalleryCallback) map[string]string {
+	normalized, err := config.NormalizeLocalGalleryCallbacks(callbacks)
+	if err != nil {
+		return map[string]string{}
+	}
+	byInstallation := make(map[string]string, len(normalized))
+	for _, callback := range normalized {
+		byInstallation[callback.InstallationID] = callback.CallbackURL
+	}
+	return byInstallation
 }
 
 func isPublicCallbackAddr(address netip.Addr) bool {

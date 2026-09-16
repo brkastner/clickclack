@@ -29,34 +29,36 @@ import (
 )
 
 type Server struct {
-	openclawNotepad       config.OpenClawNotepadConfig
-	avatarPacksDir        string
-	store                 store.Store
-	hub                   *realtime.Hub
-	uploadDir             string
-	uploadStorage         uploadstore.Store
-	githubOAuth           GitHubOAuthConfig
-	openclawID            OpenClawIDConfig
-	access                *accessVerifier
-	frontendURL           string
-	homeLinkConfig        HomeLinkConfig
-	appLinkMode           AppLinkMode
-	publicAPIURL          string
-	embedFrameAncestors   []string
-	cookies               authpolicy.CookieNames
-	cookieSameSite        http.SameSite
-	disableDevAuth        bool
-	passwordAuthEnabled   bool
-	pushNotifier          PushNotifier
-	metrics               *metricsRegistry
-	build                 buildMetadata
-	setupCodeClaimLimiter *slidingWindowLimiter
-	passwordIPLimiter     *slidingWindowLimiter
-	passwordIDLimiter     *slidingWindowLimiter
-	passwordChangeLimiter *slidingWindowLimiter
-	realtimeReplayLimit   int
-	realtimeSessionCheck  time.Duration
-	callbackClient        *http.Client
+	openclawNotepad            config.OpenClawNotepadConfig
+	avatarPacksDir             string
+	store                      store.Store
+	hub                        *realtime.Hub
+	uploadDir                  string
+	uploadStorage              uploadstore.Store
+	githubOAuth                GitHubOAuthConfig
+	openclawID                 OpenClawIDConfig
+	access                     *accessVerifier
+	frontendURL                string
+	homeLinkConfig             HomeLinkConfig
+	appLinkMode                AppLinkMode
+	publicAPIURL               string
+	embedFrameAncestors        []string
+	cookies                    authpolicy.CookieNames
+	cookieSameSite             http.SameSite
+	disableDevAuth             bool
+	passwordAuthEnabled        bool
+	pushNotifier               PushNotifier
+	metrics                    *metricsRegistry
+	build                      buildMetadata
+	setupCodeClaimLimiter      *slidingWindowLimiter
+	passwordIPLimiter          *slidingWindowLimiter
+	passwordIDLimiter          *slidingWindowLimiter
+	passwordChangeLimiter      *slidingWindowLimiter
+	realtimeReplayLimit        int
+	realtimeSessionCheck       time.Duration
+	callbackClient             *http.Client
+	localGalleryCallbackClient *http.Client
+	localGalleryCallbacks      map[string]string
 }
 
 const (
@@ -112,27 +114,28 @@ type actor struct {
 }
 
 type Options struct {
-	OpenClawNotepad     config.OpenClawNotepadConfig
-	AvatarPacksDir      string
-	UploadDir           string
-	UploadStorage       uploadstore.Store
-	GitHubOAuth         GitHubOAuthConfig
-	OpenClawID          OpenClawIDConfig
-	Access              AccessConfig
-	FrontendURL         string
-	PublicAPIURL        string
-	HomeLink            HomeLinkConfig
-	EmbedFrameAncestors []string
-	CookieNames         authpolicy.CookieNames
-	DisableDevAuth      bool
-	PasswordAuthEnabled bool
-	PushNotifier        PushNotifier
-	AppLinkMode         AppLinkMode
-	MetricsEnabled      bool
-	Environment         string
-	Version             string
-	Commit              string
-	callbackClient      *http.Client
+	OpenClawNotepad       config.OpenClawNotepadConfig
+	AvatarPacksDir        string
+	UploadDir             string
+	UploadStorage         uploadstore.Store
+	GitHubOAuth           GitHubOAuthConfig
+	OpenClawID            OpenClawIDConfig
+	Access                AccessConfig
+	FrontendURL           string
+	PublicAPIURL          string
+	HomeLink              HomeLinkConfig
+	EmbedFrameAncestors   []string
+	CookieNames           authpolicy.CookieNames
+	DisableDevAuth        bool
+	PasswordAuthEnabled   bool
+	PushNotifier          PushNotifier
+	AppLinkMode           AppLinkMode
+	MetricsEnabled        bool
+	Environment           string
+	Version               string
+	Commit                string
+	LocalGalleryCallbacks []config.LocalGalleryCallback
+	callbackClient        *http.Client
 }
 
 func New(st store.Store, hub *realtime.Hub, options Options) *Server {
@@ -152,34 +155,37 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	if callbackClient == nil {
 		callbackClient = newCallbackHTTPClient()
 	}
+	localGalleryCallbacks := localGalleryCallbackMap(options.LocalGalleryCallbacks)
 	return &Server{
-		openclawNotepad:       options.OpenClawNotepad,
-		store:                 st,
-		avatarPacksDir:        options.AvatarPacksDir,
-		hub:                   hub,
-		uploadDir:             options.UploadDir,
-		uploadStorage:         uploadStorage,
-		githubOAuth:           options.GitHubOAuth.withDefaults(),
-		openclawID:            options.OpenClawID.withDefaults(),
-		access:                newAccessVerifier(options.Access),
-		frontendURL:           strings.TrimSpace(options.FrontendURL),
-		homeLinkConfig:        options.HomeLink.withDefaults(),
-		appLinkMode:           appLinkModeOrDefault(options.AppLinkMode),
-		publicAPIURL:          strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
-		embedFrameAncestors:   append([]string(nil), options.EmbedFrameAncestors...),
-		cookies:               cookieNames,
-		cookieSameSite:        configuredCookieSameSite(options.FrontendURL, options.PublicAPIURL),
-		disableDevAuth:        options.DisableDevAuth,
-		passwordAuthEnabled:   options.PasswordAuthEnabled,
-		pushNotifier:          options.PushNotifier,
-		metrics:               metrics,
-		setupCodeClaimLimiter: newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
-		passwordIPLimiter:     newSlidingWindowLimiter(passwordLoginIPLimit, passwordLoginIPWindow),
-		passwordIDLimiter:     newSlidingWindowLimiter(passwordLoginIDLimit, passwordLoginIDWindow),
-		passwordChangeLimiter: newSlidingWindowLimiter(passwordChangeLimit, passwordChangeWindow),
-		realtimeReplayLimit:   realtimeReplayMaxEvents,
-		realtimeSessionCheck:  realtimeSessionRecheckInterval,
-		callbackClient:        callbackClient,
+		openclawNotepad:            options.OpenClawNotepad,
+		store:                      st,
+		avatarPacksDir:             options.AvatarPacksDir,
+		hub:                        hub,
+		uploadDir:                  options.UploadDir,
+		uploadStorage:              uploadStorage,
+		githubOAuth:                options.GitHubOAuth.withDefaults(),
+		openclawID:                 options.OpenClawID.withDefaults(),
+		access:                     newAccessVerifier(options.Access),
+		frontendURL:                strings.TrimSpace(options.FrontendURL),
+		homeLinkConfig:             options.HomeLink.withDefaults(),
+		appLinkMode:                appLinkModeOrDefault(options.AppLinkMode),
+		publicAPIURL:               strings.TrimRight(strings.TrimSpace(options.PublicAPIURL), "/"),
+		embedFrameAncestors:        append([]string(nil), options.EmbedFrameAncestors...),
+		cookies:                    cookieNames,
+		cookieSameSite:             configuredCookieSameSite(options.FrontendURL, options.PublicAPIURL),
+		disableDevAuth:             options.DisableDevAuth,
+		passwordAuthEnabled:        options.PasswordAuthEnabled,
+		pushNotifier:               options.PushNotifier,
+		metrics:                    metrics,
+		setupCodeClaimLimiter:      newSlidingWindowLimiter(setupCodeClaimLimit, setupCodeClaimWindow),
+		passwordIPLimiter:          newSlidingWindowLimiter(passwordLoginIPLimit, passwordLoginIPWindow),
+		passwordIDLimiter:          newSlidingWindowLimiter(passwordLoginIDLimit, passwordLoginIDWindow),
+		passwordChangeLimiter:      newSlidingWindowLimiter(passwordChangeLimit, passwordChangeWindow),
+		realtimeReplayLimit:        realtimeReplayMaxEvents,
+		realtimeSessionCheck:       realtimeSessionRecheckInterval,
+		callbackClient:             callbackClient,
+		localGalleryCallbackClient: newLocalGalleryCallbackHTTPClient(localGalleryCallbacks),
+		localGalleryCallbacks:      localGalleryCallbacks,
 		build: buildMetadata{
 			Environment: options.Environment,
 			Version:     options.Version,

@@ -723,7 +723,7 @@ func (s *Server) DispatchGallery(ctx context.Context) error {
 			return errors.New("gallery delivery envelope missing")
 		}
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		_, _, deliveryErr := s.postEventCallback(callCtx, sub, store.Event{ID: req.ID}, payload)
+		_, _, deliveryErr := s.postEventCallback(callCtx, sub, store.Event{ID: req.ID, Type: "gallery_action." + req.Kind}, payload)
 		cancel()
 		// HTTP acknowledgement alone never means execution was accepted. The durable
 		// request remains pending until the authenticated response arrives. Network

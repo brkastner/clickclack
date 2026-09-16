@@ -1791,7 +1791,11 @@ func (s *Server) postEventCallback(ctx context.Context, subscription store.Event
 	req.Header.Set("X-ClickClack-Timestamp", timestamp)
 	req.Header.Set("X-ClickClack-Event-ID", event.ID)
 	req.Header.Set("X-ClickClack-Signature", signSlashCallback(subscription.SigningSecret, timestamp, payload))
-	resp, err := s.callbackClient.Do(req)
+	client := s.callbackClient
+	if s.isLocalGalleryCallback(subscription, event) {
+		client = s.localGalleryCallbackClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, "", err
 	}
@@ -1804,6 +1808,15 @@ func (s *Server) postEventCallback(ctx context.Context, subscription store.Event
 		return resp.StatusCode, string(body), errors.New("event subscription callback failed")
 	}
 	return resp.StatusCode, string(body), nil
+}
+
+// isLocalGalleryCallback rechecks the exception at delivery time. A mixed
+// subscription may use loopback only for its gallery lifecycle event.
+func (s *Server) isLocalGalleryCallback(subscription store.EventSubscription, event store.Event) bool {
+	if event.Type != "gallery_action.open" && event.Type != "gallery_action.choices" && event.Type != "gallery_action.submit" {
+		return false
+	}
+	return subscription.AppInstallationID != "" && s.localGalleryCallbacks[subscription.AppInstallationID] == subscription.CallbackURL
 }
 
 func (s *Server) postSlashCallback(ctx context.Context, command store.SlashCommand, payload []byte) (int, string, error) {
