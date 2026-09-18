@@ -3,15 +3,16 @@
   import { goto } from "$app/navigation";
   import { sourceConversationID } from "../../lib/chat/message-source-navigation";
   import { api } from "../../lib/api";
-  import { uploadURL, imageViewerItems } from "../../lib/uploads";
+  import { uploadURL, imageViewerItems, type ImageViewerItem } from "../../lib/uploads";
   import type { Channel, DirectConversation, Message, Upload, User, Workspace } from "../../lib/types";
   import { listAllWorkspaceMembers } from "../../lib/workspace-members";
   import { connectRealtime } from "../../lib/realtime.svelte";
-  import { OutputGallerySession, outputBots, boundOutputBot, outputSourceKey, galleryReturn, rememberGallery, revealGallerySource, clearGalleryReturn, type OutputPage } from "../../lib/output-gallery";
+  import { OutputGallerySession, outputBots, boundOutputBot, outputSourceKey, outputIncludeOwnKey, preferredGalleryDestination, galleryReturn, rememberGallery, revealGallerySource, clearGalleryReturn, type OutputPage } from "../../lib/output-gallery";
   import { MAX_MESSAGE_ATTACHMENTS } from "../../lib/attachments";
   import { enqueueGalleryAttachment, galleryAttachmentQueue, removeGalleryAttachment, clearGalleryAttachments, setGalleryAttachmentDestination } from "../../lib/gallery-attachment-queue";
   import GalleryActionPanel from "./GalleryActionPanel.svelte";
-  import type { GalleryActionDiscovery } from "../../lib/gallery-actions";
+  import { eligibleGalleryActions, type GalleryActionDiscovery } from "../../lib/gallery-actions";
+  import type { ImageViewerContextAction } from "../media/ImageViewerIsland";
   import OutputCard from "./OutputCard.svelte";
   import ImageViewer from "../media/ImageViewer.svelte";
   let { workspaceID }: { workspaceID: string } = $props();
@@ -26,10 +27,12 @@
   let queue = $state<Upload[]>([]);
   let choosingDestination = $state(false);
   let galleryAction = $state<{action:GalleryActionDiscovery;upload:Upload;destinationID:string}>();
+  let galleryActionNotice = $state<{message:string;failed:boolean}>();
   let expandedImageIndex = $state<number | undefined>();
   let expandedVideo = $state<Upload>();
   let expandedOpener: HTMLElement | null = null;
   let galleryGap = $state(16);
+  let includeOwn = $state(false);
   let masonry = $state<Record<string, { left: number; top: number }>>({});
   let masonryWidth = $state(0);
   let masonryHeight = $state(0);
@@ -57,6 +60,7 @@
   // loaded page; videos retain their own player rather than being coerced into images.
   const imageUploads = $derived(media.filter((item) => /^image\//i.test(item.upload.content_type)).map((item) => item.upload));
   const viewerItems = $derived(imageViewerItems(imageUploads));
+  const pendingDestination = $derived(preferredGalleryDestination(directs, bots, sourceID));
   function mediaAttachments(message: Message): Upload[] {
     return (message.attachments ?? []).filter((upload) => /^(image|video)\//i.test(upload.content_type));
   }
@@ -79,10 +83,11 @@
     const scope = workspace.id;
     session = new OutputGallerySession((cursor, limit, signal) => {
       const params = new URLSearchParams({ author_id: author, limit: String(limit), media_only: "true" });
+      if (includeOwn) params.set("include_own", "true");
       if (cursor) params.set("cursor", cursor);
       return api<OutputPage>(`/api/workspaces/${scope}/outputs?${params}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) });
     });
-    rememberGallery({ userID: user.id, workspaceID: scope, sourceID: author, session });
+    rememberGallery({ userID: user.id, workspaceID: scope, sourceID: author, includeOwn, session });
     await run(() => session!.load());
   }
   function capturePosition(preferredID = "") {
@@ -208,6 +213,12 @@
     await tick();
     restorePosition();
   }
+  async function setIncludeOwn(value: boolean) {
+    if (!user || !workspace || value === includeOwn) return;
+    includeOwn = value;
+    try { localStorage.setItem(outputIncludeOwnKey(user.id, workspace.id), value ? "true" : "false"); } catch { /* The session setting still works. */ }
+    await choose(sourceID);
+  }
   function addToQueue(upload: Upload) {
     if (!user || !workspace) return;
     queue = enqueueGalleryAttachment(user.id, workspace.id, upload, MAX_MESSAGE_ATTACHMENTS).uploads;
@@ -229,6 +240,19 @@
     const index = imageUploads.findIndex((item) => item.id === upload.id);
     if (index < 0) return;
     expandedImageIndex = index;
+  }
+  async function expandedContextActions(item: ImageViewerItem): Promise<ImageViewerContextAction[]> {
+    if (!item.upload) return [];
+    const source = media.find((entry) => entry.upload.id === item.upload!.id);
+    if (!source) return [];
+    const destinationID = source.message.channel_id || source.message.direct_conversation_id || "";
+    const params = new URLSearchParams({ source_upload_id: item.upload.id, destination_id: destinationID });
+    const data = await api<{gallery_actions:unknown}>(`/api/workspaces/${encodeURIComponent(source.message.workspace_id)}/gallery-actions?${params}`);
+    return eligibleGalleryActions(data.gallery_actions, item.upload).filter((action) => action.descriptor.fields.length === 0).map((action) => ({
+      id: `${action.installation_id}:${action.descriptor.id}`,
+      label: action.descriptor.label,
+      run: () => { expandedImageIndex = undefined; galleryActionNotice = undefined; galleryAction = { action, upload: item.upload, destinationID }; },
+    }));
   }
   function expandVideo(upload: Upload) {
     expandedOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -271,9 +295,12 @@
         channels = loadedChannels.channels; directs = loadedDirects.conversations;
         labels = Object.fromEntries([...channels.map((c) => [c.id, `#${c.name}`]), ...directs.map((d) => [d.id, d.members.filter((m) => m.id !== user?.id).map((m) => m.display_name).join(", ") || "Direct conversation"])]);
         queue = galleryAttachmentQueue(user.id, scope).uploads;
-        try { galleryGap = Math.max(4, Math.min(40, Number(localStorage.getItem("clickclack:gallery-gap")) || 16)); } catch { /* Default gap is stable. */ }
+        try {
+          galleryGap = Math.max(4, Math.min(40, Number(localStorage.getItem("clickclack:gallery-gap")) || 16));
+          includeOwn = localStorage.getItem(outputIncludeOwnKey(user.id, scope)) === "true";
+        } catch { /* Defaults remain stable. */ }
         const saved = galleryReturn;
-        if (saved?.userID === user.id && saved.workspaceID === scope && boundOutputBot(bots, saved.sourceID)) {
+        if (saved?.userID === user.id && saved.workspaceID === scope && (saved.includeOwn ?? false) === includeOwn && boundOutputBot(bots, saved.sourceID)) {
           sourceID = saved.sourceID; session = saved.session;
           validating = true; await run(() => session!.revalidate()); validating = false;
 
@@ -308,6 +335,7 @@
         </select>
       </label>
       <label>spacing <input type="range" min="4" max="40" step="2" value={galleryGap} aria-label="gallery spacing" oninput={(event) => void setGalleryGap(Number(event.currentTarget.value))} /></label>
+      <label class="output-gallery__toggle"><input type="checkbox" checked={includeOwn} onchange={(event) => void setIncludeOwn(event.currentTarget.checked)} /><span>show mine</span></label>
       {#if sourceID}
         <button class="output-gallery__button" disabled={busy} onclick={() => void run(() => session!.load())}>refresh</button>
         <button class="output-gallery__button output-gallery__button--primary" disabled={busy} onclick={() => void latest()}>latest</button>
@@ -315,6 +343,7 @@
     </div>
   </header>
   {#if error}<p class="output-gallery__notice" role="alert">{error}</p>{#if !sourceID}<button class="output-gallery__button" onclick={() => window.location.reload()}>reload gallery</button>{/if}{/if}
+  {#if galleryActionNotice}<p class="output-gallery__notice" role={galleryActionNotice.failed?"alert":"status"}>{galleryActionNotice.message}</p>{/if}
   {#if pageError}<p class="output-gallery__notice" role="alert">{pageError}</p><button class="output-gallery__button" onclick={() => void run(() => session!.load(!!session?.nextCursor))}>retry</button>{/if}
   {#if initializing || validating}<p class="output-gallery__notice" role="status">checking gallery…</p>
   {:else if !sourceID}<p class="output-gallery__notice">select the bot account whose media you want to browse.</p>
@@ -322,22 +351,22 @@
     <div class="output-grid" bind:this={masonryGrid} style={`--gallery-gap: ${galleryGap}px; height: ${masonryHeight}px`}>
       {#each media as item, itemIndex (tileKey(item))}
         <div class="output-grid__tile" data-gallery-tile={tileKey(item)} style={masonryStyle(item)}>
-          <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpandImage={expandImage} onExpandVideo={expandVideo} onGalleryAction={(action,upload,message)=>{galleryAction={action,upload,destinationID:message.channel_id || message.direct_conversation_id || ""};}} />
+          <OutputCard message={item.message} upload={item.upload} label={labels[item.message.channel_id || item.message.direct_conversation_id || ""] || "source conversation"} eager={itemIndex < 12} onOpen={(value) => void open(value)} onAddToMessage={addToQueue} onExpandImage={expandImage} onExpandVideo={expandVideo} onGalleryAction={(action,upload,message)=>{galleryActionNotice=undefined;galleryAction={action,upload,destinationID:message.channel_id || message.direct_conversation_id || ""};}} />
         </div>
       {/each}
     </div>
     {#if !busy && !pageError && !media.length}<p class="output-gallery__notice">no images or videos from this account yet.</p>{/if}
     {#if more}<div class="output-gallery__more"><button class="output-gallery__button" disabled={busy} onclick={() => void run(() => session!.load(true))}>{busy ? "loading…" : "load older media"}</button></div>{/if}
   {/if}
-  {#if galleryAction && user}{#key `${galleryAction.action.installation_id}:${galleryAction.action.descriptor.id}:${galleryAction.upload.id}`}<GalleryActionPanel {...galleryAction} {workspaceID} actorID={user.id} onClose={()=>{galleryAction=undefined;}} />{/key}{/if}
+  {#if galleryAction && user}{#key `${galleryAction.action.installation_id}:${galleryAction.action.descriptor.id}:${galleryAction.upload.id}`}<GalleryActionPanel {...galleryAction} {workspaceID} actorID={user.id} onClose={()=>{galleryAction=undefined;}} onStatus={(message,failed)=>{galleryActionNotice={message,failed};}} />{/key}{/if}
   {#if queue.length}
-    <aside class="output-gallery__queue" aria-label="Pending gallery attachments"><strong>{queue.length} pending</strong><button class="output-gallery__button" onclick={() => (choosingDestination = true)}>add to message…</button><button class="output-gallery__button" onclick={clearQueue}>clear</button>{#each queue as upload (upload.id)}<button class="output-gallery__queued" onclick={() => removeFromQueue(upload.id)} aria-label={`Remove ${upload.filename} from pending attachments`}>{upload.filename} ×</button>{/each}</aside>
+    <aside class="output-gallery__queue" aria-label="Pending gallery attachments"><strong>{queue.length} pending</strong><button class="output-gallery__button output-gallery__button--primary" onclick={() => pendingDestination ? void chooseDestination(pendingDestination.id) : (choosingDestination = true)}>add to @{pendingDestination?.bot.handle ?? "vai"} message</button><button class="output-gallery__button" onclick={() => (choosingDestination = true)}>choose another…</button><button class="output-gallery__button" onclick={clearQueue}>clear</button>{#each queue as upload (upload.id)}<button class="output-gallery__queued" onclick={() => removeFromQueue(upload.id)} aria-label={`Remove ${upload.filename} from pending attachments`}>{upload.filename} ×</button>{/each}</aside>
   {/if}
   {#if choosingDestination}
     <div class="output-gallery__scrim" role="presentation" onclick={() => (choosingDestination = false)}><section class="output-gallery__chooser" role="dialog" aria-modal="true" aria-label="Choose destination" onclick={(event) => event.stopPropagation()}><h2>add {queue.length} pending item{queue.length === 1 ? "" : "s"} to</h2><p>Choose the conversation whose draft should receive these uploads. Nothing will be sent.</p><div class="output-gallery__destinations">{#each channels as channel (channel.id)}<button onclick={() => void chooseDestination(channel.id)}>#{channel.name}</button>{/each}{#each directs as direct (direct.id)}<button onclick={() => void chooseDestination(direct.id)}>{labels[direct.id]}</button>{/each}</div><button class="output-gallery__button" onclick={() => (choosingDestination = false)}>cancel</button></section></div>
   {/if}
   {#if expandedImageIndex !== undefined}
-    <ImageViewer items={viewerItems} initialIndex={expandedImageIndex} onClose={() => (expandedImageIndex = undefined)} />
+    <ImageViewer items={viewerItems} initialIndex={expandedImageIndex} loadContextActions={expandedContextActions} onClose={() => (expandedImageIndex = undefined)} />
   {/if}
   {#if expandedVideo}
     <div class="output-gallery__scrim" role="presentation" onclick={closeExpandedVideo} onkeydown={(event) => event.key === "Escape" && closeExpandedVideo()}><section class="output-gallery__video-viewer" role="dialog" aria-modal="true" aria-label={`Expanded ${expandedVideo.filename}`} tabindex="-1" onclick={(event) => event.stopPropagation()}><video src={uploadURL(expandedVideo)} controls autoplay playsinline aria-label={expandedVideo.filename}><track kind="captions" /></video><button class="output-gallery__button" autofocus onclick={closeExpandedVideo}>close</button></section></div>
@@ -351,6 +380,10 @@
   .output-gallery__controls { display: flex; align-items: end; flex-wrap: wrap; gap: .5rem; }
   label { display: grid; gap: .3rem; color: var(--muted); font-size: .76rem; font-weight: 650; text-transform: lowercase; }
   select, .output-gallery__button { min-height: 2.35rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+  .output-gallery__toggle { display: flex; min-height: 2.35rem; align-items: center; align-self: end; gap: .45rem; padding: 0 .7rem; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; }
+  .output-gallery__toggle:hover { border-color: var(--accent); background: var(--hover-strong); }
+  .output-gallery__toggle input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--accent); }
+  .output-gallery__toggle span { font-size: .76rem; font-weight: 700; }
   select { min-width: min(18rem, calc(100vw - 3rem)); padding: 0 .7rem; cursor: pointer; color-scheme: light dark; }
   :global(:root[data-color-mode="light"]) select { color-scheme: light; }
   :global(:root[data-color-mode="dark"]) select { color-scheme: dark; }

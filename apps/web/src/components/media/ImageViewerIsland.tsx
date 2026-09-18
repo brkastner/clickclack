@@ -4,10 +4,12 @@ import { writeClipboardText } from "../../lib/clipboard";
 import type { ImageViewerItem } from "../../lib/uploads";
 import { copyAttachmentLink, copyViewerImage } from "../../lib/image-viewer-clipboard";
 
+export type ImageViewerContextAction = { id: string; label: string; run: () => void };
 export type ImageViewerProps = {
   items: ImageViewerItem[];
   initialIndex: number;
   onClose: () => void;
+  loadContextActions?: (item: ImageViewerItem) => Promise<ImageViewerContextAction[]>;
 };
 
 type ContextMenuPosition = {
@@ -45,11 +47,13 @@ function findFocusFallback(opener: HTMLElement | null): HTMLElement | null {
   );
 }
 
-function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
+function ImageViewer({ items, initialIndex, onClose, loadContextActions }: ImageViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
   const [contextMenuStatus, setContextMenuStatus] = useState("");
   const [copying, setCopying] = useState(false);
+  const [contextActions, setContextActions] = useState<ImageViewerContextAction[]>([]);
+  const contextActionSerial = useRef(0);
   const scrimRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -66,6 +70,7 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
   useEffect(() => setCurrentIndex(initialIndex), [initialIndex, items]);
 
   const dismissContextMenu = useCallback(() => {
+    contextActionSerial.current++;
     setContextMenu(null);
     setContextMenuStatus("");
   }, []);
@@ -76,15 +81,20 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
   }, [dismissContextMenu]);
 
   const showContextMenu = useCallback((x: number, y: number) => {
-    const menuWidth = 210;
-    const menuHeight = 108;
+    const menuWidth = 240;
+    const menuHeight = 180;
     const margin = 8;
     setContextMenu({
       x: Math.max(margin, Math.min(x, window.innerWidth - menuWidth - margin)),
       y: Math.max(margin, Math.min(y, window.innerHeight - menuHeight - margin)),
     });
     setContextMenuStatus("");
-  }, []);
+    setContextActions([]);
+    const serial = ++contextActionSerial.current;
+    if (current && loadContextActions) void loadContextActions(current).then((actions) => {
+      if (serial === contextActionSerial.current) setContextActions(actions);
+    }).catch(() => {});
+  }, [current, loadContextActions]);
 
   const openContextMenu = useCallback(
     (event: React.MouseEvent<HTMLImageElement>) => {
@@ -175,7 +185,7 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
       window.removeEventListener("blur", dismissContextMenu);
       window.removeEventListener("resize", dismissContextMenu);
     };
-  }, [contextMenu, dismissContextMenu]);
+  }, [closeContextMenu, contextMenu, dismissContextMenu]);
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -228,7 +238,7 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [closeContextMenu, contextMenu, currentIndex, items.length, onClose, showNext, showPrevious]);
 
-  useEffect(() => dismissContextMenu(), [currentIndex, dismissContextMenu]);
+  useEffect(() => { contextActionSerial.current++; dismissContextMenu(); }, [currentIndex, dismissContextMenu]);
 
   const copyCurrentImage = useCallback(async () => {
     if (copying) return;
@@ -362,6 +372,11 @@ function ImageViewer({ items, initialIndex, onClose }: ImageViewerProps) {
               >
                 Copy attachment link
               </button>
+              {contextActions.map((action) => (
+                <button key={action.id} type="button" role="menuitem" onClick={() => { dismissContextMenu(); action.run(); }}>
+                  {action.label}
+                </button>
+              ))}
               {contextMenuStatus && <p role="status">{contextMenuStatus}</p>}
             </div>
           )}

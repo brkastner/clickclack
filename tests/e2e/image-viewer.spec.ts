@@ -74,6 +74,13 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
     inlineImageMenu.getByRole("menuitem", { name: "Copy attachment link" }),
   ).toBeVisible();
   await expect(page.getByRole("dialog", { name: `Image viewer: ${filename}` })).toHaveCount(0);
+  await page.mouse.move(4, 4);
+  await expect(inlineImageMenu).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(inlineImageMenu).toHaveCount(0);
+
+  await conversationTrigger.getByRole("img", { name: filename }).click({ button: "right" });
+  await expect(inlineImageMenu).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(inlineImageMenu).toHaveCount(0);
 
@@ -103,7 +110,15 @@ test("opens conversation and thread images in an accessible lightbox", async ({ 
   await expect(page.locator(".shell")).toHaveAttribute("inert", "");
   await expect(closeButton).toBeFocused();
 
-  await page.keyboard.press("Tab");
+  await displayedImage.click({ button: "right" });
+  const pointerImageMenu = dialog.getByRole("menu", { name: "Image options" });
+  await expect(pointerImageMenu).toBeVisible();
+  // Pointer travel must not dismiss the menu before the user can reach it.
+  await page.mouse.move(4, 4);
+  await expect(pointerImageMenu).toBeVisible();
+  await dialog.locator("header strong").click();
+  await expect(pointerImageMenu).toHaveCount(0);
+  await displayedImage.focus();
   await expect(displayedImage).toBeFocused();
   await page.keyboard.press("Shift+F10");
   const imageMenu = dialog.getByRole("menu", { name: "Image options" });

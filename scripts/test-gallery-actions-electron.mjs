@@ -19,19 +19,21 @@ try{
  const bot={id:'bot',kind:'bot',display_name:'Synthetic photo lab',handle:'lab'};
  const upload={id:'source',filename:'sample.png',content_type:'image/png',width:320,height:180,byte_size:1};
  const message={id:'output',workspace_id:'workspace',channel_id:'channel',author_id:'bot',author:bot,body:'Synthetic',created_at:'2026-09-13T00:00:00Z',attachments:[upload]};
+ const ownUpload={id:'own-source',filename:'mine.png',content_type:'image/png',width:320,height:180,byte_size:1};
+ const ownMessage={id:'own-output',workspace_id:'workspace',channel_id:'channel',author_id:'owner',author:user,body:'Mine',created_at:'2026-09-13T00:00:01Z',attachments:[ownUpload]};
  const descriptor={version:1,id:'synthetic.adjust',label:'Adjust image',accepted_media_types:['image/png'],schema_revision:1,fields:[{id:'confirm',kind:'boolean',label:'Confirm',default:true},{id:'amount',kind:'number',label:'Amount',min:0,max:10,step:.5,default:1},{id:'format',kind:'select',label:'Format',choices:[{id:'png',label:'PNG'}]},{id:'images',kind:'images',label:'References',choices:[],min:0,max:2,dynamic:true}]};
- let enabled=true;let session;const requests=new Map();const submissions=[];
+ let enabled=true;let providerUnavailable=true;let session;const requests=new Map();const submissions=[];
  await page.route('**/api/**',async route=>{
  const r=route.request();const url=new URL(r.url());const path=url.pathname;let json;
  if(path==='/api/me')json={user};
  else if(path==='/api/workspaces')json={workspaces:[{id:'workspace',route_id:'w',name:'Synthetic'}]};
  else if(path.endsWith('/members'))json={members:[{user:bot,role:'bot'}],has_more:false};
  else if(path.endsWith('/channels'))json={channels:[{id:'channel',name:'outputs'}]};
- else if(path==='/api/dms')json={conversations:[]};
- else if(path.endsWith('/outputs'))json={outputs:[message],next_cursor:null};
+ else if(path==='/api/dms')json={conversations:[{id:'dm-lab',route_id:'dm-lab',workspace_id:'workspace',created_at:'2026-09-13T00:00:00Z',members:[user,bot],can_send:true}]};
+ else if(path.endsWith('/outputs'))json={outputs:url.searchParams.get('include_own')==='true'?[ownMessage,message]:[message],next_cursor:null};
  else if(path.startsWith('/api/uploads/')){const video=upload.content_type.startsWith('video/')&&path.endsWith('/source');return route.fulfill({contentType:video?'video/webm':'image/png',body:await readFile(`${root}/${video?'preview.webm':'preview.png'}`)});}
  else if(path.endsWith('/gallery-actions'))json={gallery_actions:enabled?[{installation_id:'app',descriptor}]:[]};
- else if(path.endsWith('/gallery-actions/open')){const b=r.postDataJSON();session={id:b.session_id,actor_id:'owner',workspace_id:'workspace',installation_id:'app',source_upload_id:'source',destination_id:'channel',descriptor:structuredClone(descriptor),expires_at:Math.floor(Date.now()/1000)+1800,capability_revision:'one'};const request={request_id:`${session.id}.open`,session_id:session.id,kind:'open',state:'accepted',payload:b,subscription_id:'sub'};requests.set(request.request_id,request);json={session,request};}
+ else if(path.endsWith('/gallery-actions/open')){const b=r.postDataJSON();session={id:b.session_id,actor_id:'owner',workspace_id:'workspace',installation_id:'app',source_upload_id:'source',destination_id:'channel',descriptor:structuredClone(descriptor),expires_at:Math.floor(Date.now()/1000)+1800,capability_revision:'one'};const request={request_id:`${session.id}.open`,session_id:session.id,kind:'open',state:providerUnavailable?'uncertain':'accepted',payload:b,subscription_id:'sub'};requests.set(request.request_id,request);json={session,request};}
  else if(path.endsWith('/choices')){const b=r.postDataJSON();session.descriptor.fields[3].choices=[{id:'reference',label:'Reference',upload_id:'preview'}];session.preview_upload_id='preview';const request={request_id:b.request_id,session_id:session.id,kind:'choices',state:'accepted',payload:b,subscription_id:'sub'};requests.set(b.request_id,request);json={session,request};}
  else if(path.endsWith('/submit')){const b=r.postDataJSON();submissions.push(b);session.submission_id=b.request_id;const request={request_id:b.request_id,session_id:session.id,kind:'submit',state:'uncertain',payload:b,subscription_id:'sub'};requests.set(b.request_id,request);json={session,request};}
  else if(path.includes('/gallery-actions/sessions/')){if(!session)return route.fulfill({status:404,json:{error:'not found'}});const request=requests.get(url.searchParams.get('request_id')||session.submission_id||`${session.id}.open`);json={session,request};}
@@ -41,19 +43,22 @@ try{
  await page.goto(server.resolvedUrls.local[0]);
  await page.getByLabel('gallery source account').selectOption('bot');
  const card=page.locator('.output-card');await expect(card).toHaveCount(1);
+ const showMine=page.getByLabel('show mine');await expect(showMine).not.toBeChecked();await showMine.check();await expect(card).toHaveCount(2);await showMine.uncheck();await expect(card).toHaveCount(1);
  const options=page.getByRole('button',{name:'Media options for sample.png'});
  await options.click();await page.getByRole('menuitem',{name:'Adjust image'}).click();
  const panel=page.getByRole('dialog',{name:'Adjust image'});await expect(panel).toBeVisible();
- await expect(panel.getByRole('button',{name:'Submit',exact:true})).toBeEnabled();
+ await expect(panel.getByRole('alert')).toContainText('provider could not be reached');
+ providerUnavailable=false;session=undefined;requests.clear();await panel.getByRole('button',{name:'Start new panel'}).click();
+ await expect(panel.getByRole('button',{name:'Run action',exact:true})).toBeEnabled();
  await panel.getByLabel('Amount').fill('2.5');await panel.getByRole('button',{name:'Load choices'}).click();
  await panel.getByLabel('Reference',{exact:true}).check();await expect(panel.getByAltText('Action preview')).toBeVisible();
  await page.screenshot({path:`${evidence}/panel.png`});
- await panel.getByRole('button',{name:'Submit',exact:true}).dblclick();await expect(panel.getByRole('status')).toContainText('uncertain');assert.equal(submissions.length,1);assert.deepEqual(submissions[0].values,{confirm:true,amount:2.5,format:'png',images:['reference']});
+ await panel.getByRole('button',{name:'Run action',exact:true}).dblclick();await expect(panel.getByRole('status')).toContainText('uncertain');assert.equal(submissions.length,1);assert.deepEqual(submissions[0].values,{confirm:true,amount:2.5,format:'png',images:['reference']});
  await page.keyboard.press('Escape');await expect(panel).toHaveCount(0);await expect(options).toBeFocused();
  await options.press('Shift+F10');await page.getByRole('menuitem',{name:'Adjust image'}).click();await expect(panel.getByRole('status')).toContainText('uncertain');assert.equal(submissions.length,1);
  await page.keyboard.press('Escape');enabled=false;
  await options.click();await expect(page.getByRole('menuitem',{name:'Adjust image'})).toHaveCount(0);
- await page.getByRole('menuitem',{name:'Add to pending message'}).click();await expect(page.getByLabel('Pending gallery attachments')).toContainText('1 pending');
+ await page.getByRole('menuitem',{name:'Add to pending message'}).click();const pending=page.getByLabel('Pending gallery attachments');await expect(pending).toContainText('1 pending');await expect(pending.getByRole('button',{name:'add to @lab message'})).toBeVisible();
  await page.screenshot({path:`${evidence}/no-plugin.png`});assert.deepEqual(errors,[]);
  // A video descriptor must render a native video source preview, never an img.
  enabled=true;session=undefined;requests.clear();

@@ -38,6 +38,9 @@ func TestOutputsHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "my output"}); err != nil {
+		t.Fatal(err)
+	}
 	outsider, err := st.CreateUser(ctx, store.CreateUserInput{DisplayName: "Outside", Email: "output-outsider@example.com"})
 	if err != nil {
 		t.Fatal(err)
@@ -86,6 +89,14 @@ func TestOutputsHTTP(t *testing.T) {
 	}
 	if w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("outputs must not be cached")
+	}
+	own := request(owner.ID, "?author_id="+bot.ID+"&limit=10&include_own=true")
+	if own.Code != 200 {
+		t.Fatal(own.Body.String())
+	}
+	var ownPage store.OutputPage
+	if err := json.Unmarshal(own.Body.Bytes(), &ownPage); err != nil || len(ownPage.Outputs) != 4 {
+		t.Fatalf("include-own query did not add requester output: %#v %v", ownPage, err)
 	}
 	w = request(owner.ID, base+"&cursor="+url.QueryEscape(*page.NextCursor))
 	if w.Code != 200 {

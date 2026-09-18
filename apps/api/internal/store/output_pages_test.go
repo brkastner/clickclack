@@ -42,7 +42,7 @@ func TestOutputCursorRejectsChangedScopeAndMalformedPosition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, changed := range []OutputPageRequest{{WorkspaceID: "other", AuthorID: "b", UserID: "u"}, {WorkspaceID: "w", AuthorID: "other", UserID: "u"}} {
+	for _, changed := range []OutputPageRequest{{WorkspaceID: "other", AuthorID: "b", UserID: "u"}, {WorkspaceID: "w", AuthorID: "other", UserID: "u"}, {WorkspaceID: "w", AuthorID: "b", UserID: "u", IncludeOwn: true}} {
 		if _, _, err := DecodeOutputCursor(cursor, changed); !errors.Is(err, ErrInvalidOutputPage) {
 			t.Fatal("accepted changed cursor scope")
 		}

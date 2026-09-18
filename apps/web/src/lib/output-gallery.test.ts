@@ -4,6 +4,8 @@ import {
   OutputGallerySession,
   boundOutputBot,
   outputSourceKey,
+  outputIncludeOwnKey,
+  preferredGalleryDestination,
   type OutputPage,
 } from "./output-gallery.ts";
 import type { Message, User } from "./types.ts";
@@ -27,6 +29,22 @@ test("source binding uses immutable ID despite duplicate names, renames and dele
   assert.equal(boundOutputBot(bots, "b"), undefined);
   assert.notEqual(outputSourceKey("a", "w"), outputSourceKey("b", "w"));
   assert.notEqual(outputSourceKey("a", "w"), outputSourceKey("a", "x"));
+  assert.notEqual(outputIncludeOwnKey("a", "w"), outputIncludeOwnKey("b", "w"));
+  assert.notEqual(outputIncludeOwnKey("a", "w"), outputIncludeOwnKey("a", "x"));
+});
+test("pending attachments prefer the viewed bot direct and fall back to @vai", () => {
+  const bots = [
+    { id: "current", kind: "bot", display_name: "Current", handle: "current" },
+    { id: "vai", kind: "bot", display_name: "VAI", handle: "vai" },
+  ] as User[];
+  const directs = [
+    { id: "dm-current", can_send: true, members: [bots[0]] },
+    { id: "dm-vai", can_send: true, members: [bots[1]] },
+  ] as any[];
+  assert.equal(preferredGalleryDestination(directs, bots, "current")?.id, "dm-current");
+  assert.equal(preferredGalleryDestination(directs, bots, "missing")?.id, "dm-vai");
+  directs[0].can_send = false;
+  assert.equal(preferredGalleryDestination(directs, bots, "current")?.id, "dm-vai");
 });
 test("cancelled page cannot populate a switched source", async () => {
   let resolve!: (page: OutputPage) => void;

@@ -14,6 +14,7 @@
     onGalleryAction?: (action: GalleryActionDiscovery, upload: Upload, message: Message) => void;
   } = $props();
   let menu = $state(false);
+  let card: HTMLElement;
   let actions = $state<GalleryActionDiscovery[]>([]);
   let discovery = 0;
   $effect(() => { if (!menu || !onGalleryAction) return; const serial = ++discovery; const abort = new AbortController(); actions = [];
@@ -21,6 +22,7 @@
     void api<{gallery_actions:unknown}>(`/api/workspaces/${encodeURIComponent(message.workspace_id)}/gallery-actions?${params}`,{signal:abort.signal}).then(data=>{if(serial===discovery&&!abort.signal.aborted)actions=eligibleGalleryActions(data.gallery_actions,upload);}).catch(()=>{});
     return ()=>{abort.abort();};
   });
+  $effect(() => { if (!menu) return; const dismiss = (event: PointerEvent) => { if (!card.contains(event.target as Node)) menu = false; }; window.addEventListener("pointerdown", dismiss); return () => window.removeEventListener("pointerdown", dismiss); });
   let menuButton: HTMLButtonElement;
   const mediaURL = $derived(uploadURL(upload));
   const isVideo = $derived(upload.content_type.toLowerCase().startsWith("video/"));
@@ -43,7 +45,7 @@
   }
 </script>
 
-<article class="output-card" data-output-id={message.id}>
+<article bind:this={card} class="output-card" data-output-id={message.id}>
   <div class="output-card__media" style={mediaStyle}>
     {#if isVideo}
       <video src={mediaURL} preload="metadata" playsinline controls controlslist="nodownload" aria-label={`Video from ${label}`} onloadedmetadata={(event) => resolveVideoRatio(event.currentTarget)} oncontextmenu={showMenu} onkeydown={keydown}><track kind="captions" /></video>

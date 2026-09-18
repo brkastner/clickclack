@@ -35,6 +35,11 @@ func Run(t *testing.T, st store.Store, exec func(string, ...any) error) {
 	must(t, exec("INSERT INTO message_attachments (message_id, upload_id, created_at) VALUES (?, ?, ?)", attachment.ID, "output-upload", attachment.CreatedAt))
 	must(t, exec("UPDATE messages SET body = '' WHERE id = ?", attachment.ID))
 	want[attachment.ID] = true
+	ownAttachment, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: owner.ID, Body: "own placeholder"})
+	must(t, err)
+	must(t, exec("INSERT INTO uploads (id, workspace_id, owner_id, filename, content_type, byte_size, storage_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", "own-output-upload", ws, owner.ID, "mine.png", "image/png", 12, "synthetic-own", ownAttachment.CreatedAt))
+	must(t, exec("INSERT INTO message_attachments (message_id, upload_id, created_at) VALUES (?, ?, ?)", ownAttachment.ID, "own-output-upload", ownAttachment.CreatedAt))
+	must(t, exec("UPDATE messages SET body = '' WHERE id = ?", ownAttachment.ID))
 	deleted, _, err := st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: channels[0].ID, AuthorID: bot.ID, Body: "deleted"})
 	must(t, err)
 	must(t, exec("UPDATE messages SET deleted_at = created_at WHERE id = ?", deleted.ID))
@@ -93,7 +98,21 @@ func Run(t *testing.T, st store.Store, exec func(string, ...any) error) {
 	mediaPage, err := st.ListOutputPage(ctx, store.OutputPageRequest{WorkspaceID: ws, AuthorID: bot.ID, UserID: owner.ID, MediaOnly: true})
 	must(t, err)
 	if len(mediaPage.Outputs) != 1 || mediaPage.Outputs[0].ID != attachment.ID {
-		t.Fatalf("media-only page included non-media output: %#v", mediaPage.Outputs)
+		t.Fatalf("media-only page included non-media or own output by default: %#v", mediaPage.Outputs)
+	}
+	ownPage, err := st.ListOutputPage(ctx, store.OutputPageRequest{WorkspaceID: ws, AuthorID: bot.ID, UserID: owner.ID, MediaOnly: true, IncludeOwn: true})
+	must(t, err)
+	if len(ownPage.Outputs) != 2 {
+		t.Fatalf("include-own page has %d outputs, want 2: %#v", len(ownPage.Outputs), ownPage.Outputs)
+	}
+	foundOwn := false
+	for _, message := range ownPage.Outputs {
+		if message.ID == ownAttachment.ID {
+			foundOwn = message.Author != nil && message.Author.ID == owner.ID && message.Author.Kind == "human"
+		}
+	}
+	if !foundOwn {
+		t.Fatal("include-own page did not hydrate the requester's media and human author")
 	}
 	request.Cursor = *first.NextCursor
 	request.UserID = member.ID
