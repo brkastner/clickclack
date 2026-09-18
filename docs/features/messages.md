@@ -114,15 +114,14 @@ rows use the normal durable message sequence and realtime fan-out. They do
 not increment unread counts, trigger notifications, or appear in full-text
 search.
 
-The selected [KAS-753 rendering plan](../drafts/chronological-bot-activity.md)
+The implemented and locally verified [KAS-753 rendering plan](../drafts/chronological-bot-activity.md)
 keeps commentary in place and collapses only contiguous tool rows sharing the
 existing conversation/author/turn key. Ordinary messages, commentary (including
-hidden commentary), and key changes separate tool blocks. Later activity must
+hidden commentary), and key changes separate tool blocks. Later activity does
 not move ahead of intervening messages, including an ordinary final answer.
-The plan preserves visibility controls, tool details and duplicate counts,
-first-row IDs, and existing finality/staleness rules without changing durable
-ordering or protocol semantics. This is selected behavior, not a claim that
-implementation, Electron verification, or deployment has completed.
+The implementation preserves visibility controls, tool details and duplicate
+counts, first-row IDs, and existing finality/staleness rules without changing
+durable ordering or protocol semantics. Deployment has not been verified.
 
 Publishing activity requires bot-token authentication plus the explicit
 `agent_activity:write` scope, which is intentionally excluded from every

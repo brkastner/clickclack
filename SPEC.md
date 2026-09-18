@@ -191,7 +191,7 @@ Frontend should not own durable chat truth.
 
 ### Chronological bot activity (KAS-753)
 
-**Status: Selected for implementation. This documentation change does not implement, verify or deploy it.**
+**Status: Implemented in commit `5cedf5df` and locally verified. Deployment has not been verified.**
 
 Preserve the supplied conversation order when rendering durable bot activity.
 The current `coalesceAgentActivity` collects a turn's activity at its first row,
@@ -207,14 +207,19 @@ persistence or protocol semantics. Keep the existing `ChatApp.svelte` interface.
 Scope is the coalescer, its tests, and obsolete anchoring comments, not a
 workflow-panel redesign, producer change, or schema migration.
 
-The [selected implementation plan](docs/drafts/chronological-bot-activity.md)
-preserves the full selected summary, ordered steps, and validation verbatim.
-Cover interleaved human/bot/turn activity and late rows without relocating
-ordinary messages, visibility combinations, missing turn IDs, author and
-conversation isolation, duplicate tools, stale turns, and trailing live blocks.
-Run the focused activity tests, web tests, and web typecheck. Verify ordering,
-adjacent tool collapse, and stable earlier rows in ClickClack Electron.
-Deployment completion checks must pass before claiming the change is live.
+The [implementation record](docs/drafts/chronological-bot-activity.md)
+confirms that the documentation status reconciliation is complete. The
+implementation in commit `5cedf5df` remains intact at HEAD; the coalescer, its
+tests, and the `ChatApp.svelte` interface were not changed by this
+reconciliation. The change remains limited to the coalescer behavior already
+implemented, without persistence, protocol, producer, schema, or workflow-panel
+changes.
+
+Completed local verification comprises the focused activity test, the full web
+test suite, web typecheck, and the Electron activity proof. It also confirms
+that `5cedf5df` is an ancestor of HEAD and that later commits have not changed
+the KAS-753 implementation files. Deployment completion checks must pass before
+claiming the change is live.
 
 ### Sidebar hero rendering correction
 
