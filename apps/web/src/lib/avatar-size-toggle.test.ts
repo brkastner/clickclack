@@ -71,6 +71,28 @@ test("double mode scales sidebar shelf and DM avatars to 150 percent", () => {
   );
 });
 
+test("home view follows the shared avatar size preference", () => {
+  const home = readSource("../components/views/HomeView.svelte");
+
+  assert.match(home, /--home-filter-avatar-size:\s*20px;/u);
+  assert.match(home, /--home-persona-avatar-size:\s*52px;/u);
+  assert.match(
+    home,
+    /:root\[data-avatar-size="double"\][\s\S]*?--home-filter-avatar-size:\s*30px;[\s\S]*?--home-persona-avatar-size:\s*78px;/u,
+  );
+  assert.match(home, /width:\s*var\(--home-filter-avatar-size\);/u);
+  assert.match(home, /width:\s*var\(--home-persona-avatar-size\);/u);
+});
+
+test("home view typography is twenty percent larger", () => {
+  const home = readSource("../components/views/HomeView.svelte");
+
+  assert.match(home, /\.home-view\s*\{[\s\S]*?font-size:\s*120%;/u);
+  assert.match(home, /\.home-view__heading h1\s*\{[\s\S]*?font-size:\s*22\.8px;/u);
+  assert.match(home, /\.home-persona__header h2\s*\{[\s\S]*?font:\s*800 20\.4px\/1\.2/u);
+  assert.match(home, /\.home-activity p\s*\{[\s\S]*?font-size:\s*14\.4px;/u);
+});
+
 test("left-anchors persona identity headers without changing nested channels", () => {
   const styles = readSource("../styles/sidebar.css");
 
