@@ -22,6 +22,22 @@ import (
 type galleryTransport func(*http.Request) (*http.Response, error)
 
 func (f galleryTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestGallerySubmitPayloadPreservesEmptyValues(t *testing.T) {
+	payload, err := galleryRequestPayload("submit", galleryInput{RequestID: "request", SchemaRevision: 1, Values: map[string]any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err = json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	values, ok := decoded["values"].(map[string]any)
+	if !ok || len(values) != 0 {
+		t.Fatalf("empty submit values were not preserved: %s", payload)
+	}
+}
+
 func TestGalleryHostSyntheticFlow(t *testing.T) {
 	for _, backend := range []string{"sqlite", "postgres"} {
 		t.Run(backend, func(t *testing.T) {

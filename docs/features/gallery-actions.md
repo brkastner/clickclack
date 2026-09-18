@@ -44,6 +44,10 @@ await actor.galleryActions.status(sessionId, submission.request_id);
 
 The callback is a signed gallery envelope (not the ordinary event-log wrapper). It contains `version`, `event_id`, `type`, `installation_id`, `action_id`, `actor_id`, `workspace_id`, `source_upload_id`, `destination_id`, `session_id`, `request_id`, `submission_id`, `schema_revision`, `expires_at`, and `payload`. Verify `X-ClickClack-Timestamp` and `X-ClickClack-Signature` using the subscription signing secret. HTTP acknowledgement alone does not accept a request: the producer must POST the correlated authenticated response above. Only the bound producer can answer; no producer-selected callback URL is accepted in a descriptor or request.
 
+## Immediate actions
+
+Descriptors with no fields are immediate actions. Selecting one from an output's media context menu opens and submits the durable action without showing an empty configuration dialog, then reports completion in the gallery. Producers must still perform side effects only on `gallery_action.submit`; `gallery_action.open` remains preparation-only. Authorization, signing, retry identity, and status recovery are unchanged.
+
 ## Authorization and limits
 
 Discovery, open, choices, submit, status, response, and dispatch recheck current authority. Actor and bot must both retain workspace access, readable source media, and permission to send to the explicitly supplied destination. Installation, registration token, matching subscription, capability generation, schema, expiry, and moderation remain authoritative. Archival, source deletion, revocation, and membership loss invalidate access. No callback grants access to an upload.

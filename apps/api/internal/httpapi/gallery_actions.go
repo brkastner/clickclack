@@ -391,6 +391,17 @@ type galleryInput struct {
 	Limit          int            `json:"limit,omitempty"`
 }
 
+func galleryRequestPayload(kind string, input galleryInput) ([]byte, error) {
+	if kind == "submit" {
+		return json.Marshal(struct {
+			RequestID      string         `json:"request_id"`
+			SchemaRevision int            `json:"schema_revision"`
+			Values         map[string]any `json:"values"`
+		}{input.RequestID, input.SchemaRevision, input.Values})
+	}
+	return json.Marshal(input)
+}
+
 func (s *Server) requestGalleryAction(w http.ResponseWriter, r *http.Request) {
 	v, ok := s.galleryLoad(w, r)
 	if !ok {
@@ -430,7 +441,11 @@ func (s *Server) requestGalleryAction(w http.ResponseWriter, r *http.Request) {
 		galleryError(w, store.ErrGalleryConflict)
 		return
 	}
-	payload, _ := json.Marshal(b)
+	payload, e := galleryRequestPayload(kind, b)
+	if e != nil {
+		galleryError(w, e)
+		return
+	}
 	digest := galleryactions.SubmissionDigest(v.ID, b.RequestID, string(payload))
 	if old, e := s.store.GetGalleryRequest(r.Context(), b.RequestID); e == nil {
 		if old.SessionID != v.ID || old.Kind != kind || old.Digest != digest {

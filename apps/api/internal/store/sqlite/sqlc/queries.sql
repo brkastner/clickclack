@@ -1925,7 +1925,8 @@ WITH eligible AS (
 			'Z'
 	ELSE substr(strftime('%Y-%m-%dT%H:%M:%f', m.created_at), 1, 23) || '000000Z'
 END AS output_created_at FROM messages m
- WHERE m.workspace_id = sqlc.arg(workspace_id) AND m.author_id = sqlc.arg(author_id)
+ WHERE m.workspace_id = sqlc.arg(workspace_id) AND (m.author_id = sqlc.arg(author_id)
+ OR (CAST(sqlc.arg(include_own) AS INTEGER) = 1 AND m.author_id = sqlc.arg(user_id)))
  AND m.deleted_at IS NULL AND (m.kind = 'message' OR m.kind = '')
  AND (CAST(sqlc.arg(media_only) AS INTEGER) = 0 OR EXISTS (
    SELECT 1 FROM message_attachments ma JOIN uploads u ON u.id = ma.upload_id
@@ -1939,7 +1940,7 @@ END AS output_created_at FROM messages m
        WHERE dcm.conversation_id = m.direct_conversation_id AND dcm.user_id = sqlc.arg(user_id)
        AND dc.workspace_id = m.workspace_id)))
 )
-SELECT m.*, u.display_name AS author_display_name, u.handle AS author_handle,
+SELECT m.*, u.kind AS author_kind, u.display_name AS author_display_name, u.handle AS author_handle,
  u.avatar_url AS author_avatar_url, u.avatar_url_light AS author_avatar_url_light,
  u.created_at AS author_created_at, u.owner_user_id AS author_owner_id
 FROM eligible e JOIN messages m ON m.id = e.id JOIN users u ON u.id = m.author_id

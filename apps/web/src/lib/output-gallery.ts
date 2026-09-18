@@ -1,14 +1,29 @@
-import type { Message, User } from "./types";
+import type { DirectConversation, Message, User } from "./types";
 
 export type OutputPage = { outputs: Message[]; next_cursor: string | null };
 export const OUTPUT_GALLERY_PAGE_SIZE = 60;
 export const outputSourceKey = (userID: string, workspaceID: string) =>
   `clickclack:output-source:${encodeURIComponent(userID)}:${encodeURIComponent(workspaceID)}`;
+export const outputIncludeOwnKey = (userID: string, workspaceID: string) =>
+  `clickclack:output-include-own:${encodeURIComponent(userID)}:${encodeURIComponent(workspaceID)}`;
 export function outputBots(users: User[]): User[] {
   return users.filter((user) => user.kind === "bot" && !user.deleted_at);
 }
 export function boundOutputBot(users: User[], id: string): User | undefined {
   return outputBots(users).find((user) => user.id === id);
+}
+export function preferredGalleryDestination(
+  directs: DirectConversation[],
+  bots: User[],
+  sourceID: string,
+): { id: string; bot: User } | undefined {
+  const current = boundOutputBot(bots, sourceID);
+  const vai = outputBots(bots).find((bot) => bot.handle?.toLowerCase() === "vai");
+  for (const bot of [current, vai]) {
+    if (!bot) continue;
+    const direct = directs.find((conversation) => conversation.can_send && conversation.members.some((member) => member.id === bot.id));
+    if (direct) return { id: direct.id, bot };
+  }
 }
 export type OutputFetcher = (
   cursor: string,
@@ -115,7 +130,7 @@ export class OutputGallerySession {
 }
 
 export let galleryReturn:
-  | { userID: string; workspaceID: string; session: OutputGallerySession; sourceID: string }
+  | { userID: string; workspaceID: string; session: OutputGallerySession; sourceID: string; includeOwn?: boolean }
   | undefined;
 export let gallerySource: Message | undefined;
 export function rememberGallery(value: NonNullable<typeof galleryReturn>) {

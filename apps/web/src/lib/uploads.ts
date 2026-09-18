@@ -81,12 +81,14 @@ export function isVideoUpload(upload: Upload): boolean {
 export type ImageViewerItem = {
   url: string;
   title: string;
+  upload?: Upload;
 };
 
 export function imageViewerItems(uploads: Upload[]): ImageViewerItem[] {
   return uploads.filter(isImageUpload).map((upload) => ({
     url: uploadURL(upload),
     title: upload.filename,
+    upload,
   }));
 }
 

@@ -33,6 +33,7 @@ func (s *Server) listOutputs(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := 0
 	mediaOnly := r.URL.Query().Get("media_only") == "true"
+	includeOwn := r.URL.Query().Get("include_own") == "true"
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || parsed <= 0 {
@@ -42,7 +43,7 @@ func (s *Server) listOutputs(w http.ResponseWriter, r *http.Request) {
 		limit = int(parsed)
 	}
 	page, err := s.store.ListOutputPage(r.Context(), store.OutputPageRequest{
-		WorkspaceID: workspaceID, AuthorID: r.URL.Query().Get("author_id"), UserID: act.user.ID, Limit: limit, Cursor: r.URL.Query().Get("cursor"), MediaOnly: mediaOnly,
+		WorkspaceID: workspaceID, AuthorID: r.URL.Query().Get("author_id"), UserID: act.user.ID, Limit: limit, Cursor: r.URL.Query().Get("cursor"), MediaOnly: mediaOnly, IncludeOwn: includeOwn,
 	})
 	if err != nil {
 		switch {

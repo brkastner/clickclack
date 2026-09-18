@@ -51,7 +51,7 @@ func (s *Store) ListOutputPage(ctx context.Context, page store.OutputPageRequest
 	}
 	rows, err := q.ListOutputMessages(ctx, storedb.ListOutputMessagesParams{
 		WorkspaceID: req.WorkspaceID, AuthorID: req.AuthorID, UserID: req.UserID,
-		Guest: guest, MediaOnly: boolToInt(req.MediaOnly), CursorTime: createdAt, CursorID: messageID, PageLimit: int32(req.Limit + 1),
+		Guest: guest, MediaOnly: boolToInt(req.MediaOnly), IncludeOwn: boolToInt(req.IncludeOwn), CursorTime: createdAt, CursorID: messageID, PageLimit: int32(req.Limit + 1),
 	})
 	if err != nil {
 		return store.OutputPage{}, err
@@ -64,7 +64,7 @@ func (s *Store) ListOutputPage(ctx context.Context, page store.OutputPageRequest
 		}
 		author := store.User{
 			ID:             row.AuthorID,
-			Kind:           "bot",
+			Kind:           row.AuthorKind,
 			OwnerUserID:    row.AuthorOwnerID.String,
 			DisplayName:    row.AuthorDisplayName,
 			Handle:         row.AuthorHandle,
