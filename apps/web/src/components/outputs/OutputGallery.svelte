@@ -273,6 +273,7 @@
     let realtime: ReturnType<typeof connectRealtime> | undefined;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const resizeObserver = new ResizeObserver(() => {
+      if (initializing || validating) return;
       capturePosition();
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => { void tick().then(restorePosition); }, 0);
@@ -345,7 +346,7 @@
   {#if error}<p class="output-gallery__notice" role="alert">{error}</p>{#if !sourceID}<button class="output-gallery__button" onclick={() => window.location.reload()}>reload gallery</button>{/if}{/if}
   {#if galleryActionNotice}<p class="output-gallery__notice" role={galleryActionNotice.failed?"alert":"status"}>{galleryActionNotice.message}</p>{/if}
   {#if pageError}<p class="output-gallery__notice" role="alert">{pageError}</p><button class="output-gallery__button" onclick={() => void run(() => session!.load(!!session?.nextCursor))}>retry</button>{/if}
-  {#if initializing || validating}<p class="output-gallery__notice" role="status">checking gallery…</p>
+  {#if initializing}<p class="output-gallery__notice" role="status">checking gallery…</p>
   {:else if !sourceID}<p class="output-gallery__notice">select the bot account whose media you want to browse.</p>
   {:else}
     <div class="output-grid" bind:this={masonryGrid} style={`--gallery-gap: ${galleryGap}px; height: ${masonryHeight}px`}>
