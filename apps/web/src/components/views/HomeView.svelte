@@ -694,7 +694,7 @@
     :global(:root[data-avatar-size="double"]) .home-view { --home-persona-avatar-size: 66px; }
     .home-view__toolbar {
       padding: calc(17px + var(--safe-area-top)) calc(16px + var(--safe-area-right)) 14px
-        calc(16px + var(--safe-area-left));
+        calc(66px + var(--safe-area-left));
     }
     .home-view__status { display: none; }
     .home-view__canvas {

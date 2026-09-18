@@ -80,6 +80,7 @@ test("mobile Home and Gallery respect every safe-area edge", () => {
   const viewStyles = readSource("../styles/views.css");
 
   assert.match(home, /calc\(17px \+ var\(--safe-area-top\)\)/u);
+  assert.match(home, /calc\(66px \+ var\(--safe-area-left\)\)/u);
   assert.match(home, /calc\(14px \+ var\(--safe-area-bottom\)\)/u);
   assert.match(gallery, /calc\(1rem \+ var\(--safe-area-bottom\)\)/u);
   assert.match(gallery, /--safe-area-left/u);
