@@ -192,6 +192,13 @@
     if (restoreFocus) { await tick(); moveMenuTrigger?.focus(); }
   }
 
+  function handleWindowPointerDown(event: PointerEvent) {
+    if (!moveMenuChannelID) return;
+    const target = event.target as Node | null;
+    if (target && (moveMenuElement?.contains(target) || moveMenuTrigger?.contains(target))) return;
+    void closeMoveMenu();
+  }
+
   function assignmentFor(channel: Channel): ChannelProfileShortcut | undefined {
     const id = channel.bot_assignments?.[0]?.bot_user_id;
     return profiles.find((profile) => profile.bot_user_id === id);
@@ -236,6 +243,8 @@
     return from !== to && from !== "archived";
   }
 </script>
+
+<svelte:window onpointerdown={handleWindowPointerDown} />
 
 {#snippet channelRow(channel: Channel, scope: Channel[], groupKey: string, subdued = false)}
   {@const unread = channel.unread_count || 0}
