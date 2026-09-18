@@ -22,6 +22,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/openclaw/clickclack/apps/api/internal/authpolicy"
 	"github.com/openclaw/clickclack/apps/api/internal/config"
+	"github.com/openclaw/clickclack/apps/api/internal/notepad"
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/uploadstore"
@@ -30,6 +31,7 @@ import (
 
 type Server struct {
 	openclawNotepad            config.OpenClawNotepadConfig
+	publishedNotepads          *notepad.PublishedStore
 	avatarPacksDir             string
 	store                      store.Store
 	hub                        *realtime.Hub
@@ -158,6 +160,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 	localGalleryCallbacks := localGalleryCallbackMap(options.LocalGalleryCallbacks)
 	return &Server{
 		openclawNotepad:            options.OpenClawNotepad,
+		publishedNotepads:          notepad.NewPublishedStore(),
 		store:                      st,
 		avatarPacksDir:             options.AvatarPacksDir,
 		hub:                        hub,
@@ -305,7 +308,9 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/dms/{conversation_id}/workflow-runs", s.listWorkflowSnapshots)
 		r.Get("/realtime/ws", s.websocket)
 		r.Get("/channels/{channel_id}/notepad", s.getNotepad)
+		r.Put("/channels/{channel_id}/notepad", s.publishNotepad)
 		r.Get("/dms/{conversation_id}/notepad", s.getNotepad)
+		r.Put("/dms/{conversation_id}/notepad", s.publishNotepad)
 		r.Get("/channels/{channel_id}/notepad/availability", s.getNotepadAvailability)
 		r.Get("/dms/{conversation_id}/notepad/availability", s.getNotepadAvailability)
 		r.Get("/channels/{channel_id}/notepad/watch", s.watchNotepad)

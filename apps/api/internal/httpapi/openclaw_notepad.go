@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	"encoding/json"
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/openclaw/clickclack/apps/api/internal/config"
@@ -65,6 +67,13 @@ func (s *Server) notepadAccess(r *http.Request, act actor) (string, error) {
 	}
 	return workspaceID, nil
 }
+func notepadTargetKey(workspaceID string, r *http.Request) string {
+	if channelID := chi.URLParam(r, "channel_id"); channelID != "" {
+		return workspaceID + "\x00channel\x00" + channelID
+	}
+	return workspaceID + "\x00direct\x00" + chi.URLParam(r, "conversation_id")
+}
+
 func (s *Server) notepadBinding(workspaceID string, r *http.Request) (config.OpenClawNotepadGateway, config.OpenClawNotepadBinding, bool) {
 	for _, b := range s.openclawNotepad.Bindings {
 		if b.WorkspaceID == workspaceID && b.ChannelID == chi.URLParam(r, "channel_id") && b.DirectConversationID == chi.URLParam(r, "conversation_id") {
@@ -89,8 +98,44 @@ func (s *Server) getNotepadAvailability(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusForbidden, notepad.Denied)
 		return
 	}
-	_, _, available := s.notepadBinding(workspaceID, r)
-	writeJSON(w, http.StatusOK, map[string]bool{"available": available})
+	_, published := s.publishedNotepads.Get(notepadTargetKey(workspaceID, r))
+	_, _, bound := s.notepadBinding(workspaceID, r)
+	writeJSON(w, http.StatusOK, map[string]bool{"available": published || bound})
+}
+
+type publishNotepadRequest struct {
+	Card *notepad.Card `json:"card"`
+}
+
+func (s *Server) publishNotepad(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	act, err := s.currentActor(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, notepad.Denied)
+		return
+	}
+	workspaceID, err := s.notepadAccess(r, act)
+	if err != nil || act.botTokenID == "" || act.requireScope("agent_activity:write") != nil {
+		writeError(w, http.StatusForbidden, notepad.Denied)
+		return
+	}
+	var input publishNotepadRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
+	decoder.DisallowUnknownFields()
+	if err = decoder.Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err = decoder.Decode(&struct{}{}); err != io.EOF {
+		writeError(w, http.StatusBadRequest, errors.New("request body must contain one JSON object"))
+		return
+	}
+	if err = notepad.ValidatePublishedCard(input.Card); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	s.publishedNotepads.Put(notepadTargetKey(workspaceID, r), input.Card)
+	writeJSON(w, http.StatusOK, notepad.Result{State: notepad.Ready, Card: input.Card})
 }
 
 func (s *Server) getNotepad(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +148,10 @@ func (s *Server) getNotepad(w http.ResponseWriter, r *http.Request) {
 	workspaceID, err := s.notepadAccess(r, act)
 	if err != nil {
 		writeError(w, http.StatusForbidden, notepad.Denied)
+		return
+	}
+	if card, published := s.publishedNotepads.Get(notepadTargetKey(workspaceID, r)); published {
+		writeJSON(w, http.StatusOK, notepad.Result{State: notepad.Ready, Card: card})
 		return
 	}
 	g, b, ok := s.notepadBinding(workspaceID, r)
@@ -165,6 +214,32 @@ func (s *Server) watchNotepad(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		return socket.Write(writeCtx, websocket.MessageText, body) == nil
 	}
+	key := notepadTargetKey(workspaceID, r)
+	publishedChanges, published, cancelPublished := s.publishedNotepads.Watch(key)
+	if published {
+		defer cancelPublished()
+		if !send(notepad.Ready) {
+			return
+		}
+		ticker := time.NewTicker(s.realtimeSessionCheck)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := s.notepadAccess(r, act); err != nil {
+					socket.Close(websocket.StatusPolicyViolation, "conversation access revoked")
+					return
+				}
+			case <-publishedChanges:
+				if !send(notepad.Ready) {
+					return
+				}
+			}
+		}
+	}
+	cancelPublished()
 	g, b, ok := s.notepadBinding(workspaceID, r)
 	if !ok {
 		send(notepad.Unmapped)

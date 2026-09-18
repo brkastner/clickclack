@@ -16,7 +16,11 @@ export interface paths {
      * @description Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
      */
     get: operations["getChannelNotepad"];
-    put?: never;
+    /**
+     * Publish an agent notepad snapshot
+     * @description Requires bot authentication, agent_activity:write, messages:read and current conversation/workspace access.
+     */
+    put: operations["publishChannelNotepad"];
     post?: never;
     delete?: never;
     options?: never;
@@ -76,7 +80,11 @@ export interface paths {
      * @description Requires messages:read and current conversation/workspace access. DMs also require dms:read. Watch also requires realtime:read. No gateway identity or credentials are accepted from the client.
      */
     get: operations["getDirectNotepad"];
-    put?: never;
+    /**
+     * Publish an agent notepad snapshot
+     * @description Requires bot authentication, agent_activity:write, messages:read, dms:read and current conversation/workspace access.
+     */
+    put: operations["publishDirectNotepad"];
     post?: never;
     delete?: never;
     options?: never;
@@ -1659,6 +1667,9 @@ export interface components {
       state: components["schemas"]["NotepadState"];
       card: components["schemas"]["NotepadCard"] | null;
     };
+    PublishNotepadRequest: {
+      card: components["schemas"]["NotepadCard"] | null;
+    };
     NotepadAvailability: {
       available: boolean;
     };
@@ -2962,6 +2973,46 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  publishChannelNotepad: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublishNotepadRequest"];
+      };
+    };
+    responses: {
+      /** @description Published notepad snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotepadResult"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bot, scope, conversation, or workspace access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   getChannelNotepad: {
     parameters: {
       query?: never;
@@ -3060,6 +3111,46 @@ export interface operations {
         content?: never;
       };
       /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  publishDirectNotepad: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublishNotepadRequest"];
+      };
+    };
+    responses: {
+      /** @description Published notepad snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotepadResult"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bot, scope, conversation, or workspace access denied */
       403: {
         headers: {
           [name: string]: unknown;

@@ -11,7 +11,9 @@ export type PublishWorkflowSnapshotRequest =
 export type PublishWorkflowSnapshotResponse =
   components["schemas"]["PublishWorkflowSnapshotResponse"];
 
+export type NotepadCard = components["schemas"]["NotepadCard"];
 export type NotepadResult = components["schemas"]["NotepadResult"];
+export type PublishNotepadRequest = components["schemas"]["PublishNotepadRequest"];
 export type NotepadChanged = components["schemas"]["NotepadChanged"];
 export type HomeLink = components["schemas"]["HomeLink"];
 
@@ -1160,6 +1162,15 @@ export class ClickClackClient {
   notepads = {
     get: (kind: "channels" | "dms", id: string): Promise<NotepadResult> =>
       this.request(`/api/${kind}/${encodeURIComponent(id)}/notepad`),
+    publish: (
+      kind: "channels" | "dms",
+      id: string,
+      input: PublishNotepadRequest,
+    ): Promise<NotepadResult> =>
+      this.request(`/api/${kind}/${encodeURIComponent(id)}/notepad`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
     // Closing the returned socket unwatches. Every ready notice requires a read;
     // notices are ephemeral, content-free invalidations, not snapshots.
     watch: (

@@ -8,6 +8,33 @@ servers:
   - url: http://localhost:8080
 paths:
   /api/channels/{channel_id}/notepad:
+    put:
+      operationId: publishChannelNotepad
+      summary: Publish an agent notepad snapshot
+      description: Requires bot authentication, agent_activity:write, messages:read and current conversation/workspace access.
+      parameters:
+        - in: path
+          name: channel_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishNotepadRequest'
+      responses:
+        '200':
+          description: Published notepad snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotepadResult'
+        '401':
+          description: Authentication required
+        '403':
+          description: Bot, scope, conversation, or workspace access denied
     get:
       operationId: getChannelNotepad
       summary: Read the server-bound OpenClaw notepad
@@ -70,6 +97,33 @@ paths:
         '403':
           description: Conversation or scope access denied
   /api/dms/{conversation_id}/notepad:
+    put:
+      operationId: publishDirectNotepad
+      summary: Publish an agent notepad snapshot
+      description: Requires bot authentication, agent_activity:write, messages:read, dms:read and current conversation/workspace access.
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishNotepadRequest'
+      responses:
+        '200':
+          description: Published notepad snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotepadResult'
+        '401':
+          description: Authentication required
+        '403':
+          description: Bot, scope, conversation, or workspace access denied
     get:
       operationId: getDirectNotepad
       summary: Read the server-bound OpenClaw notepad
@@ -2555,6 +2609,15 @@ components:
       properties:
         state:
           $ref: '#/components/schemas/NotepadState'
+        card:
+          oneOf:
+            - $ref: '#/components/schemas/NotepadCard'
+            - type: 'null'
+    PublishNotepadRequest:
+      type: object
+      additionalProperties: false
+      required: [card]
+      properties:
         card:
           oneOf:
             - $ref: '#/components/schemas/NotepadCard'

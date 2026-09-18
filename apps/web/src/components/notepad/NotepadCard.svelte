@@ -3,7 +3,7 @@
  import type { NotepadSnapshot } from "../../lib/chat/notepad";
  let { id, snapshot, className = "" }: { id: string; snapshot: NotepadSnapshot; className?: string } = $props();
  const messages = {
-  loading: "Loading agent notepad…", unmapped: "No OpenClaw notepad is mapped to this conversation. Pi-only conversations do not have an OpenClaw notepad.", unsupported: "This OpenClaw gateway does not support agent notepads.", denied: "You do not have access to this agent notepad.", unavailable: "The agent notepad is unavailable.", disconnected: "Disconnected from the agent notepad. Reconnecting…", ready: "No notepad yet.",
+  loading: "Loading agent notepad…", unmapped: "No agent notepad is connected to this conversation.", unsupported: "This agent does not support notepads.", denied: "You do not have access to this agent notepad.", unavailable: "The agent notepad is unavailable.", disconnected: "Disconnected from the agent notepad. Reconnecting…", ready: "No notepad yet.",
  };
 </script>
 
