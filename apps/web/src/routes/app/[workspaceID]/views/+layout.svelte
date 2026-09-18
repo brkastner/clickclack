@@ -13,7 +13,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key !== "Escape") return;
+    if (activeSlug === "home" || event.key !== "Escape") return;
     const target = event.target as HTMLElement | null;
     if (
       target &&
@@ -28,6 +28,9 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
+{#if activeSlug === "home"}
+  {@render children?.()}
+{:else}
 <div class="workspace-views">
   <nav class="workspace-views__rail" aria-label="Workspace views">
     <button type="button" class="workspace-views__back" onclick={backToChat} title="Back to chat (Esc)">
@@ -64,3 +67,4 @@
     {@render children?.()}
   </main>
 </div>
+{/if}

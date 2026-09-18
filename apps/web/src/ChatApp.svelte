@@ -4,7 +4,7 @@
   import { consumeGalleryAttachments, retainGalleryAttachments } from "./lib/gallery-attachment-queue";
 
   import { afterNavigate, goto } from "$app/navigation";
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick, type Component } from "svelte";
   import { toStore } from "svelte/store";
   import {
     DEFAULT_HOME_LINK,
@@ -192,6 +192,8 @@
 
   export let routeWorkspaceID = "";
   export let routeTargetID = "";
+  export let routeViewSlug = "";
+  export let routeViewComponent: Component<any> | undefined = undefined;
 
   let user: User | null = null;
   const reactionController = new ReactionController(() => user?.id || "");
@@ -710,7 +712,7 @@
   $: if (replyContext === "dm" && replyTarget && !messages.some((m) => m.id === replyTarget?.id)) clearReplyTarget();
   // Observe route inputs, not bookkeeping changed by a local pane selection.
   $: if (appReady) {
-    followRoute(routeWorkspaceID, routeTargetID);
+    followRoute(routeWorkspaceID, routeTargetID, routeViewSlug);
   }
 
   afterNavigate(() => {
@@ -1293,8 +1295,8 @@
     workspaces = data.workspaces;
   }
 
-  function routeKey(workspaceID = "", targetID = ""): string {
-    return `${workspaceID || ""}/${targetID || ""}`;
+  function routeKey(workspaceID = "", targetID = "", viewSlug = ""): string {
+    return `${workspaceID || ""}/${targetID || ""}/${viewSlug || ""}`;
   }
 
   function appHref(workspaceID = selectedWorkspaceID, targetID = ""): string {
@@ -1347,8 +1349,10 @@
     await goto(path, { replaceState, noScroll: true, keepFocus: true });
   }
 
-  function followRoute(workspaceID: string, targetID: string) {
-    if (routeKey(workspaceID, targetID) !== activeRouteKey) void applyRoute(workspaceID, targetID);
+  function followRoute(workspaceID: string, targetID: string, viewSlug: string) {
+    if (routeKey(workspaceID, targetID, viewSlug) !== activeRouteKey) {
+      void applyRoute(workspaceID, targetID, viewSlug);
+    }
   }
 
   function commitSelectedRoute() {
@@ -1441,10 +1445,10 @@
     connectRealtimeSocket();
   }
 
-  async function applyRoute(workspaceIDParam = "", targetIDParam = "") {
+  async function applyRoute(workspaceIDParam = "", targetIDParam = "", viewSlugParam = "") {
     const serial = ++routeApplySerial;
     // Record admission, not completion: cancelled routes must not suppress a later visit.
-    activeRouteKey = routeKey(workspaceIDParam, targetIDParam);
+    activeRouteKey = routeKey(workspaceIDParam, targetIDParam, viewSlugParam);
     if (targetIDParam !== thread.selection?.messageID && targetIDParam !== thread.root?.route_id) thread.close();
     try {
       reactionController.clear();
@@ -1503,6 +1507,17 @@
         void loadWorkspaceMembers(workspace.id);
       }
       if (serial !== routeApplySerial) return;
+
+      if (viewSlugParam === "home") {
+        clearRoutePanelState();
+        selectedChannelID = "";
+        selectedDirectID = "";
+        resetTopicStateForConversation("");
+        messages = [];
+        messagesLoading = false;
+        connectPendingRealtime(workspace.id);
+        return;
+      }
 
       if (routeTarget) {
         const routeTargetAvailable = await ensureResolvedRouteTargetLoaded(routeTarget, serial);
@@ -5547,6 +5562,7 @@
 
   <Sidebar
     {homeLink}
+    activeViewSlug={routeViewSlug}
     workspaceCreatePending={createPending === "workspace"}
     {workspaceCreateError}
     workspaceID={selectedWorkspaceID}
@@ -5613,6 +5629,18 @@
   <ChannelNotepadPreview target={notepadPreviewTarget} />
 
   <main class="timeline" inert={mobileNavOpen}>
+    {#if routeViewSlug === "home" && routeViewComponent}
+      <svelte:component
+        this={routeViewComponent}
+        workspaceID={selectedWorkspaceID}
+        workspaceRouteID={routeWorkspaceIDFor(selectedWorkspaceID)}
+        currentUserID={user?.id || ""}
+        {channels}
+        {directConversations}
+        users={mentionPeople}
+        {workingConversationIDs}
+      />
+    {:else}
     {#if galleryReturn?.userID === user?.id && galleryReturn?.workspaceID === selectedWorkspaceID}
       {#if gallerySourceError}<p role="alert">{gallerySourceError}</p>{/if}
     {/if}
@@ -5835,6 +5863,7 @@
       onClearReply={clearReplyTarget}
     />
     </div>
+    {/if}
   </main>
 
   {#if selectedArtifact}
