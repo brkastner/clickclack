@@ -149,6 +149,8 @@
     flex-direction: row;
     align-items: center;
     gap: 6px;
+    padding: calc(14px + var(--safe-area-top)) calc(10px + var(--safe-area-right)) 14px
+      calc(10px + var(--safe-area-left));
     border-right: 0;
     border-bottom: 1px solid var(--border);
     overflow-x: auto;

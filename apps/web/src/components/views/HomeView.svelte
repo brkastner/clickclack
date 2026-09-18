@@ -692,9 +692,15 @@
   @media (max-width: 640px) {
     .home-view { --home-persona-avatar-size: 44px; }
     :global(:root[data-avatar-size="double"]) .home-view { --home-persona-avatar-size: 66px; }
-    .home-view__toolbar { padding-inline: 16px; }
+    .home-view__toolbar {
+      padding: calc(17px + var(--safe-area-top)) calc(16px + var(--safe-area-right)) 14px
+        calc(16px + var(--safe-area-left));
+    }
     .home-view__status { display: none; }
-    .home-view__canvas { padding: 14px; }
+    .home-view__canvas {
+      padding: 14px calc(14px + var(--safe-area-right)) calc(14px + var(--safe-area-bottom))
+        calc(14px + var(--safe-area-left));
+    }
     .home-persona__header { grid-template-columns: var(--home-persona-avatar-size) minmax(0, 1fr); padding: 11px 12px; }
     .home-persona__working,
     .home-persona__unread { grid-column: 2; justify-self: start; }

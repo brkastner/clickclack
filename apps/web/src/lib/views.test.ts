@@ -74,6 +74,19 @@ test("the view shell lists the registry rather than hardcoding entries", () => {
   assert.match(layout, /Escape/u, "Escape should return to chat, matching workspace settings");
 });
 
+test("mobile Home and Gallery respect every safe-area edge", () => {
+  const home = readSource("../components/views/HomeView.svelte");
+  const gallery = readSource("../components/outputs/OutputGallery.svelte");
+  const viewStyles = readSource("../styles/views.css");
+
+  assert.match(home, /calc\(17px \+ var\(--safe-area-top\)\)/u);
+  assert.match(home, /calc\(14px \+ var\(--safe-area-bottom\)\)/u);
+  assert.match(gallery, /calc\(1rem \+ var\(--safe-area-bottom\)\)/u);
+  assert.match(gallery, /--safe-area-left/u);
+  assert.match(viewStyles, /calc\(14px \+ var\(--safe-area-top\)\)/u);
+  assert.match(viewStyles, /--safe-area-right/u);
+});
+
 test("the sidebar links views from the registry", () => {
   const sidebar = readSource("../components/navigation/Sidebar.svelte");
 
