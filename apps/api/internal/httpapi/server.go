@@ -258,6 +258,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/workspaces/{workspace_id}/gallery-actions", s.listGalleryActions)
 		r.Post("/workspaces/{workspace_id}/gallery-actions/open", s.openGalleryAction)
 		r.Get("/gallery-actions/sessions/{session_id}", s.statusGalleryAction)
+		r.Get("/gallery-actions/sessions/{session_id}/uploads/{upload_id}", s.getGallerySessionUpload)
 		r.Post("/gallery-actions/sessions/{session_id}/{kind}", s.requestGalleryAction)
 		r.Post("/bots/self/gallery-actions/requests/{request_id}/response", s.respondGalleryAction)
 		r.Patch("/bots/{bot_user_id}", s.updateBotProfile)

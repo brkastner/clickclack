@@ -44,19 +44,21 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 	dark := "dark"
 	iris := "iris"
 	comfortable := "comfortable"
+	hidePersonaGrid := true
 	account, err := st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID: user.ID,
 		AppearancePreferences: &store.AppearancePreferencesPatch{
-			ColorMode:  &dark,
-			BoardTheme: &iris,
-			Density:    &comfortable,
+			ColorMode:       &dark,
+			BoardTheme:      &iris,
+			Density:         &comfortable,
+			HidePersonaGrid: &hidePersonaGrid,
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	preferences = account.AppearancePreferences
-	if preferences == nil || preferences.ColorMode != "dark" || preferences.BoardTheme != "iris" || preferences.MessageLayout != "" || preferences.Density != "" {
+	if preferences == nil || preferences.ColorMode != "dark" || preferences.BoardTheme != "iris" || preferences.MessageLayout != "" || preferences.Density != "" || !preferences.HidePersonaGrid {
 		t.Fatalf("unexpected initial preferences: %#v", preferences)
 	}
 
@@ -73,7 +75,7 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	preferences = account.AppearancePreferences
-	if preferences == nil || preferences.ColorMode != "dark" || preferences.BoardTheme != "ember" || preferences.MessageLayout != "" || preferences.Density != "" {
+	if preferences == nil || preferences.ColorMode != "dark" || preferences.BoardTheme != "ember" || preferences.MessageLayout != "" || preferences.Density != "" || !preferences.HidePersonaGrid {
 		t.Fatalf("partial update replaced unrelated preferences: %#v", preferences)
 	}
 

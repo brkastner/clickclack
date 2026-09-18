@@ -74,10 +74,13 @@ test("the view shell lists the registry rather than hardcoding entries", () => {
   assert.match(layout, /Escape/u, "Escape should return to chat, matching workspace settings");
 });
 
-test("mobile Home and Gallery respect every safe-area edge", () => {
+test("mobile full-screen routes and overlays respect every safe-area edge", () => {
   const home = readSource("../components/views/HomeView.svelte");
   const gallery = readSource("../components/outputs/OutputGallery.svelte");
+  const copyLink = readSource("../components/messages/CopyLinkFallback.svelte");
   const viewStyles = readSource("../styles/views.css");
+  const settings = readSource("../styles/settings.css");
+  const modals = readSource("../styles/modals.css");
 
   assert.match(home, /calc\(17px \+ var\(--safe-area-top\)\)/u);
   assert.match(home, /calc\(66px \+ var\(--safe-area-left\)\)/u);
@@ -86,6 +89,10 @@ test("mobile Home and Gallery respect every safe-area edge", () => {
   assert.match(gallery, /--safe-area-left/u);
   assert.match(viewStyles, /calc\(14px \+ var\(--safe-area-top\)\)/u);
   assert.match(viewStyles, /--safe-area-right/u);
+  assert.match(settings, /\.ws-settings \{\s+padding: var\(--safe-area-top\)/u);
+  assert.match(settings, /\.settings-modal-scrim \{\s+place-items: stretch;/u);
+  assert.match(modals, /calc\(24px \+ var\(--safe-area-bottom\)\)/u);
+  assert.match(copyLink, /calc\(20px \+ var\(--safe-area-bottom\)\)/u);
 });
 
 test("the sidebar links views from the registry", () => {

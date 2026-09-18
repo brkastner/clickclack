@@ -367,6 +367,7 @@ CREATE TABLE user_appearance_preferences (
   density TEXT NOT NULL DEFAULT '',
   bot_shelf_order TEXT NOT NULL DEFAULT '',
   bot_shelf_limit INTEGER NOT NULL DEFAULT 0,
+  hide_persona_grid INTEGER NOT NULL DEFAULT 0,
   persona_hero_positions TEXT NOT NULL DEFAULT ''
 );
 

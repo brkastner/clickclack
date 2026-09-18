@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	"github.com/openclaw/clickclack/apps/api/internal/realtime"
 	"github.com/openclaw/clickclack/apps/api/internal/store"
 	"github.com/openclaw/clickclack/apps/api/internal/store/storetest"
+	"github.com/openclaw/clickclack/apps/api/internal/uploadstore"
 )
 
 type galleryTransport func(*http.Request) (*http.Response, error)
@@ -81,7 +84,11 @@ func TestGalleryHostSyntheticFlow(t *testing.T) {
 			if _, _, e = st.CreateMessage(ctx, store.CreateMessageInput{ChannelID: destination, AuthorID: owner.ID, Body: "fixture", UploadID: upload.ID}); e != nil {
 				t.Fatal(e)
 			}
-			server := New(st, realtime.NewHub(), Options{})
+			mediaDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(mediaDir, "choice-synthetic"), []byte("x"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			server := New(st, realtime.NewHub(), Options{UploadStorage: uploadstore.NewLocal(mediaDir)})
 			handler := server.Handler()
 			call := func(method, path, credential string, body any) *httptest.ResponseRecorder {
 				var raw []byte
@@ -99,6 +106,14 @@ func TestGalleryHostSyntheticFlow(t *testing.T) {
 				} else if credential != "" {
 					r.Header.Set("Authorization", "Bearer "+credential)
 				}
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, r)
+				return w
+			}
+			callUnauthenticated := func(method, path string) *httptest.ResponseRecorder {
+				r := httptest.NewRequest(method, path, nil)
+				r.RemoteAddr = "203.0.113.1:1234"
+				r.Host = "example.test"
 				w := httptest.NewRecorder()
 				handler.ServeHTTP(w, r)
 				return w
@@ -140,6 +155,10 @@ func TestGalleryHostSyntheticFlow(t *testing.T) {
 			require(call("POST", path, owner.ID, open), 202)
 			require(call("POST", path, owner.ID, open), 200)
 			require(call("POST", "/api/bots/self/gallery-actions/requests/"+sessionID+".open/response", token.Token, map[string]any{"session_id": sessionID, "schema_revision": 1, "state": "accepted", "preview_upload_id": privateUpload.ID}), 403)
+			choiceUpload, err := storetest.CreateUpload(ctx, st, store.CreateUploadInput{WorkspaceID: workspace, OwnerID: bot.ID, Filename: "choice.png", ContentType: "image/png", ByteSize: 1, StoragePath: "choice-synthetic"})
+			if err != nil {
+				t.Fatal(err)
+			}
 			executions := map[string]bool{}
 			deliveries := 0
 			lost := true
@@ -159,7 +178,7 @@ func TestGalleryHostSyntheticFlow(t *testing.T) {
 				id := event["request_id"].(string)
 				reply := map[string]any{"session_id": sessionID, "schema_revision": 1, "state": "accepted"}
 				if event["type"] == "gallery_action.choices" {
-					reply["choices"] = []any{map[string]any{"id": "reference", "label": "Reference", "upload_id": upload.ID}}
+					reply["choices"] = []any{map[string]any{"id": "reference", "label": "Reference", "upload_id": choiceUpload.ID}}
 				}
 				if event["type"] == "gallery_action.submit" {
 					executions[id] = true
@@ -178,6 +197,16 @@ func TestGalleryHostSyntheticFlow(t *testing.T) {
 			if e = server.DispatchGallery(ctx); e != nil {
 				t.Fatal(e)
 			}
+			mediaPath := "/api/gallery-actions/sessions/" + sessionID + "/uploads/" + choiceUpload.ID
+			media := call("GET", mediaPath, owner.ID, nil)
+			require(media, 200)
+			if media.Body.String() != "x" || !strings.Contains(media.Header().Get("Cache-Control"), "no-store") {
+				t.Fatal("invalid private media response")
+			}
+			require(call("GET", mediaPath, token.Token, nil), 403)
+			require(callUnauthenticated("GET", mediaPath), 401)
+			require(call("GET", "/api/gallery-actions/sessions/"+sessionID+"/uploads/"+privateUpload.ID, owner.ID, nil), 404)
+			require(call("GET", "/api/uploads/"+choiceUpload.ID, owner.ID, nil), 404)
 			values := map[string]any{"amount": 1.5, "confirm": true, "format": "png", "images": []string{"reference"}}
 			input := map[string]any{"request_id": "submission-1", "schema_revision": 1, "values": values}
 			values["amount"] = 1.25
@@ -287,6 +316,7 @@ func TestGalleryHostSyntheticFlow(t *testing.T) {
 			// Capability replacement invalidates all prior sessions, even with the same
 			// schema number; delayed replies cannot revive them.
 			require(call("PUT", "/api/bots/self/gallery-actions", token.Token, registration), 200)
+			require(call("GET", mediaPath, owner.ID, nil), 410)
 			require(call("GET", "/api/gallery-actions/sessions/"+sessionID+"", owner.ID, nil), 410)
 			require(call("POST", "/api/bots/self/gallery-actions/requests/submission-1/response", token.Token, map[string]any{"session_id": sessionID, "schema_revision": 1, "state": "accepted"}), 410)
 		})

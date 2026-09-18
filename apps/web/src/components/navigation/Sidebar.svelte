@@ -11,7 +11,7 @@
     type SectionState,
   } from "../../lib/sidebar-sections";
   import { directConversationForUser, handleLabel, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
-  import { botShelfPreferences, DEFAULT_BOT_SHELF_LIMIT, setBotShelfLimit, setBotShelfOrder } from "../../lib/appearance";
+  import { botShelfPreferences, DEFAULT_BOT_SHELF_LIMIT, personaGridHidden, setBotShelfLimit, setBotShelfOrder } from "../../lib/appearance";
   import { parsePersonaChannelPins, pinnedPersonaChannel, type PersonaChannelPins } from "../../lib/personaNavigation";
   import type { Channel, DirectConversation, User, Workspace } from "../../lib/types";
   import ChannelList from "./ChannelList.svelte";
@@ -441,6 +441,7 @@
       </nav>
     {/if}
 
+    {#if !$personaGridHidden}
     <section id="sidebar-people-list" class="sidebar-people-row" aria-label="Recent people">
       {#each displayedRecentPeople as person (person.id)}
           {@const conversation = directConversationForUser(directConversations, person.id, currentUser?.id)}
@@ -515,6 +516,7 @@
           <button type="button" role="menuitem" onclick={shelfHideAll}>hide all</button>
         {/if}
       </div>
+    {/if}
     {/if}
 
     <ChannelList

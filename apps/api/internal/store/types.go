@@ -266,6 +266,8 @@ type AppearancePreferences struct {
 	BotShelfOrder []string `json:"bot_shelf_order,omitempty"`
 	// BotShelfLimit caps how many shelf bots render; 0 means show all.
 	BotShelfLimit int `json:"bot_shelf_limit,omitempty"`
+	// HidePersonaGrid removes the compact recent-person grid from the sidebar.
+	HidePersonaGrid bool `json:"hide_persona_grid,omitempty"`
 	// PersonaHeroPositions stores per-bot pan percentages and zoom for the
 	// sidebar persona hero crop.
 	PersonaHeroPositions map[string]PersonaHeroPosition `json:"persona_hero_positions,omitempty"`
@@ -278,6 +280,7 @@ type AppearancePreferencesPatch struct {
 	Density              *string                         `json:"density,omitempty"`
 	BotShelfOrder        *[]string                       `json:"bot_shelf_order,omitempty"`
 	BotShelfLimit        *int                            `json:"bot_shelf_limit,omitempty"`
+	HidePersonaGrid      *bool                           `json:"hide_persona_grid,omitempty"`
 	PersonaHeroPositions *map[string]PersonaHeroPosition `json:"persona_hero_positions,omitempty"`
 }
 

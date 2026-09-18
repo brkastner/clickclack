@@ -24,6 +24,7 @@ func (s *Store) GetAppearancePreferences(ctx context.Context, userID string) (*s
 		Density:              row.Density,
 		BotShelfOrder:        store.DecodeBotShelfOrder(row.BotShelfOrder),
 		BotShelfLimit:        int(row.BotShelfLimit),
+		HidePersonaGrid:      row.HidePersonaGrid != 0,
 		PersonaHeroPositions: store.DecodePersonaHeroPositions(row.PersonaHeroPositions),
 	}
 	return &preferences, nil
@@ -77,6 +78,18 @@ func updateAppearancePreferences(ctx context.Context, q *storedb.Queries, userID
 		if err := q.UpdateAppearanceBotShelfLimit(ctx, storedb.UpdateAppearanceBotShelfLimitParams{
 			BotShelfLimit: int32(*patch.BotShelfLimit),
 			UserID:        userID,
+		}); err != nil {
+			return err
+		}
+	}
+	if patch.HidePersonaGrid != nil {
+		hidePersonaGrid := int32(0)
+		if *patch.HidePersonaGrid {
+			hidePersonaGrid = 1
+		}
+		if err := q.UpdateAppearanceHidePersonaGrid(ctx, storedb.UpdateAppearanceHidePersonaGridParams{
+			HidePersonaGrid: hidePersonaGrid,
+			UserID:          userID,
 		}); err != nil {
 			return err
 		}

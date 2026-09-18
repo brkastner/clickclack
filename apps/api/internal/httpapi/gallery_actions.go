@@ -258,21 +258,69 @@ func (s *Server) galleryAuthorize(ctx context.Context, v store.GallerySession) e
 	if !slices.Contains(v.Descriptor.AcceptedMediaTypes, u.ContentType) {
 		return errors.New("source media type changed")
 	}
-	for _, id := range []string{v.ActorID, app.BotUserID} {
-		if e = s.galleryMedia(ctx, v.WorkspaceID, id, []galleryactions.Descriptor{v.Descriptor}); e != nil {
-			return e
-		}
-		if v.PreviewUploadID != "" {
-			u, e := s.store.GetUpload(ctx, v.PreviewUploadID, id)
-			if e != nil {
-				return e
-			}
-			if u.WorkspaceID != v.WorkspaceID || !strings.HasPrefix(u.ContentType, "image/") {
-				return sql.ErrNoRows
+	for _, field := range v.Descriptor.Fields {
+		for _, choice := range field.Choices {
+			if choice.UploadID != "" {
+				if _, e = s.gallerySessionMedia(ctx, v, app.BotUserID, choice.UploadID); e != nil {
+					return e
+				}
 			}
 		}
 	}
-	return nil
+	if v.PreviewUploadID != "" {
+		_, e = s.gallerySessionMedia(ctx, v, app.BotUserID, v.PreviewUploadID)
+	}
+	return e
+}
+
+// The installation can share its own images only through an authorized session.
+// Other owners' images must remain independently visible to both participants.
+func (s *Server) gallerySessionMedia(ctx context.Context, v store.GallerySession, botID, uploadID string) (store.Upload, error) {
+	u, err := s.store.GetUpload(ctx, uploadID, botID)
+	if err != nil {
+		return u, err
+	}
+	if u.WorkspaceID != v.WorkspaceID || !strings.HasPrefix(u.ContentType, "image/") {
+		return store.Upload{}, sql.ErrNoRows
+	}
+	if u.OwnerID != botID {
+		if _, err = s.store.GetUpload(ctx, uploadID, v.ActorID); err != nil {
+			return store.Upload{}, err
+		}
+	}
+	return u, nil
+}
+
+func (s *Server) getGallerySessionUpload(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	v, ok := s.galleryLoad(w, r)
+	if !ok {
+		return
+	}
+	id := chi.URLParam(r, "upload_id")
+	bound := id != "" && id == v.PreviewUploadID
+	for _, field := range v.Descriptor.Fields {
+		for _, choice := range field.Choices {
+			if choice.UploadID == id {
+				bound = true
+			}
+		}
+	}
+	if !bound {
+		writeError(w, http.StatusNotFound, sql.ErrNoRows)
+		return
+	}
+	app, _, err := s.galleryInstallation(r.Context(), v.WorkspaceID, v.ActorID, v.InstallationID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	u, err := s.gallerySessionMedia(r.Context(), v, app.BotUserID, id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	s.serveUpload(w, r, u)
 }
 func (s *Server) openGalleryAction(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.galleryActor(w, r, false)

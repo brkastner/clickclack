@@ -515,8 +515,16 @@ func (s *Server) getUpload(w http.ResponseWriter, r *http.Request) {
 	if !s.requireBotUploadResource(w, r, act, upload, "") {
 		return
 	}
+	s.serveUpload(w, r, upload)
+}
+
+func (s *Server) serveUpload(w http.ResponseWriter, r *http.Request, upload store.Upload) {
+	if s.uploadStorage == nil {
+		writeError(w, http.StatusInternalServerError, errors.New("uploads are not configured"))
+		return
+	}
 	setUploadResponseHeaders(w, upload)
-	err = s.uploadStorage.ServeHTTP(w, r, uploadstore.Object{
+	err := s.uploadStorage.ServeHTTP(w, r, uploadstore.Object{
 		Path:        upload.StoragePath,
 		Filename:    upload.Filename,
 		ContentType: safeUploadContentType(upload.ContentType),

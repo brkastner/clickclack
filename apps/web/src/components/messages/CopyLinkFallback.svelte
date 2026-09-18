@@ -87,7 +87,8 @@
     z-index: 1200;
     display: grid;
     place-items: center;
-    padding: 20px;
+    padding: calc(20px + var(--safe-area-top)) calc(20px + var(--safe-area-right))
+      calc(20px + var(--safe-area-bottom)) calc(20px + var(--safe-area-left));
   }
   .copy-link-backdrop {
     position: absolute;

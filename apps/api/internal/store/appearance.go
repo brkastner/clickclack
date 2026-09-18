@@ -16,6 +16,7 @@ func AppearancePreferencesPatchEmpty(patch AppearancePreferencesPatch) bool {
 		patch.Density == nil &&
 		patch.BotShelfOrder == nil &&
 		patch.BotShelfLimit == nil &&
+		patch.HidePersonaGrid == nil &&
 		patch.PersonaHeroPositions == nil
 }
 
@@ -111,6 +112,7 @@ func NormalizeAppearancePreferencesPatch(input AppearancePreferencesPatch) (Appe
 		Density:              density,
 		BotShelfOrder:        shelfOrder,
 		BotShelfLimit:        shelfLimit,
+		HidePersonaGrid:      input.HidePersonaGrid,
 		PersonaHeroPositions: heroPositions,
 	}, nil
 }

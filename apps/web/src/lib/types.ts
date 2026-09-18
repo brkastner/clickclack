@@ -29,6 +29,7 @@ export type AppearancePreferences = {
   density?: "" | "compact";
   bot_shelf_order?: string[];
   bot_shelf_limit?: number;
+  hide_persona_grid?: boolean;
   persona_hero_positions?: Record<string, PersonaHeroPosition>;
 };
 
@@ -39,6 +40,7 @@ export type AppearancePreferencesPatch = {
   density?: "" | "comfortable" | "compact";
   bot_shelf_order?: string[];
   bot_shelf_limit?: number;
+  hide_persona_grid?: boolean;
   persona_hero_positions?: Record<string, PersonaHeroPosition>;
 };
 

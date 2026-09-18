@@ -4413,6 +4413,9 @@ components:
           description: Maximum shelf bots to render. 0 shows all.
           minimum: 0
           maximum: 64
+        hide_persona_grid:
+          type: boolean
+          description: Hide the recent-person grid in the sidebar.
         persona_hero_positions:
           type: object
           description: Per-bot sidebar hero crop positions and zoom.
@@ -4465,6 +4468,9 @@ components:
           description: Maximum shelf bots to render. 0 shows all.
           minimum: 0
           maximum: 64
+        hide_persona_grid:
+          type: boolean
+          description: Hide the recent-person grid in the sidebar.
         persona_hero_positions:
           type: object
           description: Complete per-bot sidebar hero crop map. Empty object resets all positions.

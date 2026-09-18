@@ -1117,7 +1117,7 @@ func (q *Queries) GetActiveSlashCommandWorkspace(ctx context.Context, id string)
 }
 
 const getAppearancePreferences = `-- name: GetAppearancePreferences :one
-SELECT color_mode, board_theme, message_layout, density, bot_shelf_order, bot_shelf_limit, persona_hero_positions
+SELECT color_mode, board_theme, message_layout, density, bot_shelf_order, bot_shelf_limit, hide_persona_grid, persona_hero_positions
 FROM user_appearance_preferences
 WHERE user_id = $1
 `
@@ -1129,6 +1129,7 @@ type GetAppearancePreferencesRow struct {
 	Density              string `json:"density"`
 	BotShelfOrder        string `json:"bot_shelf_order"`
 	BotShelfLimit        int32  `json:"bot_shelf_limit"`
+	HidePersonaGrid      int32  `json:"hide_persona_grid"`
 	PersonaHeroPositions string `json:"persona_hero_positions"`
 }
 
@@ -1142,6 +1143,7 @@ func (q *Queries) GetAppearancePreferences(ctx context.Context, userID string) (
 		&i.Density,
 		&i.BotShelfOrder,
 		&i.BotShelfLimit,
+		&i.HidePersonaGrid,
 		&i.PersonaHeroPositions,
 	)
 	return i, err
@@ -6698,6 +6700,22 @@ type UpdateAppearanceDensityParams struct {
 
 func (q *Queries) UpdateAppearanceDensity(ctx context.Context, arg UpdateAppearanceDensityParams) error {
 	_, err := q.db.ExecContext(ctx, updateAppearanceDensity, arg.Density, arg.UserID)
+	return err
+}
+
+const updateAppearanceHidePersonaGrid = `-- name: UpdateAppearanceHidePersonaGrid :exec
+UPDATE user_appearance_preferences
+SET hide_persona_grid = $1
+WHERE user_id = $2
+`
+
+type UpdateAppearanceHidePersonaGridParams struct {
+	HidePersonaGrid int32  `json:"hide_persona_grid"`
+	UserID          string `json:"user_id"`
+}
+
+func (q *Queries) UpdateAppearanceHidePersonaGrid(ctx context.Context, arg UpdateAppearanceHidePersonaGridParams) error {
+	_, err := q.db.ExecContext(ctx, updateAppearanceHidePersonaGrid, arg.HidePersonaGrid, arg.UserID)
 	return err
 }
 

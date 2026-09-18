@@ -6,7 +6,8 @@
   z-index: 50;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: calc(24px + var(--safe-area-top)) calc(24px + var(--safe-area-right))
+    calc(24px + var(--safe-area-bottom)) calc(24px + var(--safe-area-left));
   background: rgba(5, 8, 15, 0.54);
   backdrop-filter: blur(14px);
 }

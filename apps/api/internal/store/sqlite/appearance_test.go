@@ -41,6 +41,7 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 	system := "system"
 	moss := "moss"
 	compact := "compact"
+	hidePersonaGrid := true
 	heroPositions := map[string]store.PersonaHeroPosition{"bot-1": {X: 35, Y: 72}}
 	account, err = st.UpdateCurrentUser(ctx, store.UpdateCurrentUserInput{
 		UserID: user.ID,
@@ -48,6 +49,7 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 			ColorMode:            &system,
 			BoardTheme:           &moss,
 			Density:              &compact,
+			HidePersonaGrid:      &hidePersonaGrid,
 			PersonaHeroPositions: &heroPositions,
 		},
 	})
@@ -55,7 +57,7 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	preferences = account.AppearancePreferences
-	if preferences == nil || preferences.ColorMode != "" || preferences.BoardTheme != "moss" || preferences.MessageLayout != "" || preferences.Density != "compact" || preferences.PersonaHeroPositions["bot-1"].Y != 72 {
+	if preferences == nil || preferences.ColorMode != "" || preferences.BoardTheme != "moss" || preferences.MessageLayout != "" || preferences.Density != "compact" || !preferences.HidePersonaGrid || preferences.PersonaHeroPositions["bot-1"].Y != 72 {
 		t.Fatalf("unexpected initial preferences: %#v", preferences)
 	}
 
@@ -72,7 +74,7 @@ func TestAppearancePreferencesLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	preferences = account.AppearancePreferences
-	if preferences == nil || preferences.ColorMode != "" || preferences.BoardTheme != "" || preferences.MessageLayout != "outlined" || preferences.Density != "compact" || preferences.PersonaHeroPositions["bot-1"].Y != 72 {
+	if preferences == nil || preferences.ColorMode != "" || preferences.BoardTheme != "" || preferences.MessageLayout != "outlined" || preferences.Density != "compact" || !preferences.HidePersonaGrid || preferences.PersonaHeroPositions["bot-1"].Y != 72 {
 		t.Fatalf("partial update replaced unrelated preferences: %#v", preferences)
 	}
 

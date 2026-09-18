@@ -259,7 +259,7 @@ FROM user_notification_settings
 WHERE user_id = sqlc.arg(user_id);
 
 -- name: GetAppearancePreferences :one
-SELECT color_mode, board_theme, message_layout, density, bot_shelf_order, bot_shelf_limit, persona_hero_positions
+SELECT color_mode, board_theme, message_layout, density, bot_shelf_order, bot_shelf_limit, hide_persona_grid, persona_hero_positions
 FROM user_appearance_preferences
 WHERE user_id = sqlc.arg(user_id);
 
@@ -296,6 +296,11 @@ WHERE user_id = sqlc.arg(user_id);
 -- name: UpdateAppearanceBotShelfLimit :exec
 UPDATE user_appearance_preferences
 SET bot_shelf_limit = sqlc.arg(bot_shelf_limit)
+WHERE user_id = sqlc.arg(user_id);
+
+-- name: UpdateAppearanceHidePersonaGrid :exec
+UPDATE user_appearance_preferences
+SET hide_persona_grid = sqlc.arg(hide_persona_grid)
 WHERE user_id = sqlc.arg(user_id);
 
 -- name: UpdateAppearancePersonaHeroPositions :exec

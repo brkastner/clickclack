@@ -9,10 +9,12 @@
     loadColorMode,
     loadDensity,
     loadMessageLayout,
+    personaGridHidden,
     setBoardTheme,
     setColorMode,
     setDensity,
     setMessageLayout,
+    setPersonaGridHidden,
     type BoardTheme,
     type ColorMode,
     type Density,
@@ -29,6 +31,7 @@
   let boardTheme = $state<BoardTheme>(loadBoardTheme());
   let messageLayout = $state<MessageLayout>(loadMessageLayout());
   let density = $state<Density>(loadDensity());
+  let hidePersonaGrid = $state(false);
 
   $effect(() => {
     void user.appearance_preferences;
@@ -36,6 +39,7 @@
     boardTheme = loadBoardTheme();
     messageLayout = loadMessageLayout();
     density = loadDensity();
+    hidePersonaGrid = $personaGridHidden;
   });
 
   function pickMode(mode: ColorMode) {
@@ -276,5 +280,24 @@
       </div>
     </div>
   </div>
+  <section class="settings-rows" aria-label="Sidebar personas">
+    <h3 class="settings-rows__head">Sidebar personas</h3>
+    <div class="settings-row2 settings-row2--toggle">
+      <div class="settings-row2__desc">
+        <label class="settings-row2__label" for="hide-persona-grid">Hide recent-person grid</label>
+        <p class="settings-row2__hint">Keep Home and Gallery at the top, followed by persona cards and channel lists.</p>
+      </div>
+      <div class="settings-row2__control settings-row2__control--end">
+        <input
+          id="hide-persona-grid"
+          class="settings-switch"
+          type="checkbox"
+          checked={hidePersonaGrid}
+          onchange={(event) => setPersonaGridHidden(event.currentTarget.checked)}
+        />
+      </div>
+    </div>
+  </section>
+
   <BotAvatarPacksSection />
 </div>

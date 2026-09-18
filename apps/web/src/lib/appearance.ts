@@ -291,6 +291,7 @@ export function setDensity(density: Density) {
 export type BotShelfPreferences = { order: string[]; limit: number };
 export const DEFAULT_BOT_SHELF_LIMIT = 6;
 export const botShelfPreferences = writable<BotShelfPreferences>({ order: [], limit: 0 });
+export const personaGridHidden = writable(false);
 export type PersonaHeroPositionSaveState = "idle" | "saving" | "saved" | "error";
 export const personaHeroPositions = writable<Record<string, PersonaHeroPosition>>({});
 export const personaHeroPositionSaveState = writable<PersonaHeroPositionSaveState>("idle");
@@ -306,6 +307,11 @@ export function setBotShelfLimit(limit: number) {
   const normalized = Math.max(0, Math.floor(limit));
   botShelfPreferences.update((current) => ({ ...current, limit: normalized }));
   queueAppearancePatch({ bot_shelf_limit: normalized });
+}
+
+export function setPersonaGridHidden(hidden: boolean) {
+  personaGridHidden.set(hidden);
+  queueAppearancePatch({ hide_persona_grid: hidden });
 }
 
 export function setPersonaHeroPosition(botID: string, position: PersonaHeroPosition) {
@@ -370,6 +376,7 @@ export function applyServerPreferences(preferences: AppearancePreferences) {
     order: preferences.bot_shelf_order ?? [],
     limit: preferences.bot_shelf_limit ?? 0,
   });
+  personaGridHidden.set(preferences.hide_persona_grid ?? false);
   personaHeroPositionSnapshot = preferences.persona_hero_positions ?? {};
   personaHeroPositions.set(personaHeroPositionSnapshot);
 }

@@ -2437,6 +2437,8 @@ export interface components {
       bot_shelf_order?: string[];
       /** @description Maximum shelf bots to render. 0 shows all. */
       bot_shelf_limit?: number;
+      /** @description Hide the recent-person grid in the sidebar. */
+      hide_persona_grid?: boolean;
       /** @description Per-bot sidebar hero crop positions and zoom. */
       persona_hero_positions?: {
         [key: string]: components["schemas"]["PersonaHeroPosition"];
@@ -2463,6 +2465,8 @@ export interface components {
       bot_shelf_order?: string[];
       /** @description Maximum shelf bots to render. 0 shows all. */
       bot_shelf_limit?: number;
+      /** @description Hide the recent-person grid in the sidebar. */
+      hide_persona_grid?: boolean;
       /** @description Complete per-bot sidebar hero crop map. Empty object resets all positions. */
       persona_hero_positions?: {
         [key: string]: components["schemas"]["PersonaHeroPosition"];

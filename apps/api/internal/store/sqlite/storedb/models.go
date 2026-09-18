@@ -452,6 +452,7 @@ type UserAppearancePreference struct {
 	Density              string `json:"density"`
 	BotShelfOrder        string `json:"bot_shelf_order"`
 	BotShelfLimit        int64  `json:"bot_shelf_limit"`
+	HidePersonaGrid      int64  `json:"hide_persona_grid"`
 	PersonaHeroPositions string `json:"persona_hero_positions"`
 }
 

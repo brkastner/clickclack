@@ -717,10 +717,14 @@
 
 /* Mobile: modal goes full-bleed */
 @media (max-width: 720px) {
+  .settings-modal-scrim {
+    place-items: stretch;
+    padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom)
+      var(--safe-area-left);
+  }
   .settings-modal {
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh;
+    width: 100%;
+    height: 100%;
     border-radius: 0;
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -948,7 +952,8 @@
 /* Mobile: full-bleed panel, close in top-right corner */
 @media (max-width: 760px) {
   .ws-settings {
-    padding: 0;
+    padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom)
+      var(--safe-area-left);
   }
   .ws-settings__panel {
     border-radius: 0;
@@ -1613,8 +1618,8 @@
     padding: 32px 20px 60px;
   }
   .ws-settings__close {
-    top: 10px;
-    right: 12px;
+    top: calc(10px + var(--safe-area-top));
+    right: calc(12px + var(--safe-area-right));
   }
 }
 

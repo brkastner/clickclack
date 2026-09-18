@@ -38,7 +38,7 @@ func TestMigrateAppliesMissingPasswordMigrationAfterCustomMigrations(t *testing.
 		}
 	}
 	var latest string
-	if err := st.db.QueryRowContext(ctx, `SELECT max(name) FROM schema_migrations`).Scan(&latest); err != nil || latest < "0048_persona_hero_positions.sql" {
+	if err := st.db.QueryRowContext(ctx, `SELECT max(name) FROM schema_migrations`).Scan(&latest); err != nil || latest < "0052_hide_persona_grid.sql" {
 		t.Fatalf("expected custom migrations before upgrade, latest=%q err=%v", latest, err)
 	}
 	for range 2 {
