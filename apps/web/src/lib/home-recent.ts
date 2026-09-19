@@ -41,7 +41,9 @@ export function messagePreview(message: Message, maxLength = 180): string {
     .trim();
   const text = body || (message.attachments?.length ? "Shared an attachment" : "Message");
   return Array.from(text).length > maxLength
-    ? `${Array.from(text).slice(0, maxLength - 1).join("")}…`
+    ? `${Array.from(text)
+        .slice(0, maxLength - 1)
+        .join("")}…`
     : text;
 }
 
@@ -72,12 +74,14 @@ export function buildHomeRecentItems(
     .flatMap((source) => {
       const message = latestUsefulMessage(source.messages);
       return message
-        ? [{
-            ...source,
-            message,
-            persona: resolveHomePersona(source, message, usersByID),
-            preview: messagePreview(message),
-          }]
+        ? [
+            {
+              ...source,
+              message,
+              persona: resolveHomePersona(source, message, usersByID),
+              preview: messagePreview(message),
+            },
+          ]
         : [];
     })
     .sort((a, b) => {

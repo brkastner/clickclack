@@ -21,7 +21,10 @@ export function preferredGalleryDestination(
   const vai = outputBots(bots).find((bot) => bot.handle?.toLowerCase() === "vai");
   for (const bot of [current, vai]) {
     if (!bot) continue;
-    const direct = directs.find((conversation) => conversation.can_send && conversation.members.some((member) => member.id === bot.id));
+    const direct = directs.find(
+      (conversation) =>
+        conversation.can_send && conversation.members.some((member) => member.id === bot.id),
+    );
     if (direct) return { id: direct.id, bot };
   }
 }
@@ -130,7 +133,13 @@ export class OutputGallerySession {
 }
 
 export let galleryReturn:
-  | { userID: string; workspaceID: string; session: OutputGallerySession; sourceID: string; includeOwn?: boolean }
+  | {
+      userID: string;
+      workspaceID: string;
+      session: OutputGallerySession;
+      sourceID: string;
+      includeOwn?: boolean;
+    }
   | undefined;
 export let gallerySource: Message | undefined;
 export function rememberGallery(value: NonNullable<typeof galleryReturn>) {
