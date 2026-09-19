@@ -124,6 +124,29 @@ The owner must be a human workspace member, and `--created-by` must match that
 owner. A bot cannot own another bot. The server also checks that the owner is
 still a workspace member when a user-owned bot token is used.
 
+## Create project coding personas
+
+Use one user-owned bot per repository when each project should have a separate
+coding-agent identity in ClickClack. From the `pi-clickclack` checkout, run:
+
+```sh
+pnpm persona:add
+```
+
+The interactive helper asks for the project alias, display name, handle, and
+project directory. It creates the bot with `bot:write,agent_activity:write`,
+stores its token in an isolated `0600` environment file, gives it a separate
+SQLite state file, builds the bridge, and starts its named systemd service.
+
+For example, the values `utmco`, `утмсо`, `utmco`, and
+`/home/kas/dev/utmco` create `@utmco` with the display name `утмсо`, backed by
+`pi-clickclack-utmco.service` and locked to that project directory.
+
+Use `pnpm persona:add -- --dry-run` to preview the result or
+`pnpm persona:add -- --help` for non-interactive flags. Every channel or DM
+gets an independent persistent Pi session. Do not reuse a bot token or SQLite
+state file across persona services.
+
 ## Scopes
 
 Start with the smallest useful bundle:
