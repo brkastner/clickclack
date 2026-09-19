@@ -6,6 +6,7 @@ import {
   buildHomeRecentItems,
   latestUsefulMessage,
   messagePreview,
+  recentContextMessages,
   resolveHomePersona,
   type HomeRecentSource,
 } from "./home-recent.ts";
@@ -140,6 +141,44 @@ describe("Home recent-message projection", () => {
     assert.match(preview, /^Shipped the fix with tests/u);
     assert.equal(Array.from(preview).length, 50);
     assert.ok(preview.endsWith("…"));
+  });
+
+  it("selects up to three earlier useful messages in chronological order", () => {
+    const messages = [
+      message("one", "2026-09-17T08:00:00Z"),
+      message("two", "2026-09-17T09:00:00Z"),
+      message("three", "2026-09-17T10:00:00Z"),
+      message("four", "2026-09-17T11:00:00Z"),
+      message("latest", "2026-09-17T12:00:00Z"),
+    ];
+
+    assert.deepEqual(
+      recentContextMessages(messages).map((item) => item.id),
+      ["two", "three", "four"],
+    );
+  });
+
+  it("skips deleted and empty context messages", () => {
+    const deleted = {
+      ...message("deleted", "2026-09-17T10:00:00Z"),
+      deleted_at: "2026-09-17T10:01:00Z",
+    };
+    const messages = [
+      message("visible", "2026-09-17T09:00:00Z"),
+      deleted,
+      message("empty", "2026-09-17T11:00:00Z", ""),
+      message("latest", "2026-09-17T12:00:00Z"),
+    ];
+
+    assert.deepEqual(
+      recentContextMessages(messages).map((item) => item.id),
+      ["visible"],
+    );
+  });
+
+  it("returns no context when there is no earlier useful message", () => {
+    assert.deepEqual(recentContextMessages([]), []);
+    assert.deepEqual(recentContextMessages([message("latest", "2026-09-17T12:00:00Z")]), []);
   });
 
   it("keeps an attachment-only conversation visible", () => {

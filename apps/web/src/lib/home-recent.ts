@@ -26,10 +26,18 @@ export type HomePersonaGroup = {
   working: boolean;
 };
 
+function isUsefulMessage(message: Message): boolean {
+  return !message.deleted_at && Boolean(message.body.trim() || message.attachments?.length);
+}
+
 export function latestUsefulMessage(messages: Message[]): Message | undefined {
-  return [...messages]
-    .reverse()
-    .find((message) => !message.deleted_at && (message.body.trim() || message.attachments?.length));
+  return [...messages].reverse().find(isUsefulMessage);
+}
+
+export function recentContextMessages(messages: Message[], limit = 3): Message[] {
+  if (limit <= 0) return [];
+  const useful = messages.filter(isUsefulMessage);
+  return useful.slice(Math.max(0, useful.length - limit - 1), -1);
 }
 
 export function messagePreview(message: Message, maxLength = 180): string {
