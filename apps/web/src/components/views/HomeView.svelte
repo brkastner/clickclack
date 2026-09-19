@@ -1,18 +1,24 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
-  import { api } from "$lib/api";
+  import { onDestroy, onMount, tick } from "svelte";
+  import { api, readableAPIError } from "$lib/api";
   import { channelDisplayTitle } from "$lib/chat/channels";
+  import { newNonce } from "$lib/chat/messages";
   import { dmTitle, isDeletedBot, userDisplayLabel } from "$lib/chat/people";
   import {
     buildHomePersonaGroups,
     buildHomeRecentItems,
     channelHomeSource,
     directHomeSource,
+    messagePreview,
+    recentContextMessages,
+    type HomeRecentItem,
     type HomeRecentSource,
   } from "$lib/home-recent";
-  import type { Channel, DirectConversation, MessagePage, User } from "$lib/types";
+  import type { ComposerInputElement } from "$lib/chat/typeToFocus";
+  import type { Channel, DirectConversation, Message, MessagePage, User } from "$lib/types";
   import type { WorkspaceViewProps } from "$lib/views";
   import Avatar from "../avatar/Avatar.svelte";
+  import ChatComposer from "../composer/ChatComposer.svelte";
   import HomeDiagnostics from "./HomeDiagnostics.svelte";
 
   type HomeViewProps = WorkspaceViewProps & {
@@ -45,6 +51,12 @@
   let error = $state("");
   let now = $state(Date.now());
   let selectedPersonaID = $state("");
+  let expandedItemID = $state("");
+  let activityToggles = $state<Record<string, HTMLButtonElement | undefined>>({});
+  let composerBody = $state("");
+  let composerInput = $state<ComposerInputElement | null>(null);
+  let sendingItemID = $state("");
+  let sendError = $state("");
   let requestSerial = 0;
   let loadController: AbortController | undefined;
 
@@ -54,6 +66,7 @@
   const visibleGroups = $derived(
     selectedPersonaID ? groups.filter((group) => group.id === selectedPersonaID) : groups,
   );
+  const usersByID = $derived(new Map(users.map((user) => [user.id, user])));
 
   function itemHref(routeID: string): string {
     return `/app/${encodeURIComponent(workspaceRouteID)}/${encodeURIComponent(routeID)}`;
@@ -72,6 +85,81 @@
 
   function languageFor(value: string): string | undefined {
     return /[\u0400-\u04ff]/u.test(value) ? "ru" : undefined;
+  }
+
+  /** Return the best available display label for a message author. */
+  function messageAuthorName(message: Message): string {
+    return userDisplayLabel(message.author ?? usersByID.get(message.author_id), "Unknown");
+  }
+
+  /** Open or close an activity row and prepare its composer for a fresh reply. */
+  function toggleExpanded(itemID: string): void {
+    if (sendingItemID) return;
+    const opening = expandedItemID !== itemID;
+    expandedItemID = opening ? itemID : "";
+    composerBody = "";
+    sendError = "";
+    if (opening) void tick().then(() => composerInput?.focus());
+  }
+
+  /** Close the expanded activity row and discard its transient composer state. */
+  function collapseExpanded(): void {
+    expandedItemID = "";
+    composerBody = "";
+    sendError = "";
+  }
+
+  /** Let Escape close an expanded row while focus is within its summary. */
+  function handleSummaryKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape" && expandedItemID) {
+      event.preventDefault();
+      collapseExpanded();
+    }
+  }
+
+  /** Apply the reply composer's Escape and Enter keyboard shortcuts. */
+  function handleComposerKeydown(event: KeyboardEvent, item: HomeRecentItem): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      const activityToggle = activityToggles[item.id];
+      collapseExpanded();
+      void tick().then(() => activityToggle?.focus());
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void sendMessage(item);
+    }
+  }
+
+  /** Post a reply for an activity item and merge the returned message locally. */
+  async function sendMessage(item: HomeRecentItem): Promise<void> {
+    const body = composerBody.trim();
+    if (!body || sendingItemID) return;
+
+    const itemID = item.id;
+    const path = item.kind === "direct"
+      ? `/api/dms/${encodeURIComponent(itemID)}/messages`
+      : `/api/channels/${encodeURIComponent(itemID)}/messages`;
+    sendingItemID = itemID;
+    sendError = "";
+    try {
+      const { message } = await api<{ message: Message }>(path, {
+        method: "POST",
+        body: JSON.stringify({ body, nonce: newNonce() }),
+      });
+      sources = sources.map((source) =>
+        source.id === itemID ? { ...source, messages: [...source.messages, message] } : source,
+      );
+      if (expandedItemID === itemID && composerBody.trim() === body) composerBody = "";
+      void loadRecent();
+    } catch (reason) {
+      if (expandedItemID === itemID) {
+        sendError = readableAPIError(reason, "Could not send this message.");
+      }
+    } finally {
+      if (sendingItemID === itemID) sendingItemID = "";
+    }
   }
 
   async function loadRecent(): Promise<void> {
@@ -144,6 +232,9 @@
   $effect(() => {
     if (selectedPersonaID && !groups.some((group) => group.id === selectedPersonaID)) {
       selectedPersonaID = "";
+    }
+    if (expandedItemID && !items.some((item) => item.id === expandedItemID)) {
+      collapseExpanded();
     }
   });
 
@@ -275,24 +366,81 @@
 
               <div class="home-persona__activity">
                 {#each visibleItems as item (item.id)}
-                  <a
+                  {@const expanded = expandedItemID === item.id}
+                  {@const contextMessages = recentContextMessages(item.messages)}
+                  <article
                     class="home-activity"
                     class:is-unread={item.unreadCount > 0}
-                    href={itemHref(item.routeID)}
-                    aria-label={`${personaName}, ${item.title}: ${item.preview}. ${relativeTime(item.message.created_at)}`}
+                    class:is-expanded={expanded}
                   >
-                    <div class="home-activity__meta">
-                      <strong>{item.title}</strong>
-                      {#if workingConversationIDs.has(item.id)}
-                        <span class="home-activity__working">working</span>
+                    <div class="home-activity__summary">
+                      <button
+                        type="button"
+                        class="home-activity__toggle"
+                        aria-expanded={expanded}
+                        aria-label={`${expanded ? "Collapse" : "Expand"} ${item.title}: ${item.preview}`}
+                        bind:this={activityToggles[item.id]}
+                        onclick={() => toggleExpanded(item.id)}
+                        onkeydown={handleSummaryKeydown}
+                      ></button>
+                      <div class="home-activity__meta">
+                        <a href={itemHref(item.routeID)}>{item.title}</a>
+                        {#if workingConversationIDs.has(item.id)}
+                          <span class="home-activity__working">working</span>
+                        {/if}
+                        <time datetime={item.message.created_at}>{relativeTime(item.message.created_at)}</time>
+                      </div>
+                      {#if expanded && contextMessages.length > 0}
+                        <ol class="home-activity__context" aria-label={`Recent messages in ${item.title}`}>
+                          {#each contextMessages as message (message.id)}
+                            <li>
+                              <div>
+                                <strong lang={languageFor(messageAuthorName(message))}>{messageAuthorName(message)}</strong>
+                                <time datetime={message.created_at}>{relativeTime(message.created_at)}</time>
+                              </div>
+                              <p>{messagePreview(message)}</p>
+                            </li>
+                          {/each}
+                        </ol>
                       {/if}
-                      <time datetime={item.message.created_at}>{relativeTime(item.message.created_at)}</time>
+                      <p class="home-activity__latest">{item.preview}</p>
+                      <a
+                        class="home-activity__view"
+                        href={itemHref(item.routeID)}
+                        aria-label={`View ${item.title}`}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
+                      </a>
                     </div>
-                    <p>{item.preview}</p>
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="m9 18 6-6-6-6" />
-                    </svg>
-                  </a>
+
+                    {#if expanded}
+                      <div class="home-activity__expanded">
+                        <div class="home-activity__composer-dock">
+                          {#if sendError}
+                            <p class="home-activity__send-error" role="status">{sendError}</p>
+                          {/if}
+                          <ChatComposer
+                            value={composerBody}
+                            placeholder={`Reply to ${item.title}`}
+                            ariaLabel={`Reply to ${item.title}`}
+                            submitLabel="Send"
+                            formClass="composer home-activity__composer"
+                            disabled={sendingItemID === item.id}
+                            mentionPeople={users}
+                            onValue={(value) => {
+                              if (expandedItemID === item.id && !sendingItemID) composerBody = value;
+                            }}
+                            onSubmit={() => void sendMessage(item)}
+                            onKeydown={(event) => handleComposerKeydown(event, item)}
+                            onFocus={() => (sendError = "")}
+                            onInputRef={(node) => (composerInput = node)}
+                          />
+                        </div>
+                      </div>
+                    {/if}
+                  </article>
                 {/each}
               </div>
 
@@ -408,7 +556,9 @@
 
   .home-view__filters button:focus-visible,
   .home-view__notice button:focus-visible,
-  .home-activity:focus-visible {
+  .home-activity__toggle:focus-visible,
+  .home-activity__meta a:focus-visible,
+  .home-activity__view:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
@@ -561,33 +711,56 @@
 
   .home-activity {
     position: relative;
-    display: grid;
-    min-height: 68px;
-    padding: 11px 48px 11px 16px;
     border-bottom: 1px solid var(--line);
     color: var(--text);
-    text-decoration: none;
-    gap: 5px;
   }
 
   .home-activity:last-child { border-bottom: 0; }
-  .home-activity:hover { background: color-mix(in srgb, var(--accent) 7%, var(--hover)); }
+
+  .home-activity__summary {
+    position: relative;
+    display: grid;
+    min-height: 68px;
+    padding: 11px 48px 11px 16px;
+    gap: 5px;
+  }
+
+  .home-activity__summary:hover,
+  .home-activity.is-expanded .home-activity__summary {
+    background: color-mix(in srgb, var(--accent) 7%, var(--hover));
+  }
+
+  .home-activity__toggle {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
 
   .home-activity__meta {
+    position: relative;
+    z-index: 1;
     display: flex;
     min-width: 0;
     align-items: center;
     gap: 8px;
+    pointer-events: none;
   }
 
-  .home-activity__meta strong {
+  .home-activity__meta a {
     min-width: 0;
     overflow: hidden;
     color: var(--text-strong);
     font: 750 14.4px var(--font-display);
+    text-decoration: none;
     text-overflow: ellipsis;
     white-space: nowrap;
+    pointer-events: auto;
   }
+
+  .home-activity__meta a:hover { color: var(--accent); text-decoration: underline; }
 
   .home-activity__meta time {
     flex: 0 0 auto;
@@ -604,34 +777,86 @@
     text-transform: uppercase;
   }
 
-  .home-activity p {
+  .home-activity p { font-size: 14.4px; }
+
+  .home-activity__latest,
+  .home-activity__context p {
     display: -webkit-box;
+    position: relative;
+    z-index: 1;
     margin: 0;
     overflow: hidden;
     color: var(--muted);
     font-size: 14.4px;
     line-height: 1.45;
+    pointer-events: none;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
 
-  .home-activity.is-unread p { color: var(--text); font-weight: 600; }
+  .home-activity.is-unread .home-activity__latest { color: var(--text); font-weight: 600; }
 
-  .home-activity svg {
+  .home-activity__context {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    margin: 3px 0 4px;
+    padding: 0;
+    border-block: 1px solid color-mix(in srgb, var(--line-strong) 68%, transparent);
+    list-style: none;
+    pointer-events: none;
+  }
+
+  .home-activity__context li { padding: 8px 0; }
+  .home-activity__context li + li { border-top: 1px solid var(--line); }
+  .home-activity__context li > div { display: flex; align-items: baseline; gap: 8px; }
+  .home-activity__context strong { color: var(--text-strong); font: 700 12.6px var(--font-display); }
+  .home-activity__context time { margin-left: auto; color: var(--muted); font: 10.8px var(--font-mono); }
+  .home-activity__context p { margin-top: 2px; font-size: 13.2px; }
+
+  .home-activity__view {
     position: absolute;
+    z-index: 2;
     top: 50%;
-    right: 17px;
+    right: 12px;
+    display: grid;
+    width: 28px;
+    height: 32px;
+    color: var(--muted);
+    transform: translateY(-50%);
+    place-items: center;
+  }
+
+  .home-activity__view svg {
     width: 17px;
     height: 17px;
     fill: none;
-    stroke: var(--muted);
+    stroke: currentColor;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-    transform: translateY(-50%);
+    transition: transform .15s ease;
   }
 
-  .home-activity:hover svg { stroke: var(--accent); transform: translate(2px, -50%); }
+  .home-activity__view:hover { color: var(--accent); }
+  .home-activity__view:hover svg { transform: translateX(2px); }
+
+  .home-activity__expanded {
+    position: relative;
+    z-index: 2;
+    padding: 12px 16px 15px;
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--panel-2) 82%, transparent);
+  }
+
+  .home-activity__composer-dock { display: grid; gap: 7px; }
+  :global(.home-activity__composer) { min-width: 0; }
+
+  .home-activity__send-error {
+    margin: 0;
+    color: var(--danger);
+    font: 12px/1.4 var(--font-mono);
+  }
 
   .home-persona__more {
     margin: 0;
@@ -729,8 +954,9 @@
     .home-persona__header { grid-template-columns: var(--home-persona-avatar-size) minmax(0, 1fr); padding: 11px 12px; }
     .home-persona__working,
     .home-persona__unread { grid-column: 2; justify-self: start; }
-    .home-activity { padding-inline: 12px 38px; }
-    .home-activity svg { right: 12px; }
+    .home-activity__summary { padding-inline: 12px 42px; }
+    .home-activity__expanded { padding-inline: 12px; }
+    .home-activity__view { right: 7px; }
     :global(.home-persona__art) { right: -90px; opacity: .09; }
   }
 </style>
