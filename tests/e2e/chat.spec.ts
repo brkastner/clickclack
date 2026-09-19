@@ -2986,6 +2986,62 @@ test("refresh with unread messages opens at the divider without marking read", a
   await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
 });
 
+test("navigating into a channel marks it read without the unread bar", async ({ page }) => {
+  const workspacesResponse = await page.request.get("/api/workspaces");
+  const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };
+  const workspaceId = workspaces.workspaces[0].id;
+  const channelName = `nav-read-${Date.now()}`;
+  const channelResponse = await page.request.post(`/api/workspaces/${workspaceId}/channels`, {
+    data: { name: channelName, kind: "public" },
+  });
+  const channel = (await channelResponse.json()) as { channel: { id: string; name: string } };
+  const senderID = clickclack([
+    "admin",
+    "user",
+    "create",
+    "--data",
+    "./data/e2e",
+    "--workspace",
+    workspaceId,
+    "--name",
+    "Nav Read Sender",
+    "--email",
+    `${channelName}@example.com`,
+  ]);
+
+  for (let i = 0; i < 4; i++) {
+    const response = await page.request.post(`/api/channels/${channel.channel.id}/messages`, {
+      headers: { "X-ClickClack-User": senderID },
+      data: { body: `nav read ${i}` },
+    });
+    expect(response.ok()).toBe(true);
+  }
+
+  async function currentChannelState(): Promise<{ last_read_seq?: number; unread_count?: number }> {
+    const response = await page.request.get(`/api/workspaces/${workspaceId}/channels`);
+    const data = (await response.json()) as {
+      channels: { id: string; last_read_seq?: number; unread_count?: number }[];
+    };
+    const current = data.channels.find((item) => item.id === channel.channel.id);
+    if (!current) throw new Error("channel missing from list");
+    return current;
+  }
+
+  await page.goto("/app");
+  await waitForAppReady(page);
+  await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(4);
+
+  await page.getByRole("link", { name: `# ${channel.channel.name}` }).click();
+  await expect(page.getByRole("heading", { name: `#${channel.channel.name}` })).toBeVisible();
+  await expect(page.locator(".markdown").filter({ hasText: "nav read 3" })).toBeVisible();
+
+  await expect.poll(async () => (await currentChannelState()).unread_count || 0).toBe(0);
+  await expect
+    .poll(async () => (await currentChannelState()).last_read_seq || 0)
+    .toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: "Mark as read" })).toHaveCount(0);
+});
+
 test("automatic read receipts do not clear unseen paged history", async ({ page }) => {
   const workspacesResponse = await page.request.get("/api/workspaces");
   const workspaces = (await workspacesResponse.json()) as { workspaces: { id: string }[] };

@@ -22,31 +22,45 @@ test("keeps the unread overlay above elevated virtualized message rows", () => {
   );
 });
 
-test("preserves unread state while opening channels and direct conversations", () => {
+test("marks channels and direct conversations read after navigating into them", () => {
   const applyRoute =
     chatApp.match(
       /async function applyRoute[\s\S]*?\n  async function ensureResolvedRouteTargetLoaded/u,
     )?.[0] ?? "";
-  const selectChannel =
+  const handleHistorySettled =
     chatApp.match(
-      /async function selectChannel[\s\S]*?\n  async function loadChannelNotifPreference/u,
-    )?.[0] ?? "";
-  const selectDirect =
-    chatApp.match(
-      /async function selectDirectConversation[\s\S]*?\n  async function startDirectWithUser/u,
+      /function handleHistorySettled[\s\S]*?\n  function currentConversationKey/u,
     )?.[0] ?? "";
   const markConversationReadOnOpen =
     chatApp.match(
       /function markConversationReadOnOpen[\s\S]*?\n  function markActiveViewRead/u,
     )?.[0] ?? "";
 
-  assert.doesNotMatch(applyRoute, /markConversationReadOnOpen\(targetID\);/u);
-  assert.doesNotMatch(selectChannel, /markConversationReadOnOpen\(channelID\);/u);
-  assert.doesNotMatch(selectDirect, /markConversationReadOnOpen\(conversationID\);/u);
+  // Navigation arms the receipt; the settled history fires it, so the unread
+  // divider still places the scroll position before the badge clears.
+  const armed = applyRoute.match(/pendingOpenReadKey = navigated \? targetID : "";/gu) ?? [];
+  assert.equal(armed.length, 2);
+  assert.match(
+    handleHistorySettled,
+    /if \(openedKey === currentConversationKey\(\) && openedKey === viewKey\) \{\s*pendingOpenReadKey = "";\s*markConversationReadOnOpen\(openedKey\);/u,
+  );
   assert.match(markConversationReadOnOpen, /latestReadSeqForKey\(key\)/u);
   assert.match(markConversationReadOnOpen, /markDirectRead\(key, seq\)/u);
   assert.match(markConversationReadOnOpen, /markChannelRead\(key, seq\)/u);
   assert.match(markConversationReadOnOpen, /clearUnreadLocally\(key, seq\)/u);
+});
+
+test("keeps unread state on a cold load so a refresh never burns it", () => {
+  const applyRoute =
+    chatApp.match(
+      /async function applyRoute[\s\S]*?\n  async function ensureResolvedRouteTargetLoaded/u,
+    )?.[0] ?? "";
+
+  assert.match(applyRoute, /const navigated = routeEverApplied;/u);
+  // A cold boot at /app resolves its fallback target through a second pass, so
+  // the flag only flips once a conversation route has resolved.
+  const flips = applyRoute.match(/routeEverApplied = true;/gu) ?? [];
+  assert.equal(flips.length, 3);
 });
 
 test("marks the channel read after successfully navigating to a topic", () => {

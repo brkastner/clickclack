@@ -405,6 +405,12 @@
   let activeLoadingNewer = false;
   let unreadMarkers = new Map<string, UnreadMarker>();
   let suppressAutoReadUntil = 0;
+  // Opening a conversation marks it read. The receipt waits until the freshly
+  // loaded history has settled so the unread divider still gets to place the
+  // scroll position before the badge clears. A cold load (deep link, refresh)
+  // is not navigation: it keeps its unread state so a reload never burns it.
+  let pendingOpenReadKey = "";
+  let routeEverApplied = false;
   let viewKey = "";
   let viewRestoreState: MessageListState | undefined = undefined;
   let activeConversationKey = "";
@@ -1448,6 +1454,9 @@
 
   async function applyRoute(workspaceIDParam = "", targetIDParam = "", viewSlugParam = "") {
     const serial = ++routeApplySerial;
+    // A cold boot at /app lands on a fallback target through a second pass, so
+    // "navigated" only flips once a conversation route has actually resolved.
+    const navigated = routeEverApplied;
     // Record admission, not completion: cancelled routes must not suppress a later visit.
     activeRouteKey = routeKey(workspaceIDParam, targetIDParam, viewSlugParam);
     if (targetIDParam !== thread.selection?.messageID && targetIDParam !== thread.root?.route_id) thread.close();
@@ -1538,6 +1547,7 @@
 
       if (routeTarget?.target_type === "channel" && channels.some((channel) => channel.id === routeTarget.target_id)) {
         const targetID = routeTarget.target_id;
+        routeEverApplied = true;
         const sameConversation =
           !workspaceChanged && selectedChannelID === targetID && !selectedDirectID && viewKey === targetID;
         selectedChannelID = targetID;
@@ -1552,6 +1562,7 @@
           return;
         }
         resetTopicStateForConversation(targetID);
+        pendingOpenReadKey = navigated ? targetID : "";
         await Promise.all([loadMessages(), loadPinnedMessages()]);
         if (serial !== routeApplySerial) return;
         connectPendingRealtime(workspace.id);
@@ -1560,6 +1571,7 @@
 
       if (routeTarget?.target_type === "direct" && directConversations.some((conversation) => conversation.id === routeTarget.target_id)) {
         const targetID = routeTarget.target_id;
+        routeEverApplied = true;
         const sameConversation =
           !workspaceChanged && selectedDirectID === targetID && !selectedChannelID && viewKey === targetID;
         selectedDirectID = targetID;
@@ -1573,6 +1585,7 @@
           return;
         }
         resetTopicStateForConversation(targetID);
+        pendingOpenReadKey = navigated ? targetID : "";
         await loadMessages();
         if (serial !== routeApplySerial) return;
         connectPendingRealtime(workspace.id);
@@ -1580,6 +1593,7 @@
       }
 
       if (routeTarget?.target_type === "thread") {
+        routeEverApplied = true;
         const resolved = await applyThreadRoute(routeTarget, serial);
         if (serial !== routeApplySerial) return;
         if (resolved) connectPendingRealtime(workspace.id);
@@ -2445,6 +2459,13 @@
   }
 
   function handleHistorySettled(state: MessageListViewportState) {
+    if (pendingOpenReadKey) {
+      const openedKey = pendingOpenReadKey;
+      if (openedKey === currentConversationKey() && openedKey === viewKey) {
+        pendingOpenReadKey = "";
+        markConversationReadOnOpen(openedKey);
+      }
+    }
     const shouldLoadOlder =
       olderPageState === "settling" && pendingOlderPageIntent && state.nearOlder && activeHasOlder;
     const shouldLoadNewer =
