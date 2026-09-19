@@ -5642,6 +5642,7 @@
         {workingConversationIDs}
         {connected}
         voiceStatus={voiceState.status}
+        onConversationRead={(conversationID, seq) => clearUnreadLocally(conversationID, seq)}
       />
     {:else}
     {#if galleryReturn?.userID === user?.id && galleryReturn?.workspaceID === selectedWorkspaceID}
