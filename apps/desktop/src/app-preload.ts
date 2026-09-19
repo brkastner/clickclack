@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { SystemDiagnostics } from "../../web/src/lib/system-diagnostics";
 import { localFilePath, type LocalFileResult } from "./local-file-link";
 import {
   DESKTOP_SERVER_ORIGIN_ARG,
@@ -18,6 +19,7 @@ export type DesktopPasteTarget = "composer" | "profile-dark" | "profile-light";
 
 export type ClickClackDesktopBridge = {
   integratedTitleBar: boolean;
+  systemDiagnostics(): Promise<SystemDiagnostics | null>;
   notify(notification: DesktopNotification): Promise<boolean>;
   onNavigate(callback: (route: string) => void): () => void;
   onPasteFiles(
@@ -148,6 +150,7 @@ function installDesktopClipboardHandling() {
 const bridge: ClickClackDesktopBridge = {
   integratedTitleBar: process.argv.includes(DESKTOP_TITLEBAR_ARG),
   platform: process.platform,
+  systemDiagnostics: () => ipcRenderer.invoke("desktop:system-diagnostics"),
   notify: (notification) => ipcRenderer.invoke("desktop:notify", notification),
   setUnreadCount: (count) => ipcRenderer.send("desktop:set-unread", count),
   setActiveRoute: (route) => ipcRenderer.send("desktop:set-active-route", route),

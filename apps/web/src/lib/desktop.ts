@@ -1,4 +1,5 @@
 import { MAX_MESSAGE_ATTACHMENTS } from "./attachments.ts";
+import type { SystemDiagnostics } from "./system-diagnostics";
 
 export type DesktopNotification = {
   body: string;
@@ -17,6 +18,7 @@ export type DesktopPasteTarget = "composer" | "profile-dark" | "profile-light";
 
 export type ClickClackDesktopBridge = {
   integratedTitleBar: boolean;
+  systemDiagnostics?(): Promise<SystemDiagnostics | null>;
   notify(notification: DesktopNotification): Promise<boolean>;
   onNavigate(callback: (route: string) => void): () => void;
   onPasteFiles(

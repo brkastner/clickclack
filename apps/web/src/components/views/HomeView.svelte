@@ -13,6 +13,7 @@
   import type { Channel, DirectConversation, MessagePage, User } from "$lib/types";
   import type { WorkspaceViewProps } from "$lib/views";
   import Avatar from "../avatar/Avatar.svelte";
+  import HomeDiagnostics from "./HomeDiagnostics.svelte";
 
   type HomeViewProps = WorkspaceViewProps & {
     workspaceRouteID?: string;
@@ -21,6 +22,8 @@
     directConversations?: DirectConversation[];
     users?: User[];
     workingConversationIDs?: ReadonlySet<string>;
+    connected?: boolean;
+    voiceStatus?: string;
   };
 
   let {
@@ -31,6 +34,8 @@
     directConversations = [],
     users = [],
     workingConversationIDs = new Set<string>(),
+    connected = false,
+    voiceStatus = "unknown",
   }: HomeViewProps = $props();
 
   let sources = $state<HomeRecentSource[]>([]);
@@ -199,6 +204,8 @@
   </header>
 
   <div class="home-view__canvas">
+    <div class="home-view__columns">
+    <div class="home-view__feed">
     {#if loading}
       <div class="home-personas" aria-label="Loading recent activity" aria-busy="true">
         {#each Array(3) as _, index (index)}
@@ -299,6 +306,9 @@
         </ol>
       {/if}
     {/if}
+    </div>
+    <HomeDiagnostics {connected} {voiceStatus} />
+    </div>
   </div>
 </section>
 
@@ -422,6 +432,21 @@
     background-color: var(--bg);
     background-image: radial-gradient(color-mix(in srgb, var(--line-strong) 45%, transparent) .8px, transparent .8px);
     background-size: 22px 22px;
+  }
+
+  .home-view__feed { min-width: 0; }
+
+  .home-view__columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1050px) 320px;
+    gap: 24px;
+    max-width: 1394px;
+    margin: 0 auto;
+    align-items: start;
+  }
+
+  @media (max-width: 1100px) {
+    .home-view__columns { grid-template-columns: minmax(0, 1fr); }
   }
 
   .home-personas {

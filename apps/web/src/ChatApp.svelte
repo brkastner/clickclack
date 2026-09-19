@@ -5639,6 +5639,8 @@
         {directConversations}
         users={mentionPeople}
         {workingConversationIDs}
+        {connected}
+        voiceStatus={voiceState.status}
       />
     {:else}
     {#if galleryReturn?.userID === user?.id && galleryReturn?.workspaceID === selectedWorkspaceID}

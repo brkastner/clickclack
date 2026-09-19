@@ -282,7 +282,9 @@ export async function desktop(t) {
     platform: process.platform,
     argv: [],
     execPath: process.execPath,
-    env: {},
+    env: { PI_CODING_AGENT_DIR: path.join(directory, "pi-fixture") },
+    pid: process.pid,
+    uptime: () => 10,
   });
   vm.runInNewContext(
     await fs.readFile(bundle, "utf8"),
@@ -304,6 +306,9 @@ export async function desktop(t) {
       console: { error: (...args) => logs.push(args) },
       URL,
       Response,
+      fetch: (...args) => controls.fetch(...args),
+      setInterval: () => ({ unref() {} }),
+      clearInterval() {},
       TextDecoder,
       AbortSignal,
       Error,

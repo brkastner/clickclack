@@ -50,6 +50,7 @@ import {
   type WindowState,
 } from "./contract";
 import { createLocalTerminalProcessFactory, TerminalSurface } from "./terminal-surface";
+import { SubscriptionDiagnostics } from "./subscription-diagnostics";
 
 const PROTOCOLS = [LEGACY_DESKTOP_PROTOCOL, DESKTOP_AUTH_PROTOCOL] as const;
 const SETTINGS_FILE = "desktop.json";
@@ -80,6 +81,8 @@ let windowSaveTimer: NodeJS.Timeout | undefined;
 let saveQueue = Promise.resolve();
 let integratedTitleBar = false;
 let localFileRequestPending = false;
+let subscriptionDiagnostics: SubscriptionDiagnostics | undefined;
+let subscriptionTimer: NodeJS.Timeout | undefined;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -103,6 +106,10 @@ async function start() {
   if (process.platform === "win32") app.setAppUserModelId("chat.clickclack.desktop");
   nativeTheme.themeSource = "system";
   settings = await readSettings();
+  subscriptionDiagnostics = new SubscriptionDiagnostics(
+    path.join(app.getPath("userData"), "subscription-history.json"),
+  );
+  app.once("will-quit", () => clearInterval(subscriptionTimer));
   integratedTitleBar = await serverSupportsIntegratedTitleBar(settings.serverUrl);
   applyLoginItemSetting();
   registerIPC();
@@ -574,6 +581,21 @@ async function revealLocalFile(contents: WebContents, input: unknown): Promise<L
 }
 
 function registerIPC() {
+  ipcMain.handle("desktop:system-diagnostics", async (event) => {
+    if (!isMainSender(event) || !subscriptionDiagnostics) return null;
+    if (!subscriptionTimer) {
+      subscriptionTimer = setInterval(() => void subscriptionDiagnostics?.get(), 5 * 60_000);
+      subscriptionTimer.unref();
+    }
+    const subscriptions = await subscriptionDiagnostics.get();
+    if (!isMainSender(event)) return null;
+    return {
+      ...subscriptions,
+      capturedAt: Date.now(),
+      desktopVersion: app.getVersion(),
+      desktopUptimeSeconds: Math.floor(process.uptime()),
+    };
+  });
   ipcMain.handle("desktop:reveal-local-file", (event, input) => {
     if (!isMainSender(event)) return "denied";
     return revealLocalFile(event.sender, input);

@@ -3,6 +3,19 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { A, B, C, deferred, desktop, settle, until } from "./main-harness.mjs";
 
+test("diagnostics only returns a safe snapshot to the trusted main frame", async (t) => {
+  const d = await desktop(t);
+  assert.equal(await d.invoke(d.windows[1], "desktop:system-diagnostics"), null);
+  assert.equal(
+    await d.invoke(d.main, "desktop:system-diagnostics", undefined, { url: A + "/app" }),
+    null,
+  );
+  const result = await d.invoke(d.main, "desktop:system-diagnostics");
+  assert.equal(result.desktopVersion, "0.0.0-test");
+  assert.equal(result.desktopUptimeSeconds, 10);
+  assert.equal(result.accounts.length, 0);
+});
+
 test("filesystem-shaped app links never navigate to HTTP or open a browser", async (t) => {
   const d = await desktop(t);
   const before = [...d.main.loads];
