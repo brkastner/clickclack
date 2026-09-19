@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  hourlyBurnRate,
   remainingColor,
   sortSubscriptionAccounts,
   usageTrend,
@@ -56,6 +57,11 @@ test("remaining capacity controls color at both boundaries", () => {
     [100, "love"],
   ] as const)
     assert.match(remainingColor(used), new RegExp(token));
+});
+test("hourly burn normalizes the 24h daily rate", () => {
+  assert.equal(hourlyBurnRate(12), 0.5);
+  assert.equal(hourlyBurnRate(0), 0);
+  assert.equal(hourlyBurnRate(null), null);
 });
 test("forecasts distinguish exhaustion, buffer, unknown and stale", () => {
   assert.deepEqual(quotaForecast(account, now), { text: "estimated empty in 2d 8h", risk: true });
