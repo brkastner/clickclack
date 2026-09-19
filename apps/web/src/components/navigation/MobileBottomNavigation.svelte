@@ -199,4 +199,21 @@
       display: none;
     }
   }
+
+  @media (max-width: 820px) and (max-height: 320px) and (orientation: landscape) {
+    .mobile-primary-navigation {
+      padding-top: 2px;
+      padding-bottom: var(--safe-area-bottom);
+    }
+
+    .mobile-primary-navigation a {
+      min-height: 40px;
+    }
+
+
+    .mobile-primary-navigation svg {
+      width: 20px;
+      height: 20px;
+    }
+  }
 </style>

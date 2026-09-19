@@ -12,6 +12,7 @@
     type HomeLink,
   } from "./lib/home-link";
   import { APIError, api, apiResourceURL, apiURL, authMethods, frontendBaseURL, readableAPIError, voiceBaseURL } from "./lib/api";
+  import { loadNotificationMessage } from "./lib/browser-notifications";
   import { createNotepadAvailability } from "./lib/chat/notepad-availability";
   import { requestCurrentUser } from "./lib/appearance";
   import { botAvatarFiles } from "./lib/bot-avatar-packs";
@@ -2888,12 +2889,12 @@
     let authorID = typeof payload.author_id === "string" ? payload.author_id : "";
     let rawBody = typeof payload.body === "string" ? payload.body : "New message";
     if (event.type === "thread.reply_created" && typeof payload.message_id === "string") {
-      try {
-        const data = await api<{ message: Message }>(`/api/messages/${payload.message_id}`);
+      const data = await loadNotificationMessage(() =>
+        api<{ message: Message }>(`/api/messages/${payload.message_id}`),
+      );
+      if (data) {
         authorID = data.message.author_id;
         rawBody = data.message.body;
-      } catch {
-        // A generic alert is safer than copying message content into durable event metadata.
       }
     }
     if (authorID && authorID === user?.id) return;

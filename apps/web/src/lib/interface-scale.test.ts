@@ -55,7 +55,10 @@ test("holds the top bars at one-to-one so the slider cannot move itself", () => 
   assert.doesNotMatch(layout, /grid-template-rows: 52px/u);
   assert.match(layout, /grid-template-rows: var\(--titlebar-slot\)/u);
   assert.doesNotMatch(modals, /top: 52px/u);
-  assert.match(modals, /height: calc\(var\(--app-vh\) - var\(--titlebar-slot\)\)/u);
+  assert.match(
+    modals,
+    /height: calc\(var\(--app-vh\) - var\(--titlebar-slot\) - var\(--mobile-bottom-nav-height\)\)/u,
+  );
 
   // A range input ignores the wheel natively.
   assert.match(control, /onwheel=/u);

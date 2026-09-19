@@ -537,7 +537,6 @@
     const startY = event.clientY;
     longPressTimer = window.setTimeout(() => {
       longPressTimer = undefined;
-      suppressRowClick = true;
       // A long press has no visible "it took" moment until the sheet animates in.
       haptic("medium");
       openActionSheet();
