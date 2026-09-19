@@ -16,6 +16,7 @@ type Account = {
   provider: "Claude" | "Codex";
   label: string;
   enabled: boolean;
+  isDefault: boolean;
   credential: Credential;
 };
 const PERIOD = 5 * 60_000;
@@ -44,21 +45,24 @@ export function piAccounts(auth: unknown, multi: unknown): Account[] {
   const primary = object(auth);
   const pools = object(object(multi).providers);
   const accounts: Account[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, Account>();
   for (const [key, provider] of [
     ["anthropic", "Claude"],
     ["openai-codex", "Codex"],
   ] as const) {
     const pool = object(pools[key]);
     const upstream = object(pool.upstream);
-    const rows = [
+    const rows: RecordValue[] = [
       {
         id: "upstream",
+        isDefault: true,
         label: upstream.label ?? "Pi default",
         enabled: pool.includeUpstream !== false && upstream.enabled !== false,
         credential: primary[key],
       },
-      ...(Array.isArray(pool.accounts) ? pool.accounts.map(object) : []),
+      ...(Array.isArray(pool.accounts)
+        ? pool.accounts.map((value) => ({ ...object(value), isDefault: false }))
+        : []),
     ];
     for (const row of rows) {
       const credential = object(row.credential) as Credential;
@@ -75,16 +79,23 @@ export function piAccounts(auth: unknown, multi: unknown): Account[] {
           ? credential.accountId
           : credential.access;
       const fingerprint = hash(`${key}:${identity}`);
-      if (seen.has(fingerprint)) continue;
-      seen.add(fingerprint);
+      const existing = seen.get(fingerprint);
+      if (existing) {
+        if (typeof row.label === "string") existing.label = row.label.slice(0, 100);
+        existing.enabled ||= row.enabled !== false;
+        continue;
+      }
       const stable = provider === "Codex" ? fingerprint : hash(`${key}:${String(row.id)}`);
-      accounts.push({
+      const account: Account = {
         id: stable,
         provider,
         label: typeof row.label === "string" ? row.label.slice(0, 100) : "Pi account",
         enabled: row.enabled !== false,
+        isDefault: row.isDefault === true,
         credential,
-      });
+      };
+      accounts.push(account);
+      seen.set(fingerprint, account);
     }
   }
   return accounts;
@@ -188,7 +199,7 @@ export class SubscriptionDiagnostics {
         }
         this.loaded = true;
       }
-      const inventory = piAccounts(auth, multi);
+      const inventory = await this.resolveIdentities(piAccounts(auth, multi));
       const accounts: SubscriptionAccount[] = [];
       // Small batches bound provider traffic, including on large account pools.
       for (let i = 0; i < inventory.length; i += 3) {
@@ -225,6 +236,49 @@ export class SubscriptionDiagnostics {
     return this.cache;
   }
 
+  // Claude access tokens are opaque and rotate independently between Pi stores.
+  // Deduplicate by the provider's account + organization, never by matching usage.
+  private async resolveIdentities(inventory: Account[]): Promise<Account[]> {
+    const resolved: Account[] = [];
+    for (const account of inventory) {
+      if (account.provider === "Claude") {
+        try {
+          const response = await this.request("https://api.anthropic.com/api/oauth/profile", {
+            headers: {
+              authorization: `Bearer ${account.credential.access}`,
+              "anthropic-beta": "oauth-2025-04-20",
+            },
+            redirect: "error",
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (response.ok) {
+            const raw = await response.text();
+            if (raw.length > MAX_FILE) throw new Error("oversized response");
+            const profile = object(JSON.parse(raw));
+            const user = object(profile.account).uuid;
+            const org = object(profile.organization).uuid;
+            if (typeof user === "string" && user && typeof org === "string" && org) {
+              const canonical = hash(`anthropic:${org}:${user}`);
+              if (!this.history[canonical] && this.history[account.id])
+                this.history[canonical] = this.history[account.id];
+              account.id = canonical;
+            }
+          }
+        } catch {
+          /* Keep unverified identities separate rather than guessing. */
+        }
+      }
+      const duplicate = resolved.find((a) => a.id === account.id);
+      if (duplicate) {
+        // Prefer the user's named multiprovider entry over the synthetic default.
+        if (!account.isDefault) duplicate.label = account.label;
+        duplicate.isDefault ||= account.isDefault;
+        duplicate.enabled ||= account.enabled;
+      } else resolved.push(account);
+    }
+    return resolved;
+  }
+
   private async readAccount(account: Account, now: number): Promise<SubscriptionAccount> {
     const previous = this.cache?.accounts.find((a) => a.id === account.id);
     const result: SubscriptionAccount = {
@@ -232,6 +286,7 @@ export class SubscriptionDiagnostics {
       provider: account.provider,
       label: account.label,
       enabled: account.enabled,
+      isDefault: account.isDefault,
       auth: "unknown",
       status: previous?.weekly ? "stale" : "unavailable",
       issue: null,

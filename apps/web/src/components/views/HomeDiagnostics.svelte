@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { desktop } from "$lib/desktop";
   import { voiceBaseURL } from "$lib/api";
-  import { duration, quotaForecast, remainingColor, type SystemDiagnostics } from "$lib/system-diagnostics";
+  import { duration, quotaForecast, remainingColor, sortSubscriptionAccounts, type SystemDiagnostics } from "$lib/system-diagnostics";
 
   let { connected = false, voiceStatus = "unknown" }: { connected?: boolean; voiceStatus?: string } = $props();
   let data = $state<SystemDiagnostics | null>(null);
@@ -10,7 +10,7 @@
   let issue = $state("");
   let loading = $state(true);
   let kassetteStatus = $state("checking…");
-  const accounts = $derived(data?.accounts ?? []);
+  const accounts = $derived(sortSubscriptionAccounts(data?.accounts ?? [], now));
   onMount(() => {
     let stopped = false;
     let pending = false;
@@ -62,7 +62,7 @@
       {@const forecast = quotaForecast(account, now)}
       <details class="account">
         <summary>
-          <div class="account-heading"><strong>{account.provider} <span>{account.label}</span></strong><span class="remaining" style:color={quota && !stale ? remainingColor(quota.used) : "var(--muted)"}>{quota ? `${Math.round(100 - quota.used)}% left` : "unknown"} <i aria-hidden="true">⌄</i></span></div>
+          <div class="account-heading"><strong>{account.provider} <span>{account.label === "Pi default" && account.isDefault ? "" : account.label}</span>{#if account.isDefault}<small class="default-badge" title="Current default login in Pi">Pi default</small>{/if}</strong><span class="remaining" style:color={quota && !stale ? remainingColor(quota.used) : "var(--muted)"}>{quota ? `${Math.round(100 - quota.used)}% left` : "unknown"} <i aria-hidden="true">⌄</i></span></div>
           {#if quota}
             <div class="usage" role="meter" aria-label={`${account.provider} ${account.label} weekly allowance remaining${stale ? " (last reading, stale)" : ""}`} aria-valuenow={100 - quota.used} aria-valuemin={0} aria-valuemax={100} aria-valuetext={`${quota.used}% used, ${100 - quota.used}% left${stale ? ", stale" : ""}`}><span style:background={stale ? "var(--muted)" : remainingColor(quota.used)} style:width={`${100 - quota.used}%`}></span></div>
             <div class="account-meta"><span>{quota.used}% used {stale ? "· stale" : ""}</span><span>{quota.resetAt ? `reset ${quota.resetAt > now ? "in " : "due · "}${duration(quota.resetAt - now)}` : "reset unknown"}</span></div>
@@ -117,7 +117,9 @@
   .account-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .account-heading strong { color: var(--text-strong); font-size: 13px; font-weight: 650; }
   .account-heading strong span { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 4px; }
-  .remaining { font: 11px var(--font-mono); color: var(--text); }
+  .default-badge { display: inline-block; margin-left: 6px; padding: 2px 4px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--accent); font: 9px var(--font-mono); vertical-align: middle; }
+  .account-heading strong { min-width: 0; overflow-wrap: anywhere; }
+  .remaining { flex-shrink: 0; font: 11px var(--font-mono); color: var(--text); }
   summary i { display: inline-block; font-style: normal; margin-left: 5px; color: var(--muted); }
   details[open] > summary i { transform: rotate(180deg); }
   .usage { height: 4px; margin-top: 11px; background: var(--line); border-radius: 2px; overflow: hidden; }

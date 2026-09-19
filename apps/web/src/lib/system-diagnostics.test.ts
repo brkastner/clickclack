@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   remainingColor,
+  sortSubscriptionAccounts,
   usageTrend,
   quotaForecast,
   type SubscriptionAccount,
@@ -13,6 +14,7 @@ const account: SubscriptionAccount = {
   provider: "Claude",
   label: "test",
   enabled: true,
+  isDefault: false,
   auth: "connected",
   status: "fresh",
   issue: null,
@@ -23,6 +25,27 @@ const account: SubscriptionAccount = {
   burnPerDay: 12,
   deltaPerDay: 3,
 };
+test("Codex sorts by remaining allowance then nearest reset without mutating input", () => {
+  const codex = (id: string, used: number, reset: number): SubscriptionAccount => ({
+    ...account,
+    id,
+    provider: "Codex",
+    weekly: { used, resetAt: now + reset * DAY, seconds: 604800 },
+  });
+  const rows = [
+    codex("late", 100, 4),
+    codex("most", 3, 6),
+    codex("soon", 100, 1),
+    { ...codex("unknown", 0, 1), status: "stale" as const },
+    account,
+  ];
+  assert.deepEqual(
+    sortSubscriptionAccounts(rows, now).map((a) => a.id),
+    ["a", "most", "soon", "late", "unknown"],
+  );
+  assert.equal(rows[0].id, "late");
+});
+
 test("remaining capacity controls color at both boundaries", () => {
   for (const [used, token] of [
     [0, "foam"],

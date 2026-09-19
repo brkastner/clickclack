@@ -5,6 +5,7 @@ export type SubscriptionAccount = {
   provider: "Claude" | "Codex";
   label: string;
   enabled: boolean;
+  isDefault: boolean;
   auth: "connected" | "needs-login" | "unknown";
   status: "fresh" | "stale" | "unavailable";
   issue: string | null;
@@ -22,6 +23,30 @@ export type SystemDiagnostics = {
   desktopVersion: string;
   desktopUptimeSeconds: number;
 };
+
+export function sortSubscriptionAccounts(
+  accounts: SubscriptionAccount[],
+  now: number,
+): SubscriptionAccount[] {
+  const rank = (a: SubscriptionAccount) =>
+    a.status === "fresh" &&
+    a.updatedAt !== null &&
+    now - a.updatedAt <= 15 * 60_000 &&
+    a.weekly &&
+    (a.weekly.resetAt === null || a.weekly.resetAt > now)
+      ? a.weekly.used
+      : Infinity;
+  return [...accounts].sort((a, b) => {
+    if (a.provider !== b.provider) return a.provider === "Claude" ? -1 : 1;
+    if (a.provider !== "Codex") return 0;
+    const left = rank(a),
+      right = rank(b);
+    if (left !== right) return left < right ? -1 : 1;
+    const resetA = a.weekly?.resetAt ?? Infinity,
+      resetB = b.weekly?.resetAt ?? Infinity;
+    return resetA === resetB ? 0 : resetA < resetB ? -1 : 1;
+  });
+}
 
 export function remainingColor(used: number): string {
   const remaining = 100 - used;

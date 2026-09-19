@@ -28,6 +28,55 @@ test("Pi inventory deduplicates identical logins, preserves disabled and exclude
   assert.equal(result[1].enabled, false);
   assert.equal(result[0].provider, "Codex");
 });
+test("Claude rotating credentials merge by identity and mark the named Pi default", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "clickclack-identity-"));
+  try {
+    await writeFile(
+      path.join(dir, "auth.json"),
+      JSON.stringify({ anthropic: { type: "oauth", access: "default-token" } }),
+    );
+    await writeFile(
+      path.join(dir, "multiprovider-auth.json"),
+      JSON.stringify({
+        providers: {
+          anthropic: {
+            accounts: [
+              {
+                id: "named",
+                label: "personal",
+                credential: { type: "oauth", access: "rotated-token" },
+              },
+            ],
+          },
+        },
+      }),
+    );
+    let usageCalls = 0;
+    const request = (async (url: string) => {
+      if (url.endsWith("/profile"))
+        return Response.json({ account: { uuid: "user-one" }, organization: { uuid: "org-one" } });
+      usageCalls++;
+      return Response.json({
+        seven_day: { utilization: 25, resets_at: new Date(now + 86400_000).toISOString() },
+      });
+    }) as typeof fetch;
+    const collector = new SubscriptionDiagnostics(
+      path.join(dir, "history.json"),
+      dir,
+      request,
+      () => now,
+    );
+    const result = await collector.get();
+    assert.equal(result.accounts.length, 1);
+    assert.equal(result.accounts[0].label, "personal");
+    assert.equal(result.accounts[0].isDefault, true);
+    assert.equal(usageCalls, 1);
+    assert.ok(!JSON.stringify(result).includes("user-one"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("Codex weekly-only primary is not mistaken for a short window", () => {
   const result = parseQuota(
     "Codex",
