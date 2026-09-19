@@ -26,3 +26,7 @@ supabase/.temp/
 deploy/fakeco/.env
 deploy/fakeco/seed-manifest.json
 .worktrees/
+
+# pi: keep settings.json tracked so fresh worktrees load pi-subagents/orkastrator
+.pi/*
+!.pi/settings.json
