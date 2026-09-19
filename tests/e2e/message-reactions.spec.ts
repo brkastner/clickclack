@@ -547,6 +547,7 @@ test("touch action sheets remain usable in short landscape viewports", async ({
   await waitForAppReady(mobilePage);
 
   const row = mobilePage.locator(".message-row:not(.is-pending)", { hasText: body });
+  await expect(row).toBeVisible();
   await touchLongPress(row.locator(".message-content"));
   const sheet = mobilePage.getByRole("dialog", { name: "Message actions" });
   await expect(sheet).toBeVisible();

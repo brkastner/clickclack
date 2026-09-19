@@ -579,7 +579,7 @@
   position: static;
   flex: 1 1 320px;
   width: auto;
-  min-width: 160px;
+  min-width: 200px;
   max-width: 520px;
   height: 32px;
   margin: 0;
@@ -759,6 +759,19 @@
   min-height: 60px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent), var(--bg);
+}
+
+@media (max-width: 820px) and (max-height: 320px) and (orientation: landscape) {
+  .topbar {
+    min-height: 40px;
+    gap: 8px;
+    padding: 4px 12px;
+  }
+
+  .topbar-meta,
+  .topbar .search {
+    display: none;
+  }
 }
 
 /* The top bars opt out of interface scale. They host the scale control itself,
