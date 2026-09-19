@@ -26,14 +26,17 @@ export type HomePersonaGroup = {
   working: boolean;
 };
 
+/** True when a message has visible content and has not been deleted. */
 function isUsefulMessage(message: Message): boolean {
   return !message.deleted_at && Boolean(message.body.trim() || message.attachments?.length);
 }
 
+/** Return the newest non-deleted message with visible content. */
 export function latestUsefulMessage(messages: Message[]): Message | undefined {
   return [...messages].reverse().find(isUsefulMessage);
 }
 
+/** Return the latest useful messages before the current one, in chronological order. */
 export function recentContextMessages(messages: Message[], limit = 3): Message[] {
   if (limit <= 0) return [];
   const useful = messages.filter(isUsefulMessage);

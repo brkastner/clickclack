@@ -86,10 +86,12 @@
     return /[\u0400-\u04ff]/u.test(value) ? "ru" : undefined;
   }
 
+  /** Return the best available display label for a message author. */
   function messageAuthorName(message: Message): string {
     return userDisplayLabel(message.author ?? usersByID.get(message.author_id), "Unknown");
   }
 
+  /** Open or close an activity row and prepare its composer for a fresh reply. */
   function toggleExpanded(itemID: string): void {
     if (sendingItemID) return;
     const opening = expandedItemID !== itemID;
@@ -99,12 +101,14 @@
     if (opening) void tick().then(() => composerInput?.focus());
   }
 
+  /** Close the expanded activity row and discard its transient composer state. */
   function collapseExpanded(): void {
     expandedItemID = "";
     composerBody = "";
     sendError = "";
   }
 
+  /** Let Escape close an expanded row while focus is within its summary. */
   function handleSummaryKeydown(event: KeyboardEvent): void {
     if (event.key === "Escape" && expandedItemID) {
       event.preventDefault();
@@ -112,6 +116,7 @@
     }
   }
 
+  /** Apply the reply composer's Escape and Enter keyboard shortcuts. */
   function handleComposerKeydown(event: KeyboardEvent, item: HomeRecentItem): void {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -124,6 +129,7 @@
     }
   }
 
+  /** Post a reply for an activity item and merge the returned message locally. */
   async function sendMessage(item: HomeRecentItem): Promise<void> {
     const body = composerBody.trim();
     if (!body || sendingItemID) return;
