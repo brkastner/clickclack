@@ -40,6 +40,28 @@ test("scales the document and keeps full-height boxes one screen tall", () => {
   assert.match(layout, /\.shell \{[\s\S]*?height: var\(--app-vh\);/u);
 });
 
+test("holds the top bars at one-to-one so the slider cannot move itself", () => {
+  const base = readSource("../styles/base.css");
+  const layout = readSource("../styles/layout.css");
+  const modals = readSource("../styles/modals.css");
+  const control = readSource("../components/topbar/InterfaceScaleControl.svelte");
+
+  assert.match(base, /--ui-unscale: calc\(1 \/ var\(--ui-scale\)\);/u);
+  assert.match(base, /--titlebar-slot: calc\(52px \* var\(--ui-unscale\)\);/u);
+  assert.match(layout, /\.topbar,\s*\.desktop-titlebar \{\s*zoom: var\(--ui-unscale\);/u);
+
+  // An unscaled bar occupies less of the zoomed coordinate space around it, so
+  // every box positioned against its height has to follow the same division.
+  assert.doesNotMatch(layout, /grid-template-rows: 52px/u);
+  assert.match(layout, /grid-template-rows: var\(--titlebar-slot\)/u);
+  assert.doesNotMatch(modals, /top: 52px/u);
+  assert.match(modals, /height: calc\(var\(--app-vh\) - var\(--titlebar-slot\)\)/u);
+
+  // A range input ignores the wheel natively.
+  assert.match(control, /onwheel=/u);
+  assert.match(control, /event\.preventDefault\(\);\s*nudge\(delta < 0 \? 1 : -1\);/u);
+});
+
 test("leads the toolbars with the scale control and trails desktop with the terminal", () => {
   const topbar = readSource("../components/topbar/Topbar.svelte");
   const titlebar = readSource("../components/topbar/DesktopTitlebar.svelte");

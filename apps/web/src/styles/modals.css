@@ -735,7 +735,7 @@
   }
   .desktop-shell .thread,
   .desktop-shell .search-results {
-    top: 52px;
+    top: var(--titlebar-slot);
     bottom: 0;
   }
 }
@@ -781,11 +781,11 @@
     padding-right: 58px;
   }
   .desktop-shell .sidebar {
-    top: 52px;
-    height: calc(var(--app-vh) - 52px);
+    top: var(--titlebar-slot);
+    height: calc(var(--app-vh) - var(--titlebar-slot));
   }
   .desktop-shell .mobile-nav-backdrop {
-    top: 52px;
+    top: var(--titlebar-slot);
   }
   .mobile-nav-backdrop {
     display: block;

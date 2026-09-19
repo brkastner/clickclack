@@ -8,13 +8,28 @@
   } from "../../lib/interface-scale";
 
   // The slider stays collapsed until asked for, then unfurls to the left of the
-  // button so the rest of the toolbar never shifts.
+  // button so the rest of the toolbar never shifts. The bars opt out of the
+  // root zoom (see layout.css), so this control keeps its geometry while the
+  // scale it is driving changes underneath it.
   let open = $state(false);
   let root = $state<HTMLDivElement>();
   let slider = $state<HTMLInputElement>();
 
   const percent = $derived(Math.round($interfaceScale * 100));
   const label = $derived(`Interface scale: ${percent}%`);
+
+  function nudge(steps: number) {
+    setInterfaceScale($interfaceScale + steps * INTERFACE_SCALE_STEP);
+  }
+
+  /** Wheel over the track adjusts the scale. A range input ignores the wheel
+      natively, which on a desktop is the obvious way to reach for it. */
+  function onWheel(event: WheelEvent) {
+    const delta = event.deltaY || event.deltaX;
+    if (!delta) return;
+    event.preventDefault();
+    nudge(delta < 0 ? 1 : -1);
+  }
 
   function toggle() {
     open = !open;
@@ -52,7 +67,7 @@
   onkeydown={onKeyDown}
   role="presentation"
 >
-  <div class="ui-scale-panel" aria-hidden={!open}>
+  <div class="ui-scale-panel" aria-hidden={!open} onwheel={open ? onWheel : undefined}>
     <input
       bind:this={slider}
       type="range"

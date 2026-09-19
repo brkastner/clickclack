@@ -130,7 +130,14 @@
      unzoomed viewport. --app-vh is the compensated full-height value; use it
      anywhere a box is meant to be exactly one screen tall. */
   --ui-scale: 1;
+  /* Cancels the root zoom for chrome that must stay put while the rest of the
+     app scales. A control that resizes itself mid-drag slides out from under
+     the cursor, which is what made the scale slider unusable with a mouse. */
+  --ui-unscale: calc(1 / var(--ui-scale));
   --app-vh: calc(100dvh / var(--ui-scale));
+  /* The title bar renders at a fixed 52px, so it occupies less room in the
+     zoomed coordinate space everything else is laid out in. */
+  --titlebar-slot: calc(52px * var(--ui-unscale));
   zoom: var(--ui-scale);
   background: var(--bg);
   color: var(--text);
