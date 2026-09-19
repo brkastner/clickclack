@@ -408,6 +408,14 @@
    toggles. */
 .composer-dock {
   position: relative;
+  padding-top: 0;
+}
+
+/* The notepad trigger is an absolutely positioned 20px strip at the dock's
+   top edge, so the dock only owes it room when a notepad is actually
+   mounted. Paying that reserve unconditionally left a dead band above the
+   composer in every channel without one. */
+.composer-dock:has(.agent-notepad) {
   padding-top: 20px;
 }
 
@@ -3426,6 +3434,46 @@
     left: 39px;
   }
 
+  /* The account alignment rules are written as :root[...] descendants, so they
+     outrank the plain mobile selectors above. Without restating the narrow
+     gutter at their specificity, a self group keeps the 80px desktop column
+     and the 57px spine while rendering a 46px avatar: the user's messages sit
+     32px further in than everyone else's and the spine misses the avatar
+     centre by 18px. */
+  :root[data-user-align="left"] .message-group.is-self,
+  :root[data-other-align="left"] .message-group:not(.is-self) {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  :root[data-user-align="right"] .message-group.is-self,
+  :root[data-other-align="right"] .message-group:not(.is-self) {
+    grid-template-columns: minmax(0, 1fr) 48px;
+  }
+
+  :root[data-user-align="left"] .message-group.is-self::after,
+  :root[data-other-align="left"] .message-group:not(.is-self)::after {
+    right: auto;
+    left: 39px;
+  }
+
+  :root[data-user-align="right"] .message-group.is-self::after,
+  :root[data-other-align="right"] .message-group:not(.is-self)::after {
+    left: auto;
+    right: 39px;
+  }
+
+  /* Right-aligned groups reserve the avatar gutter through row padding rather
+     than a grid column, so that reserve has to narrow with the column. */
+  :root[data-user-align="right"] .message-group.is-self .message-row,
+  :root[data-other-align="right"] .message-group:not(.is-self) .message-row,
+  :root[data-user-align="right"] .message-group.is-self .group-body > header,
+  :root[data-other-align="right"] .message-group:not(.is-self) .group-body > header {
+    margin-right: -48px;
+    margin-left: -16px;
+    padding-right: 48px;
+    padding-left: 16px;
+  }
+
   :root[data-avatar-size="double"] .message-group,
   :root[data-avatar-size="double"] .message-group.is-self {
     grid-template-columns: 94px minmax(0, 1fr);
@@ -3443,6 +3491,29 @@
     top: 105px;
     right: auto;
     left: 62px;
+  }
+
+  /* Same specificity leak as the standard avatar size, one attribute deeper. */
+  :root[data-avatar-size="double"][data-user-align="left"] .message-group.is-self,
+  :root[data-avatar-size="double"][data-other-align="left"] .message-group:not(.is-self) {
+    grid-template-columns: 94px minmax(0, 1fr);
+  }
+
+  :root[data-avatar-size="double"][data-user-align="right"] .message-group.is-self,
+  :root[data-avatar-size="double"][data-other-align="right"] .message-group:not(.is-self) {
+    grid-template-columns: minmax(0, 1fr) 94px;
+  }
+
+  :root[data-avatar-size="double"][data-user-align="left"] .message-group.is-self::after,
+  :root[data-avatar-size="double"][data-other-align="left"] .message-group:not(.is-self)::after {
+    right: auto;
+    left: 62px;
+  }
+
+  :root[data-avatar-size="double"][data-user-align="right"] .message-group.is-self::after,
+  :root[data-avatar-size="double"][data-other-align="right"] .message-group:not(.is-self)::after {
+    left: auto;
+    right: 62px;
   }
 
   .message-group.is-self .group-body > header {
