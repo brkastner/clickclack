@@ -52,6 +52,7 @@
   let now = $state(Date.now());
   let selectedPersonaID = $state("");
   let expandedItemID = $state("");
+  let activityToggles = $state<Record<string, HTMLButtonElement | undefined>>({});
   let composerBody = $state("");
   let composerInput = $state<ComposerInputElement | null>(null);
   let sendingItemID = $state("");
@@ -120,7 +121,9 @@
   function handleComposerKeydown(event: KeyboardEvent, item: HomeRecentItem): void {
     if (event.key === "Escape") {
       event.preventDefault();
+      const activityToggle = activityToggles[item.id];
       collapseExpanded();
+      void tick().then(() => activityToggle?.focus());
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -376,6 +379,7 @@
                         class="home-activity__toggle"
                         aria-expanded={expanded}
                         aria-label={`${expanded ? "Collapse" : "Expand"} ${item.title}: ${item.preview}`}
+                        bind:this={activityToggles[item.id]}
                         onclick={() => toggleExpanded(item.id)}
                         onkeydown={handleSummaryKeydown}
                       ></button>
