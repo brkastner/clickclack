@@ -1590,7 +1590,7 @@
   border: 1px solid var(--line);
   border-bottom: 0;
   border-radius: 16px 16px 0 0;
-  max-height: calc(100dvh - 16px - env(safe-area-inset-top, 0px));
+  max-height: calc(var(--app-vh) - 16px - env(safe-area-inset-top, 0px));
   padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;

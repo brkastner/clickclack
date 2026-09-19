@@ -2,8 +2,7 @@
 
 .auth-shell {
   display: grid;
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: var(--app-vh);
   place-items: center;
   padding: calc(32px + var(--safe-area-top)) calc(32px + var(--safe-area-right))
     calc(32px + var(--safe-area-bottom)) calc(32px + var(--safe-area-left));
@@ -225,13 +224,18 @@
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0;
   grid-template-rows: minmax(0, 1fr);
-  height: 100vh;
-  height: 100dvh;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: var(--app-vh);
+  min-height: var(--app-vh);
   /* Clip panel transitions without scrolling the shell when a child is centered. */
   overflow: clip;
   transition: grid-template-columns 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (max-width: 820px) {
+  .shell {
+    height: calc(var(--app-vh) - var(--mobile-bottom-nav-height));
+    min-height: calc(var(--app-vh) - var(--mobile-bottom-nav-height));
+  }
 }
 
 .shell.sidebar-resizing {
@@ -873,6 +877,72 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* ---------- INTERFACE SCALE ---------- */
+
+/* The slider lives to the left of its button and is collapsed to zero width
+   until opened, so the rest of the toolbar keeps its position. */
+.ui-scale {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.ui-scale-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  max-width: 0;
+  margin-right: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  opacity: 0;
+  transform: translateX(10px);
+  transition:
+    max-width 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    margin-right 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    padding 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 180ms ease,
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 180ms ease;
+}
+
+.ui-scale.open .ui-scale-panel {
+  max-width: 210px;
+  margin-right: 6px;
+  padding: 0 10px;
+  border-color: var(--line-strong);
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.ui-scale-slider {
+  width: 120px;
+  height: 28px;
+  margin: 0;
+  accent-color: var(--accent);
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.ui-scale-readout {
+  min-width: 34px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-scale-panel {
+    transition: none;
+  }
 }
 
 @media (max-width: 700px) {

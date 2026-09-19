@@ -393,7 +393,7 @@
     position: fixed;
     inset: 0;
     z-index: 40;
-    min-height: 100dvh;
+    min-height: var(--app-vh);
     border-left: 0;
   }
 

@@ -100,6 +100,10 @@
         if (ccAvatarSize === "double") {
           document.documentElement.setAttribute("data-avatar-size", ccAvatarSize);
         }
+        var ccScale = parseFloat(localStorage.getItem("clickclack:interface-scale:v1"));
+        if (ccScale >= 0.7 && ccScale <= 1.6 && ccScale !== 1) {
+          document.documentElement.style.setProperty("--ui-scale", String(ccScale));
+        }
       } catch (e) {}
     </script>
     %sveltekit.head%

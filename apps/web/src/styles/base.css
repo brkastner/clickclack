@@ -124,6 +124,14 @@
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
+  --mobile-bottom-nav-height: calc(58px + var(--safe-area-bottom));
+  /* Interface scale. `zoom` multiplies every layout box, which is what we want
+     for a px-based type ramp, but viewport units keep resolving against the
+     unzoomed viewport. --app-vh is the compensated full-height value; use it
+     anywhere a box is meant to be exactly one screen tall. */
+  --ui-scale: 1;
+  --app-vh: calc(100dvh / var(--ui-scale));
+  zoom: var(--ui-scale);
   background: var(--bg);
   color: var(--text);
 }

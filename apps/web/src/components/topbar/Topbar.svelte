@@ -3,6 +3,7 @@
   import { channelDisplayTitle, safeExternalChannelURL } from "../../lib/chat/channels";
   import type { Channel, ChannelNotificationPreference, DirectConversation } from "../../lib/types";
   import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
+  import InterfaceScaleControl from "./InterfaceScaleControl.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
 
   type Props = {
@@ -99,27 +100,9 @@
     <button type="submit" class="search-submit">Search</button>
   </form>
   <div class="topbar-actions" aria-label="Channel tools">
+    <InterfaceScaleControl />
     <ThemeToggle />
     <AvatarSizeToggle />
-    {#if channelNotifPreference}
-      <button
-        type="button"
-        class="notif-toggle"
-        title={notifTitle(channelNotifPreference)}
-        aria-label={notifTitle(channelNotifPreference)}
-        aria-busy={channelNotifSaving}
-        disabled={channelNotifSaving}
-        onclick={onToggleChannelNotifications}
-      >
-        {#if channelNotifPreference === "muted"}
-          <span aria-hidden="true">🔕</span>
-        {:else if channelNotifPreference === "mentions"}
-          <span aria-hidden="true">@</span>
-        {:else}
-          <span aria-hidden="true">🔔</span>
-        {/if}
-      </button>
-    {/if}
     {#if externalHref}
       <a href={externalHref} target="_blank" rel="noopener" title="Open external channel" aria-label="Open external channel">
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
@@ -165,6 +148,25 @@
         <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 4 6 6-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4Z" />
         </svg>
+      </button>
+    {/if}
+    {#if channelNotifPreference}
+      <button
+        type="button"
+        class="notif-toggle"
+        title={notifTitle(channelNotifPreference)}
+        aria-label={notifTitle(channelNotifPreference)}
+        aria-busy={channelNotifSaving}
+        disabled={channelNotifSaving}
+        onclick={onToggleChannelNotifications}
+      >
+        {#if channelNotifPreference === "muted"}
+          <span aria-hidden="true">🔕</span>
+        {:else if channelNotifPreference === "mentions"}
+          <span aria-hidden="true">@</span>
+        {:else}
+          <span aria-hidden="true">🔔</span>
+        {/if}
       </button>
     {/if}
     {#if selectedChannel && channelSettingsAvailable}

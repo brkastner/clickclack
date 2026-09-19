@@ -6,6 +6,7 @@
   import { deepLinkToRoute } from "$lib/applinks";
   import { dismissTopLayer } from "$lib/dismissal";
   import { clearEmbedHostTheme, installEmbedHostTheme } from "$lib/embed-theme";
+  import { initInterfaceScale } from "$lib/interface-scale";
   import { installNativeShell } from "$lib/native";
   import { completeNativeSignIn } from "$lib/native-signin";
   import "../styles/index.css";
@@ -31,6 +32,7 @@
 
   onMount(() => {
     initAppearance();
+    initInterfaceScale();
     // The shell is owned here rather than in ChatApp: settings and embed routes
     // do not render chat, and a deep link or status-bar change must still be
     // handled while one of them is on screen.

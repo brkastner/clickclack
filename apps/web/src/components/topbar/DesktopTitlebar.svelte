@@ -5,6 +5,7 @@
   import type { ChannelNotificationPreference, Workspace } from "../../lib/types";
   import WorkspaceSwitcher from "../navigation/WorkspaceSwitcher.svelte";
   import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
+  import InterfaceScaleControl from "./InterfaceScaleControl.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
 
   type Props = {
@@ -195,37 +196,9 @@
     </form>
 
     <div class="desktop-titlebar-actions" aria-label="Channel tools">
-      <button
-        type="button"
-        title="Toggle terminal"
-        aria-label="Toggle terminal"
-        onclick={() => desktop?.toggleTerminal()}
-      >
-        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" />
-          <path d="m7 9 3 3-3 3m5 0h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
+      <InterfaceScaleControl />
       <ThemeToggle />
       <AvatarSizeToggle />
-      {#if channelNotifPreference}
-        <button
-          type="button"
-          title={notifTitle(channelNotifPreference)}
-          aria-label={notifTitle(channelNotifPreference)}
-          aria-busy={channelNotifSaving}
-          disabled={channelNotifSaving}
-          onclick={onToggleChannelNotifications}
-        >
-          {#if channelNotifPreference === "muted"}
-            <span aria-hidden="true">🔕</span>
-          {:else if channelNotifPreference === "mentions"}
-            <span aria-hidden="true">@</span>
-          {:else}
-            <span aria-hidden="true">🔔</span>
-          {/if}
-        </button>
-      {/if}
       {#if runAvailable}
         <button
           type="button"
@@ -253,6 +226,24 @@
           </svg>
         </button>
       {/if}
+      {#if channelNotifPreference}
+        <button
+          type="button"
+          title={notifTitle(channelNotifPreference)}
+          aria-label={notifTitle(channelNotifPreference)}
+          aria-busy={channelNotifSaving}
+          disabled={channelNotifSaving}
+          onclick={onToggleChannelNotifications}
+        >
+          {#if channelNotifPreference === "muted"}
+            <span aria-hidden="true">🔕</span>
+          {:else if channelNotifPreference === "mentions"}
+            <span aria-hidden="true">@</span>
+          {:else}
+            <span aria-hidden="true">🔔</span>
+          {/if}
+        </button>
+      {/if}
       {#if channelSettingsAvailable}
         <button
           type="button"
@@ -266,6 +257,17 @@
           </svg>
         </button>
       {/if}
+      <button
+        type="button"
+        title="Toggle terminal"
+        aria-label="Toggle terminal"
+        onclick={() => desktop?.toggleTerminal()}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" />
+          <path d="m7 9 3 3-3 3m5 0h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
     </div>
     {#if !connected}
       <span class="desktop-titlebar-status" role="status">Connecting…</span>
