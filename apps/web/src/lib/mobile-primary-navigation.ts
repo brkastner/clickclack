@@ -48,3 +48,14 @@ export function storedConversationPath(value: string | null, workspaceID: string
   if (!value) return null;
   return conversationPath(value, workspaceID);
 }
+
+const MOBILE_KEYBOARD_MIN_OCCLUSION = 120;
+
+export function mobileKeyboardOpen(
+  layoutViewportHeight: number,
+  visibleViewportHeight: number,
+  editableFocused: boolean,
+): boolean {
+  if (!editableFocused) return false;
+  return layoutViewportHeight - visibleViewportHeight >= MOBILE_KEYBOARD_MIN_OCCLUSION;
+}

@@ -393,6 +393,10 @@
   }
 }
 
+:root[data-mobile-keyboard-open] {
+  --mobile-bottom-nav-height: 0px;
+}
+
 * {
   box-sizing: border-box;
 }

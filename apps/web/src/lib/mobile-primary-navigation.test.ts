@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   conversationPath,
   mobileChatRouteStorageKey,
+  mobileKeyboardOpen,
   mobilePrimaryDestination,
   storedConversationPath,
 } from "./mobile-primary-navigation.ts";
@@ -38,4 +39,10 @@ test("scopes remembered chat routes to a workspace", () => {
     mobileChatRouteStorageKey(workspaceID),
     "clickclack:mobile-chat-route:v1:workspace one",
   );
+});
+
+test("recognizes a keyboard-sized visual viewport reduction", () => {
+  assert.equal(mobileKeyboardOpen(844, 544, true), true);
+  assert.equal(mobileKeyboardOpen(844, 760, true), false);
+  assert.equal(mobileKeyboardOpen(844, 544, false), false);
 });

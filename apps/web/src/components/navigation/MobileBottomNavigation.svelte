@@ -5,6 +5,7 @@
   import {
     conversationPath,
     mobileChatRouteStorageKey,
+    mobileKeyboardOpen,
     mobilePrimaryDestination,
     storedConversationPath,
   } from "$lib/mobile-primary-navigation";
@@ -15,6 +16,7 @@
   const activeDestination = $derived(mobilePrimaryDestination(page.url.pathname, workspaceID));
   const visible = $derived(activeDestination !== null);
   let rememberedChatPath = $state("");
+  let keyboardOpen = $state(false);
 
   const chatHref = $derived(rememberedChatPath || workspacePath);
   const homeHref = $derived(workspaceViewsPath(encodeURIComponent(workspaceID), "home"));
@@ -40,11 +42,62 @@
     }
   }
 
-  onMount(syncChatRoute);
+  function editableElementFocused(): boolean {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement)) return false;
+    if (active.isContentEditable) return true;
+    if (active instanceof HTMLTextAreaElement) return !active.disabled && !active.readOnly;
+    if (!(active instanceof HTMLInputElement) || active.disabled || active.readOnly) return false;
+    return !["button", "checkbox", "file", "radio", "range", "reset", "submit"].includes(
+      active.type,
+    );
+  }
+
+  function setKeyboardOpen(value: boolean) {
+    keyboardOpen = value;
+    document.documentElement.toggleAttribute("data-mobile-keyboard-open", value);
+  }
+
+  onMount(() => {
+    syncChatRoute();
+    const viewport = window.visualViewport;
+    let layoutViewportHeight = Math.max(window.innerHeight, viewport?.height ?? 0);
+
+    const syncKeyboard = () => {
+      const editableFocused = editableElementFocused();
+      const visibleViewportHeight = viewport?.height ?? window.innerHeight;
+      if (!editableFocused) layoutViewportHeight = Math.max(window.innerHeight, visibleViewportHeight);
+      setKeyboardOpen(
+        mobileKeyboardOpen(layoutViewportHeight, visibleViewportHeight, editableFocused),
+      );
+    };
+    const syncAfterFocusChange = () => requestAnimationFrame(syncKeyboard);
+    const resetAfterOrientationChange = () => {
+      window.setTimeout(() => {
+        layoutViewportHeight = Math.max(window.innerHeight, viewport?.height ?? 0);
+        syncKeyboard();
+      }, 300);
+    };
+
+    viewport?.addEventListener("resize", syncKeyboard);
+    window.addEventListener("resize", syncKeyboard);
+    window.addEventListener("orientationchange", resetAfterOrientationChange);
+    document.addEventListener("focusin", syncAfterFocusChange);
+    document.addEventListener("focusout", syncAfterFocusChange);
+
+    return () => {
+      viewport?.removeEventListener("resize", syncKeyboard);
+      window.removeEventListener("resize", syncKeyboard);
+      window.removeEventListener("orientationchange", resetAfterOrientationChange);
+      document.removeEventListener("focusin", syncAfterFocusChange);
+      document.removeEventListener("focusout", syncAfterFocusChange);
+      document.documentElement.removeAttribute("data-mobile-keyboard-open");
+    };
+  });
   afterNavigate(syncChatRoute);
 </script>
 
-{#if visible}
+{#if visible && !keyboardOpen}
   <nav class="mobile-primary-navigation" aria-label="Primary navigation">
     <a
       href={homeHref}
