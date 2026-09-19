@@ -98,9 +98,13 @@ test("names concurrent responding agents beside channel and thread composers", a
   );
 
   const expectedLabel = "Blackbird and Nighthawk are responding…";
-  await expect(page.locator("main .agent-responding .typing-indicator__label")).toHaveText(
-    expectedLabel,
-  );
+  const mainResponding = page.locator("main .agent-responding");
+  await expect(mainResponding.locator(".typing-indicator__label")).toHaveText(expectedLabel);
+  const respondingBox = await mainResponding.boundingBox();
+  const composerBox = await page.locator("main .composer-dock .composer-card").boundingBox();
+  expect(respondingBox).not.toBeNull();
+  expect(composerBox).not.toBeNull();
+  expect(respondingBox!.y + respondingBox!.height).toBeLessThanOrEqual(composerBox!.y);
   await expect(page.locator(".agent-progress")).toHaveCount(0);
   await expect(page.getByText("Working on the response", { exact: true })).toBeHidden();
 

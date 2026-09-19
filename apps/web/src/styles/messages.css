@@ -411,11 +411,11 @@
   padding-top: 0;
 }
 
-/* The notepad trigger is an absolutely positioned 20px strip at the dock's
-   top edge, so the dock only owes it room when a notepad is actually
-   mounted. Paying that reserve unconditionally left a dead band above the
-   composer in every channel without one. */
-.composer-dock:has(.agent-notepad) {
+/* The notepad trigger and responding indicator share an absolutely positioned
+   20px strip at the dock's top edge. Reserve it only while either one is
+   mounted, so they clear the composer without leaving an idle dead band. */
+.composer-dock:has(.agent-notepad),
+.composer-dock:has(.agent-responding) {
   padding-top: 20px;
 }
 
