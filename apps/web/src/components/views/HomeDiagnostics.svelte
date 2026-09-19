@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { desktop } from "$lib/desktop";
   import { voiceBaseURL } from "$lib/api";
-  import { duration, quotaForecast, remainingColor, sortSubscriptionAccounts, type SystemDiagnostics } from "$lib/system-diagnostics";
+  import { duration, hourlyBurnRate, quotaForecast, remainingColor, sortSubscriptionAccounts, type SystemDiagnostics } from "$lib/system-diagnostics";
 
   let { connected = false, voiceStatus = "unknown" }: { connected?: boolean; voiceStatus?: string } = $props();
   let data = $state<SystemDiagnostics | null>(null);
@@ -60,6 +60,7 @@
       {@const quota = account.weekly}
       {@const stale = account.status !== "fresh" || !account.updatedAt || now - account.updatedAt > 15 * 60_000 || (quota?.resetAt != null && quota.resetAt <= now)}
       {@const forecast = quotaForecast(account, now)}
+      {@const burnPerHour = hourlyBurnRate(account.burnPerDay)}
       <details class="account">
         <summary>
           <div class="account-heading"><strong>{account.provider} <span>{account.label === "Pi default" && account.isDefault ? "" : account.label}</span>{#if account.isDefault}<small class="default-badge" title="Current default login in Pi">Pi default</small>{/if}</strong><span class="remaining" style:color={quota && !stale ? remainingColor(quota.used) : "var(--muted)"}>{quota ? `${Math.round(100 - quota.used)}% left` : "unknown"} <i aria-hidden="true">⌄</i></span></div>
@@ -74,6 +75,7 @@
         <div class="account-detail">
           <dl>
             <div><dt>burn / day</dt><dd>{account.burnPerDay !== null && !stale ? `${account.burnPerDay.toFixed(1)} pp` : "collecting 24h history"}</dd></div>
+            <div><dt>burn / hour (24h avg)</dt><dd>{burnPerHour !== null && !stale ? `${burnPerHour.toFixed(2)} pp` : "collecting 24h history"}</dd></div>
             <div><dt>vs prior day</dt><dd>{account.deltaPerDay !== null && !stale ? `${account.deltaPerDay >= 0 ? "+" : ""}${account.deltaPerDay.toFixed(1)} pp/day` : "needs 48h history"}</dd></div>
             <div><dt>OAuth</dt><dd>{account.auth === "connected" && stale ? "last check connected" : account.auth}</dd></div>
             <div><dt>Pi pool</dt><dd>{account.enabled ? "enabled" : "disabled"}</dd></div>
