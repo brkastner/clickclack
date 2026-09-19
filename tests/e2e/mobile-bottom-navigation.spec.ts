@@ -25,7 +25,9 @@ test("hides primary navigation while the software keyboard occludes the viewport
   await expect(navigation).toBeHidden();
   await expect(page.locator("html")).toHaveAttribute("data-mobile-keyboard-open", "");
   await expect
-    .poll(() => page.locator(".shell").evaluate((element) => element.getBoundingClientRect().height))
+    .poll(() =>
+      page.locator(".shell").evaluate((element) => element.getBoundingClientRect().height),
+    )
     .toBe(844);
 
   await page.evaluate(() => {
