@@ -415,6 +415,6 @@
     label { flex: 1 1 100%; }
     select { width: 100%; }
     .output-gallery__button { flex: 1; }
-    .output-gallery__queue { right: calc(1rem + var(--safe-area-right)); bottom: calc(1rem + var(--safe-area-bottom)); left: calc(1rem + var(--safe-area-left)); max-width: none; }
+    .output-gallery__queue { right: calc(1rem + var(--safe-area-right)); bottom: calc(1rem + var(--mobile-bottom-nav-height)); left: calc(1rem + var(--safe-area-left)); max-width: none; }
   }
 </style>

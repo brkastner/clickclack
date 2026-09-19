@@ -101,3 +101,19 @@ test("the sidebar links views from the registry", () => {
   assert.match(sidebar, /import \{ WORKSPACE_VIEWS, workspaceViewsPath \}/u);
   assert.match(sidebar, /#each WORKSPACE_VIEWS as view/u);
 });
+
+test("mobile routes share a persistent Home, Gallery, and Chat navigation bar", () => {
+  const workspaceLayout = readSource("../routes/app/[workspaceID]/+layout.svelte");
+  const navigation = readSource("../components/navigation/MobileBottomNavigation.svelte");
+  const layoutStyles = readSource("../styles/layout.css");
+  const viewStyles = readSource("../styles/views.css");
+
+  assert.match(workspaceLayout, /<MobileBottomNavigation \/>/u);
+  assert.match(navigation, />Home<\/span>/u);
+  assert.match(navigation, />Gallery<\/span>/u);
+  assert.match(navigation, />Chat<\/span>/u);
+  assert.match(navigation, /aria-current=/u);
+  assert.match(navigation, /var\(--safe-area-bottom\)/u);
+  assert.match(layoutStyles, /var\(--app-vh\) - var\(--mobile-bottom-nav-height\)/u);
+  assert.match(viewStyles, /inset: 0 0 var\(--mobile-bottom-nav-height\)/u);
+});
