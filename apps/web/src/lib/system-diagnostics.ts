@@ -90,6 +90,10 @@ export function usageTrend(
   };
 }
 
+export function hourlyBurnRate(burnPerDay: number | null): number | null {
+  return burnPerDay === null ? null : burnPerDay / 24;
+}
+
 export function quotaForecast(
   account: SubscriptionAccount,
   now: number,
