@@ -82,6 +82,7 @@
   let serial = 0;
 
   const messages = $derived(page?.messages ?? []);
+  const canSend = $derived(direct?.can_send ?? true);
   const personaName = $derived(persona ? userDisplayLabel(persona) : "");
   const subtitle = $derived(
     persona?.handle ? `@${persona.handle}` : target.kind === "direct" ? "direct message" : "channel",
@@ -162,7 +163,7 @@
 
   async function send(): Promise<void> {
     const text = body.trim();
-    if (!text || sending) return;
+    if (!text || sending || !canSend) return;
     sending = true;
     sendError = "";
     const payload: Record<string, unknown> = { body: text, nonce: newNonce() };
@@ -333,7 +334,8 @@
         {reactionController}
         {loading}
         hasOlder={page?.has_older ?? false}
-        hasNewer={false}
+        hasNewer={page?.has_newer ?? false}
+        reactionsDisabled={!canSend}
         {loadingOlder}
         {prepending}
         timelineComplete={!(page?.has_newer ?? false)}
@@ -351,6 +353,7 @@
         onOpenArtifact={(upload: Upload) => openImage(uploadURL(upload))}
         onAddAttachmentToMessage={() => {}}
         onLoadOlder={() => void loadOlder()}
+        onLoadNewer={() => void loadNewer()}
         onReachedBottom={markRead}
         onMarkRead={markRead}
       />
@@ -365,7 +368,7 @@
         placeholder={`Message ${target.title}`}
         ariaLabel={`Message ${target.title}`}
         submitLabel="Send"
-        disabled={sending}
+        disabled={sending || !canSend}
         {replyTarget}
         showToolbar
         mentionPeople={users}

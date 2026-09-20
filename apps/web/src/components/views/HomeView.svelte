@@ -51,6 +51,7 @@
   let now = $state(Date.now());
   let selectedPersonaID = $state("");
   let peekItemID = $state("");
+  let peekSnapshot = $state<HomeRecentItem | undefined>(undefined);
   let activityToggles = $state<Record<string, HTMLButtonElement | undefined>>({});
   let requestSerial = 0;
   let loadController: AbortController | undefined;
@@ -61,7 +62,7 @@
   const visibleGroups = $derived(
     selectedPersonaID ? groups.filter((group) => group.id === selectedPersonaID) : groups,
   );
-  const peekItem = $derived(items.find((item) => item.id === peekItemID));
+  const peekItem = $derived(items.find((item) => item.id === peekItemID) ?? peekSnapshot);
   const peekTarget = $derived<ConversationPeekTarget | undefined>(
     peekItem
       ? { id: peekItem.id, routeID: peekItem.routeID, kind: peekItem.kind, title: peekItem.title }
@@ -96,6 +97,7 @@
 
   /** Open the conversation modal for an activity row. */
   function openPeek(itemID: string): void {
+    peekSnapshot = items.find((item) => item.id === itemID);
     peekItemID = itemID;
   }
 
@@ -103,6 +105,7 @@
   function closePeek(): void {
     const activityToggle = activityToggles[peekItemID];
     peekItemID = "";
+    peekSnapshot = undefined;
     void loadRecent();
     void tick().then(() => activityToggle?.focus());
   }
@@ -185,8 +188,13 @@
     if (selectedPersonaID && !groups.some((group) => group.id === selectedPersonaID)) {
       selectedPersonaID = "";
     }
-    if (peekItemID && !items.some((item) => item.id === peekItemID)) {
+    if (
+      peekItemID &&
+      !channels.some((channel) => channel.id === peekItemID && !channel.archived_at) &&
+      !directConversations.some((conversation) => conversation.id === peekItemID)
+    ) {
       peekItemID = "";
+      peekSnapshot = undefined;
     }
   });
 
