@@ -1,24 +1,21 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
-  import { api, readableAPIError } from "$lib/api";
+  import { api } from "$lib/api";
   import { channelDisplayTitle } from "$lib/chat/channels";
-  import { newNonce } from "$lib/chat/messages";
   import { dmTitle, isDeletedBot, userDisplayLabel } from "$lib/chat/people";
   import {
     buildHomePersonaGroups,
     buildHomeRecentItems,
     channelHomeSource,
     directHomeSource,
-    messagePreview,
-    recentContextMessages,
     type HomeRecentItem,
     type HomeRecentSource,
   } from "$lib/home-recent";
-  import type { ComposerInputElement } from "$lib/chat/typeToFocus";
+  import type { ConversationPeekTarget } from "$lib/conversation-peek";
   import type { Channel, DirectConversation, Message, MessagePage, User } from "$lib/types";
   import type { WorkspaceViewProps } from "$lib/views";
   import Avatar from "../avatar/Avatar.svelte";
-  import ChatComposer from "../composer/ChatComposer.svelte";
+  import ConversationPeekModal from "./ConversationPeekModal.svelte";
   import HomeDiagnostics from "./HomeDiagnostics.svelte";
 
   type HomeViewProps = WorkspaceViewProps & {
@@ -30,6 +27,7 @@
     workingConversationIDs?: ReadonlySet<string>;
     connected?: boolean;
     voiceStatus?: string;
+    onConversationRead?: (conversationID: string, seq: number) => void;
   };
 
   let {
@@ -42,6 +40,7 @@
     workingConversationIDs = new Set<string>(),
     connected = false,
     voiceStatus = "unknown",
+    onConversationRead,
   }: HomeViewProps = $props();
 
   let sources = $state<HomeRecentSource[]>([]);
@@ -51,12 +50,9 @@
   let error = $state("");
   let now = $state(Date.now());
   let selectedPersonaID = $state("");
-  let expandedItemID = $state("");
+  let peekItemID = $state("");
+  let peekSnapshot = $state<HomeRecentItem | undefined>(undefined);
   let activityToggles = $state<Record<string, HTMLButtonElement | undefined>>({});
-  let composerBody = $state("");
-  let composerInput = $state<ComposerInputElement | null>(null);
-  let sendingItemID = $state("");
-  let sendError = $state("");
   let requestSerial = 0;
   let loadController: AbortController | undefined;
 
@@ -66,7 +62,19 @@
   const visibleGroups = $derived(
     selectedPersonaID ? groups.filter((group) => group.id === selectedPersonaID) : groups,
   );
-  const usersByID = $derived(new Map(users.map((user) => [user.id, user])));
+  const peekItem = $derived(items.find((item) => item.id === peekItemID) ?? peekSnapshot);
+  const peekTarget = $derived<ConversationPeekTarget | undefined>(
+    peekItem
+      ? { id: peekItem.id, routeID: peekItem.routeID, kind: peekItem.kind, title: peekItem.title }
+      : undefined,
+  );
+  const peekChannel = $derived(channels.find((channel) => channel.id === peekItemID));
+  const peekDirect = $derived(directConversations.find((conversation) => conversation.id === peekItemID));
+  const peekSignal = $derived(
+    peekItem
+      ? `${peekChannel?.last_seq ?? peekDirect?.last_seq ?? 0}:${peekItem.message.id}`
+      : "",
+  );
 
   function itemHref(routeID: string): string {
     return `/app/${encodeURIComponent(workspaceRouteID)}/${encodeURIComponent(routeID)}`;
@@ -87,79 +95,26 @@
     return /[\u0400-\u04ff]/u.test(value) ? "ru" : undefined;
   }
 
-  /** Return the best available display label for a message author. */
-  function messageAuthorName(message: Message): string {
-    return userDisplayLabel(message.author ?? usersByID.get(message.author_id), "Unknown");
+  /** Open the conversation modal for an activity row. */
+  function openPeek(itemID: string): void {
+    peekSnapshot = items.find((item) => item.id === itemID);
+    peekItemID = itemID;
   }
 
-  /** Open or close an activity row and prepare its composer for a fresh reply. */
-  function toggleExpanded(itemID: string): void {
-    if (sendingItemID) return;
-    const opening = expandedItemID !== itemID;
-    expandedItemID = opening ? itemID : "";
-    composerBody = "";
-    sendError = "";
-    if (opening) void tick().then(() => composerInput?.focus());
+  /** Close the conversation modal and return focus to the row that opened it. */
+  function closePeek(): void {
+    const activityToggle = activityToggles[peekItemID];
+    peekItemID = "";
+    peekSnapshot = undefined;
+    void loadRecent();
+    void tick().then(() => activityToggle?.focus());
   }
 
-  /** Close the expanded activity row and discard its transient composer state. */
-  function collapseExpanded(): void {
-    expandedItemID = "";
-    composerBody = "";
-    sendError = "";
-  }
-
-  /** Let Escape close an expanded row while focus is within its summary. */
-  function handleSummaryKeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape" && expandedItemID) {
-      event.preventDefault();
-      collapseExpanded();
-    }
-  }
-
-  /** Apply the reply composer's Escape and Enter keyboard shortcuts. */
-  function handleComposerKeydown(event: KeyboardEvent, item: HomeRecentItem): void {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      const activityToggle = activityToggles[item.id];
-      collapseExpanded();
-      void tick().then(() => activityToggle?.focus());
-      return;
-    }
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void sendMessage(item);
-    }
-  }
-
-  /** Post a reply for an activity item and merge the returned message locally. */
-  async function sendMessage(item: HomeRecentItem): Promise<void> {
-    const body = composerBody.trim();
-    if (!body || sendingItemID) return;
-
-    const itemID = item.id;
-    const path = item.kind === "direct"
-      ? `/api/dms/${encodeURIComponent(itemID)}/messages`
-      : `/api/channels/${encodeURIComponent(itemID)}/messages`;
-    sendingItemID = itemID;
-    sendError = "";
-    try {
-      const { message } = await api<{ message: Message }>(path, {
-        method: "POST",
-        body: JSON.stringify({ body, nonce: newNonce() }),
-      });
-      sources = sources.map((source) =>
-        source.id === itemID ? { ...source, messages: [...source.messages, message] } : source,
-      );
-      if (expandedItemID === itemID && composerBody.trim() === body) composerBody = "";
-      void loadRecent();
-    } catch (reason) {
-      if (expandedItemID === itemID) {
-        sendError = readableAPIError(reason, "Could not send this message.");
-      }
-    } finally {
-      if (sendingItemID === itemID) sendingItemID = "";
-    }
+  /** Merge a message sent from the modal into the local recent window. */
+  function applySentMessage(itemID: string, message: Message): void {
+    sources = sources.map((source) =>
+      source.id === itemID ? { ...source, messages: [...source.messages, message] } : source,
+    );
   }
 
   async function loadRecent(): Promise<void> {
@@ -233,8 +188,13 @@
     if (selectedPersonaID && !groups.some((group) => group.id === selectedPersonaID)) {
       selectedPersonaID = "";
     }
-    if (expandedItemID && !items.some((item) => item.id === expandedItemID)) {
-      collapseExpanded();
+    if (
+      peekItemID &&
+      !channels.some((channel) => channel.id === peekItemID && !channel.archived_at) &&
+      !directConversations.some((conversation) => conversation.id === peekItemID)
+    ) {
+      peekItemID = "";
+      peekSnapshot = undefined;
     }
   });
 
@@ -366,22 +326,20 @@
 
               <div class="home-persona__activity">
                 {#each visibleItems as item (item.id)}
-                  {@const expanded = expandedItemID === item.id}
-                  {@const contextMessages = recentContextMessages(item.messages)}
+                  {@const active = peekItemID === item.id}
                   <article
                     class="home-activity"
                     class:is-unread={item.unreadCount > 0}
-                    class:is-expanded={expanded}
+                    class:is-active={active}
                   >
                     <div class="home-activity__summary">
                       <button
                         type="button"
                         class="home-activity__toggle"
-                        aria-expanded={expanded}
-                        aria-label={`${expanded ? "Collapse" : "Expand"} ${item.title}: ${item.preview}`}
+                        aria-haspopup="dialog"
+                        aria-label={`Open ${item.title}: ${item.preview}`}
                         bind:this={activityToggles[item.id]}
-                        onclick={() => toggleExpanded(item.id)}
-                        onkeydown={handleSummaryKeydown}
+                        onclick={() => openPeek(item.id)}
                       ></button>
                       <div class="home-activity__meta">
                         <a href={itemHref(item.routeID)}>{item.title}</a>
@@ -390,19 +348,6 @@
                         {/if}
                         <time datetime={item.message.created_at}>{relativeTime(item.message.created_at)}</time>
                       </div>
-                      {#if expanded && contextMessages.length > 0}
-                        <ol class="home-activity__context" aria-label={`Recent messages in ${item.title}`}>
-                          {#each contextMessages as message (message.id)}
-                            <li>
-                              <div>
-                                <strong lang={languageFor(messageAuthorName(message))}>{messageAuthorName(message)}</strong>
-                                <time datetime={message.created_at}>{relativeTime(message.created_at)}</time>
-                              </div>
-                              <p>{messagePreview(message)}</p>
-                            </li>
-                          {/each}
-                        </ol>
-                      {/if}
                       <p class="home-activity__latest">{item.preview}</p>
                       <a
                         class="home-activity__view"
@@ -414,32 +359,6 @@
                         </svg>
                       </a>
                     </div>
-
-                    {#if expanded}
-                      <div class="home-activity__expanded">
-                        <div class="home-activity__composer-dock">
-                          {#if sendError}
-                            <p class="home-activity__send-error" role="status">{sendError}</p>
-                          {/if}
-                          <ChatComposer
-                            value={composerBody}
-                            placeholder={`Reply to ${item.title}`}
-                            ariaLabel={`Reply to ${item.title}`}
-                            submitLabel="Send"
-                            formClass="composer home-activity__composer"
-                            disabled={sendingItemID === item.id}
-                            mentionPeople={users}
-                            onValue={(value) => {
-                              if (expandedItemID === item.id && !sendingItemID) composerBody = value;
-                            }}
-                            onSubmit={() => void sendMessage(item)}
-                            onKeydown={(event) => handleComposerKeydown(event, item)}
-                            onFocus={() => (sendError = "")}
-                            onInputRef={(node) => (composerInput = node)}
-                          />
-                        </div>
-                      </div>
-                    {/if}
                   </article>
                 {/each}
               </div>
@@ -459,6 +378,25 @@
     </div>
   </div>
 </section>
+
+{#if peekItem && peekTarget}
+  <ConversationPeekModal
+    target={peekTarget}
+    href={itemHref(peekItem.routeID)}
+    persona={peekItem.persona}
+    channel={peekChannel}
+    direct={peekDirect}
+    {channels}
+    {users}
+    {currentUserID}
+    working={workingConversationIDs.has(peekItem.id)}
+    unreadCount={peekItem.unreadCount}
+    activitySignal={peekSignal}
+    onClose={closePeek}
+    onSent={(message) => applySentMessage(peekItem.id, message)}
+    onRead={(conversationID, seq) => onConversationRead?.(conversationID, seq)}
+  />
+{/if}
 
 <style>
   .home-view {
@@ -726,7 +664,7 @@
   }
 
   .home-activity__summary:hover,
-  .home-activity.is-expanded .home-activity__summary {
+  .home-activity.is-active .home-activity__summary {
     background: color-mix(in srgb, var(--accent) 7%, var(--hover));
   }
 
@@ -779,8 +717,7 @@
 
   .home-activity p { font-size: 14.4px; }
 
-  .home-activity__latest,
-  .home-activity__context p {
+  .home-activity__latest {
     display: -webkit-box;
     position: relative;
     z-index: 1;
@@ -795,24 +732,6 @@
   }
 
   .home-activity.is-unread .home-activity__latest { color: var(--text); font-weight: 600; }
-
-  .home-activity__context {
-    position: relative;
-    z-index: 1;
-    display: grid;
-    margin: 3px 0 4px;
-    padding: 0;
-    border-block: 1px solid color-mix(in srgb, var(--line-strong) 68%, transparent);
-    list-style: none;
-    pointer-events: none;
-  }
-
-  .home-activity__context li { padding: 8px 0; }
-  .home-activity__context li + li { border-top: 1px solid var(--line); }
-  .home-activity__context li > div { display: flex; align-items: baseline; gap: 8px; }
-  .home-activity__context strong { color: var(--text-strong); font: 700 12.6px var(--font-display); }
-  .home-activity__context time { margin-left: auto; color: var(--muted); font: 10.8px var(--font-mono); }
-  .home-activity__context p { margin-top: 2px; font-size: 13.2px; }
 
   .home-activity__view {
     position: absolute;
@@ -840,23 +759,6 @@
 
   .home-activity__view:hover { color: var(--accent); }
   .home-activity__view:hover svg { transform: translateX(2px); }
-
-  .home-activity__expanded {
-    position: relative;
-    z-index: 2;
-    padding: 12px 16px 15px;
-    border-top: 1px solid var(--line);
-    background: color-mix(in srgb, var(--panel-2) 82%, transparent);
-  }
-
-  .home-activity__composer-dock { display: grid; gap: 7px; }
-  :global(.home-activity__composer) { min-width: 0; }
-
-  .home-activity__send-error {
-    margin: 0;
-    color: var(--danger);
-    font: 12px/1.4 var(--font-mono);
-  }
 
   .home-persona__more {
     margin: 0;
@@ -955,7 +857,6 @@
     .home-persona__working,
     .home-persona__unread { grid-column: 2; justify-self: start; }
     .home-activity__summary { padding-inline: 12px 42px; }
-    .home-activity__expanded { padding-inline: 12px; }
     .home-activity__view { right: 7px; }
     :global(.home-persona__art) { right: -90px; opacity: .09; }
   }

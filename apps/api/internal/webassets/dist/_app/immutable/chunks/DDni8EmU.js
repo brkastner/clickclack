@@ -1,1 +1,0 @@
-import{n as e}from"./fV8A5gzb.js";async function t(e,t){if(!(t.desktop&&await t.desktop(e))){if(!t.browser)throw Error(`Clipboard unavailable`);await t.browser(e)}}function n(n){return t(n,{browser:globalThis.navigator?.clipboard?.writeText.bind(globalThis.navigator.clipboard),desktop:e?.writeClipboardText})}export{n as t};
