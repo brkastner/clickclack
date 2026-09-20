@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { api, readableAPIError } from "$lib/api";
+  import { portal } from "$lib/actions/portal";
+  import { coalesceAgentActivity } from "$lib/chat/agent-activity";
   import { newNonce } from "$lib/chat/messages";
   import { isDeletedBot, userDisplayLabel } from "$lib/chat/people";
   import { INITIAL_MESSAGE_LIMIT, PAGE_MESSAGE_LIMIT } from "$lib/chat/messageWindow";
@@ -81,7 +83,11 @@
   let controller: AbortController | undefined;
   let serial = 0;
 
-  const messages = $derived(page?.messages ?? []);
+  const messages = $derived(coalesceAgentActivity(
+    page?.messages ?? [],
+    { hideCommentary: false, hideToolCalls: false },
+    Date.now(),
+  ));
   const canSend = $derived(direct?.can_send ?? true);
   const personaName = $derived(persona ? userDisplayLabel(persona) : "");
   const subtitle = $derived(
@@ -269,7 +275,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="modal-scrim conversation-peek-scrim" role="presentation">
+<div class="modal-scrim conversation-peek-scrim" role="presentation" use:portal>
   <button
     class="modal-backdrop"
     type="button"
@@ -374,6 +380,12 @@
         mentionPeople={users}
         onValue={(value) => (body = value)}
         onSubmit={() => void send()}
+        onKeydown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            void send();
+          }
+        }}
         onFocus={() => (sendError = "")}
         onInputRef={(node) => (composerInput = node)}
         onClearReply={() => (replyTarget = null)}
@@ -391,7 +403,7 @@
     display: flex;
     flex-direction: column;
     width: min(1180px, 100%);
-    height: min(880px, 100%);
+    height: 100%;
     overflow: hidden;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-xl);
@@ -540,8 +552,16 @@
     flex: 0 0 auto;
     gap: 6px;
     padding: 10px 14px 14px;
-    border-top: 1px solid var(--line);
-    background: color-mix(in srgb, var(--panel-2) 55%, transparent);
+    background: var(--panel);
+  }
+
+  .conversation-peek__dock :global(.composer) {
+    padding: 0;
+    background: none;
+  }
+
+  .conversation-peek__dock :global(.composer-card) {
+    box-shadow: none;
   }
 
   .conversation-peek__error {
