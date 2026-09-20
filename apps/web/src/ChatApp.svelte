@@ -2623,15 +2623,20 @@
   }
 
   function clearUnreadLocally(key: string, seq: number) {
-    unreadMarkers.delete(key);
-    unreadMarkers = new Map(unreadMarkers);
+    const known = channels.find((c) => c.id === key) ?? directConversations.find((c) => c.id === key);
+    // A caller that only saw up to `seq` cannot clear unread for later messages.
+    const stale = !!known && seq < (known.last_seq || 0);
+    if (!stale) {
+      unreadMarkers.delete(key);
+      unreadMarkers = new Map(unreadMarkers);
+    }
     channels = channels.map((c) =>
       c.id === key
         ? {
             ...c,
             last_seq: Math.max(c.last_seq || 0, seq),
             last_read_seq: Math.max(c.last_read_seq || 0, seq),
-            unread_count: 0,
+            unread_count: stale ? c.unread_count : 0,
           }
         : c,
     );
@@ -2641,7 +2646,7 @@
             ...c,
             last_seq: Math.max(c.last_seq || 0, seq),
             last_read_seq: Math.max(c.last_read_seq || 0, seq),
-            unread_count: 0,
+            unread_count: stale ? c.unread_count : 0,
           }
         : c,
     );

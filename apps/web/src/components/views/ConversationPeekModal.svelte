@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick, untrack } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { api, readableAPIError } from "$lib/api";
   import { newNonce } from "$lib/chat/messages";
   import { isDeletedBot, userDisplayLabel } from "$lib/chat/people";
@@ -187,7 +187,46 @@
     }
   }
 
+  const FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+
+  function focusableInDialog(): HTMLElement[] {
+    if (!dialog) return [];
+    return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+      (node) => node.offsetParent !== null || node === document.activeElement,
+    );
+  }
+
+  /** Keep Tab and Shift+Tab inside the dialog while it owns the screen. */
+  function trapTab(event: KeyboardEvent): void {
+    const nodes = focusableInDialog();
+    if (nodes.length === 0) {
+      event.preventDefault();
+      dialog?.focus();
+      return;
+    }
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || !dialog?.contains(active)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+      return;
+    }
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
+    if (event.key === "Tab") {
+      trapTab(event);
+      return;
+    }
     if (event.key !== "Escape") return;
     const origin = event.target as HTMLElement | null;
     // A composer suggestion list or picker owns Escape until it closes itself.
@@ -203,6 +242,8 @@
 
   onMount(() => {
     controller = new AbortController();
+    // The first load already reads the tail, so only later signals need a refetch.
+    appliedSignal = activitySignal;
     void load();
     const previousFocus = document.activeElement as HTMLElement | null;
     void tick().then(() => composerInput?.focus());
@@ -218,11 +259,10 @@
   $effect(() => {
     // Re-read the tail whenever the workspace reports fresh activity here.
     const signal = activitySignal;
-    untrack(() => {
-      if (signal === appliedSignal || loading || !page) return;
-      appliedSignal = signal;
-      void loadNewer();
-    });
+    // Depend on loading and page too, so a signal that lands mid-load still applies.
+    if (loading || !page || signal === appliedSignal) return;
+    appliedSignal = signal;
+    void loadNewer();
   });
 </script>
 
@@ -240,6 +280,7 @@
     class="conversation-peek"
     role="dialog"
     aria-modal="true"
+    tabindex="-1"
     aria-label={`${target.title} conversation`}
     bind:this={dialog}
   >
