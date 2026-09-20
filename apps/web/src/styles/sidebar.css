@@ -876,9 +876,9 @@
 }
 
 .persona-disclosure-caret {
-  position: absolute;
-  right: 36px;
-  bottom: 8px;
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: 6px;
   z-index: 2;
   color: var(--text-strong);
   text-shadow: 0 1px 3px var(--panel);

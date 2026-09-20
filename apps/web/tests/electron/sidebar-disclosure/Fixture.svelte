@@ -21,6 +21,8 @@
 <div class="fixture-controls">
   <button onclick={() => channels = channels.map(c => c.id === "chn_one" ? { ...c, archived_at: c.archived_at ? undefined : "2026-01-02" } : c)}>Toggle Alpha channel archive</button>
   <button onclick={() => events = []}>Clear events</button>
+  <button onclick={() => channels = channels.map(c => ({ ...c, last_message_at: c.id === "chn_two" ? "2026-09-20" : "2026-09-19" }))}>Activity in Beta</button>
+  <button onclick={() => channels = channels.map(c => ({ ...c, last_message_at: undefined }))}>Reset activity</button>
   <button onclick={() => workspaceID = workspaceID === "wsp_one" ? "wsp_two" : "wsp_one"}>Switch workspace</button>
   <button onclick={() => resolvedColorMode.set("light")}>Light</button>
   <button onclick={() => resolvedColorMode.set("dark")}>Dark</button>

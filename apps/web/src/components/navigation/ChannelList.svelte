@@ -6,7 +6,7 @@
   import { directConversationForUser, moveChannelInOrder, type ChannelProfileShortcut } from "../../lib/chat/people";
   import type { PersonaChannelPins } from "../../lib/personaNavigation";
   import { personaUnreadSummary } from "../../lib/personaUnread";
-  import { collapsedAttentionLeadsPersonas } from "../../lib/sidebar-sections";
+  import { channelsByRecency, personaActivityTime } from "../../lib/sidebar-recency";
   import type { Channel, DirectConversation, User } from "../../lib/types";
   import Avatar from "../avatar/Avatar.svelte";
 
@@ -94,15 +94,9 @@
   });
   const botGroups = $derived(profiles.map((profile) => ({
     profile,
-    channels: activeChannels.filter((channel) => channel.bot_assignments?.some((assignment) => assignment.bot_user_id === profile.bot_user_id)),
-  })));
-  const visibleChannels = $derived(variant === "archived" ? archivedChannels : activeChannels);
-  const priorityChannels = $derived(visibleChannels.filter((channel) =>
-    (channel.id === selectedChannelID && !selectedDirectID) || (channel.unread_count || 0) > 0 || workingConversationIDs.has(channel.id),
-  ));
-  const attentionLeadsPersonas = $derived(
-    variant === "active" && collapsedAttentionLeadsPersonas(expanded, priorityChannels.length),
-  );
+    channels: channelsByRecency(activeChannels.filter((channel) => channel.bot_assignments?.some((assignment) => assignment.bot_user_id === profile.bot_user_id))),
+  })).sort((a, b) => personaActivityTime(activeChannels, b.profile.bot_user_id) - personaActivityTime(activeChannels, a.profile.bot_user_id)));
+
   const listID = $derived(variant === "archived" ? "sidebar-archived-channels-list" : "sidebar-channels-list");
   const orderInstructionsID = $derived(variant === "archived" ? "archived-channel-order-instructions" : "channel-order-instructions");
 
@@ -179,7 +173,7 @@
   }
 
   async function openChannelContextMenu(event: MouseEvent, channel: Channel) {
-    if (variant !== "active" || !assignmentFor(channel)) return;
+    if (variant !== "active") return;
     event.preventDefault();
     moveMenuTrigger = (event.target as HTMLElement | null)?.closest<HTMLElement>("a, button") ?? undefined;
     moveMenuChannelID = channel.id;
@@ -256,7 +250,7 @@
     oncontextmenu={(event) => { stopNotepadHover(); void openChannelContextMenu(event, channel); }}
     ondragover={(event) => { if (!draggedChannelID || draggedGroupKey !== groupKey || draggedChannelID === channel.id) return; event.preventDefault(); dropTargetID = channel.id; dropBefore = event.clientY < (event.currentTarget as HTMLElement).getBoundingClientRect().top + (event.currentTarget as HTMLElement).offsetHeight / 2; }}
     ondrop={(event) => { if (draggedGroupKey !== groupKey) return; event.preventDefault(); event.stopPropagation(); moveChannel(draggedChannelID, channel.id, dropBefore); draggedChannelID = ""; dropTargetID = ""; }}>
-    {#if expanded}
+    {#if expanded || groupKey.startsWith("bot:")}
       <button type="button" class="channel-drag-handle" draggable="true" aria-label={`Move #${channelDisplayTitle(channel)}`} aria-describedby={orderInstructionsID} title="Move channel" aria-haspopup="menu" aria-expanded={moveMenuChannelID === channel.id}
         onclick={(event) => void toggleMoveMenu(channel.id, event.currentTarget)}
         ondragstart={(event) => { draggedChannelID = channel.id; draggedGroupKey = groupKey; event.dataTransfer?.setData("text/plain", channel.id); }}
@@ -367,8 +361,9 @@
               />
               <span class="persona-band-scrim" aria-hidden="true"></span>
             {/if}
-            <span class="persona-name">{group.profile.display_name}</span><span class="channel-subgroup-count">{group.channels.length}</span>
+            <span class="persona-name">{group.profile.display_name}</span>
             {#if hasChannels}<span class="persona-disclosure-caret" aria-hidden="true">{personaExpanded ? "▾" : "▸"}</span>{/if}
+            <span class="channel-subgroup-count">{group.channels.length}</span>
             {#if unread.total > 0}
               <span class="persona-unread-stack" aria-hidden="true">
                 {#if unread.direct > 0}<span class="persona-unread-badge persona-unread-badge--dm">DM {unread.direct > 99 ? "99+" : unread.direct}</span>{/if}
@@ -394,7 +389,7 @@
 
 {#if variant === "active" || archivedChannels.length > 0}
 <section class="nav-section sidebar-channel-navigation" class:collapsed={!expanded}>
-  {#if variant === "active" && !attentionLeadsPersonas}
+  {#if variant === "active"}
     {@render personaShelf()}
   {/if}
 
@@ -414,7 +409,7 @@
       </button>
     </div>
   {/if}
-  <div class="nav-list" id={listID} role="list" hidden={!expanded && priorityChannels.length === 0}>
+  <div class="nav-list" id={listID} role="list" hidden={!expanded}>
     {#if expanded}
       <span id={orderInstructionsID} class="sr-only">Drag with a pointer, use Arrow Up and Arrow Down while focused, or open the move menu.</span>
       {#if variant === "archived"}
@@ -428,13 +423,9 @@
           </section>
         {/each}
       {/if}
-    {:else}
-      {#each priorityChannels as channel (channel.id)}{@render channelRow(channel, priorityChannels, variant === "archived" ? "archived" : "priority", variant === "archived")}{/each}
     {/if}
     <span class="sr-only" role="status" aria-live="polite">{moveAnnouncement}</span>
   </div>
-  {#if attentionLeadsPersonas}
-    {@render personaShelf()}
-  {/if}
+
 </section>
 {/if}

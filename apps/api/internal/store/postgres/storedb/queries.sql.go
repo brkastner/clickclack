@@ -3732,6 +3732,7 @@ func (q *Queries) ListChannelBotAssignmentsByWorkspace(ctx context.Context, work
 const listChannels = `-- name: ListChannels :many
 SELECT c.id, COALESCE(c.route_id, '') AS route_id, c.workspace_id, c.name, c.display_title, c.kind, c.created_at, c.archived_at,
        c.external_managed, c.external_ref, c.external_url, c.sidebar_section,
+       CAST(COALESCE((SELECT MAX(created_at) FROM messages WHERE channel_id = c.id AND parent_message_id IS NULL), '') AS TEXT) AS last_message_at,
        CAST(COALESCE((SELECT MAX(channel_seq) FROM messages WHERE channel_id = c.id AND parent_message_id IS NULL), 0) AS BIGINT) AS last_seq,
        CAST(COALESCE((SELECT cr.last_read_seq FROM channel_reads cr WHERE cr.channel_id = c.id AND cr.user_id = $1), 0) AS BIGINT) AS last_read_seq,
        CAST(COALESCE((
@@ -3766,6 +3767,7 @@ type ListChannelsRow struct {
 	ExternalRef     sql.NullString `json:"external_ref"`
 	ExternalUrl     sql.NullString `json:"external_url"`
 	SidebarSection  sql.NullString `json:"sidebar_section"`
+	LastMessageAt   string         `json:"last_message_at"`
 	LastSeq         int64          `json:"last_seq"`
 	LastReadSeq     int64          `json:"last_read_seq"`
 	UnreadCount     int64          `json:"unread_count"`
@@ -3793,6 +3795,7 @@ func (q *Queries) ListChannels(ctx context.Context, arg ListChannelsParams) ([]L
 			&i.ExternalRef,
 			&i.ExternalUrl,
 			&i.SidebarSection,
+			&i.LastMessageAt,
 			&i.LastSeq,
 			&i.LastReadSeq,
 			&i.UnreadCount,

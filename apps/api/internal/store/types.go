@@ -320,6 +320,7 @@ type Channel struct {
 	ExternalURL     *string                `json:"external_url,omitempty"`
 	SidebarSection  *string                `json:"sidebar_section,omitempty"`
 	BotAssignments  []ChannelBotAssignment `json:"bot_assignments,omitempty"`
+	LastMessageAt   string                 `json:"last_message_at"`
 	LastSeq         int64                  `json:"last_seq"`
 	LastReadSeq     int64                  `json:"last_read_seq"`
 	UnreadCount     int64                  `json:"unread_count"`

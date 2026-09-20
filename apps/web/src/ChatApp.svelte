@@ -4542,6 +4542,13 @@
     // alerts even when its conversation is already on screen.
     if (isDecisionEvent(event)) void playDecisionSound(decisionSound);
     void maybeShowBrowserNotification(event, affectsActiveView);
+    if (event.type === "message.created" && !event.payload.parent_message_id) {
+      const { channelID } = messageEventScope(event);
+      const timestamp = typeof event.payload.created_at === "string" ? event.payload.created_at : event.created_at;
+      channels = channels.map((channel) => channel.id === channelID &&
+        Date.parse(timestamp) > (Date.parse(channel.last_message_at || "") || 0)
+        ? { ...channel, last_message_at: timestamp } : channel);
+    }
     if (event.type === "message.created" && !affectsActiveView) {
       const loadedConversation = await loadUnknownDirectConversationFromEvent(event);
       if (!loadedConversation) handleUnreadBump(event);

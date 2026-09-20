@@ -73,6 +73,7 @@ export type Channel = {
   external_url?: string;
   sidebar_section?: string;
   bot_assignments?: ChannelBotAssignment[];
+  last_message_at?: string;
   last_seq?: number;
   last_read_seq?: number;
   unread_count?: number;

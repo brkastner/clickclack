@@ -28,6 +28,23 @@ try {
   const list = page.locator('#sidebar-persona-wsp_one-bot_one-channels');
   const key = "clickclack:sidebar-sections:v1:wsp_one";
   await expect(alpha).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole('button', {name: 'Activity in Beta', exact: true}).click();
+  await expect(page.locator('.profile-source-link').first()).toContainText('Beta');
+  await page.getByRole('button', {name: 'Reset activity', exact: true}).click();
+  await expect(page.locator('.profile-source-link').first()).toContainText('Alpha');
+  const channelsToggle = page.getByRole('button', {name: 'Channels', exact: true});
+  if (await channelsToggle.getAttribute('aria-expanded') === 'true') await channelsToggle.click();
+  await expect(page.locator('#sidebar-channels-list')).toBeHidden();
+  await expect(page.locator('a[href="#channel-chn_one"]')).toHaveCount(1);
+  await list.getByRole('link').click({button: 'right'});
+  await expect(page.getByRole('menuitem', {name: 'Pin', exact: true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  const caretGap = await alpha.evaluate(el => {
+    const name = el.querySelector('.persona-name').getBoundingClientRect();
+    const caret = el.querySelector('.persona-disclosure-caret').getBoundingClientRect();
+    return caret.left - name.right;
+  });
+  assert.ok(caretGap >= 0 && caretGap < 24, `caret gap: ${caretGap}`);
   const selection = await page.getByTestId("selection").textContent();
   const unread = await beta.locator('.persona-unread-stack').textContent();
   const sidebarScroll = page.locator('.sidebar-scroll');

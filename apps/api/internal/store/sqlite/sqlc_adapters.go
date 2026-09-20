@@ -234,6 +234,7 @@ func storeChannelFromListChannels(row storedb.ListChannelsRow) store.Channel {
 		ExternalRef:     ptrFromNull(row.ExternalRef),
 		ExternalURL:     ptrFromNull(row.ExternalUrl),
 		SidebarSection:  ptrFromNull(row.SidebarSection),
+		LastMessageAt:   row.LastMessageAt,
 		LastSeq:         row.LastSeq,
 		LastReadSeq:     row.LastReadSeq,
 		UnreadCount:     row.UnreadCount,
