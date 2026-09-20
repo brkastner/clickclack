@@ -45,6 +45,22 @@ try {
     return caret.left - name.right;
   });
   assert.ok(caretGap >= 0 && caretGap < 24, `caret gap: ${caretGap}`);
+  const handleGeometry = await list.locator('.channel-row').first().evaluate(row => {
+    const handle = row.querySelector('.channel-drag-handle').getBoundingClientRect();
+    const hash = row.querySelector('.hash').getBoundingClientRect();
+    const link = row.querySelector('a').getBoundingClientRect();
+    return { handleX: handle.x, hashX: hash.x, linkX: link.x, rowX: row.getBoundingClientRect().x };
+  });
+  assert.equal(handleGeometry.handleX, handleGeometry.hashX, 'drag target must cover the #');
+  assert.equal(handleGeometry.linkX, handleGeometry.rowX, 'no reserved drag gutter');
+  const dragID = await list.locator('.channel-drag-handle').first().evaluate(handle => {
+    const dataTransfer = new DataTransfer();
+    handle.dispatchEvent(new DragEvent('dragstart', {bubbles: true, dataTransfer}));
+    const id = dataTransfer.getData('text/plain');
+    handle.dispatchEvent(new DragEvent('dragend', {bubbles: true, dataTransfer}));
+    return id;
+  });
+  assert.equal(dragID, 'chn_one');
   const selection = await page.getByTestId("selection").textContent();
   const unread = await beta.locator('.persona-unread-stack').textContent();
   const sidebarScroll = page.locator('.sidebar-scroll');

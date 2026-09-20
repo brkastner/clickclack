@@ -1019,8 +1019,7 @@
   margin-left: 0;
 }
 
-.profile-channel-group .profile-subgroup-header .channel-subgroup-toggle,
-.profile-channel-group .channel-row.reorderable .nav-item {
+.profile-channel-group .profile-subgroup-header .channel-subgroup-toggle {
   padding-left: 4px;
 }
 
@@ -1030,14 +1029,6 @@
   justify-content: flex-start;
   padding-right: 32px;
   text-align: left;
-}
-
-.profile-channel-group .channel-row.reorderable .channel-drag-handle {
-  position: absolute;
-  z-index: 2;
-  inset-block: 0;
-  left: -10px;
-  width: 14px;
 }
 
 .profile-drop-target {
@@ -1146,13 +1137,14 @@
   color: var(--accent);
 }
 
-.channel-row.reorderable .nav-item {
-  padding-left: 2px;
-}
-
+/* Overlay the existing # without reserving a separate drag column. */
 .channel-drag-handle {
-  flex: 0 0 24px;
-  align-self: stretch;
+  position: absolute;
+  z-index: 2;
+  inset-block: 0;
+  left: 8px;
+  width: 14px;
+  padding: 0;
   display: grid;
   place-items: center;
   border: 0;
