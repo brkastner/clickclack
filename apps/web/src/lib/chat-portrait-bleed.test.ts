@@ -43,6 +43,19 @@ test("fades the portrait from the top-right without blocking chat interaction", 
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation:\s*none;/u);
 });
 
+test("keeps the portrait legible against the light timeline", () => {
+  const styles = readSource("../styles/layout.css");
+
+  assert.match(
+    styles,
+    /:root\[data-color-mode="light"\]\s*\.chat-portrait-bleed\s*\{[\s\S]*?opacity:\s*0\.92;[\s\S]*?brightness\(0\.88\);/u,
+  );
+  assert.match(
+    styles,
+    /@media \(prefers-color-scheme: light\)[\s\S]*?:root:not\(\[data-color-mode\]\)\s*\.chat-portrait-bleed/u,
+  );
+});
+
 test("drifts only the image with a slow compositor transform", () => {
   const styles = readSource("../styles/layout.css");
   const imageRule = styles.match(/\.chat-portrait-bleed > img\s*\{([\s\S]*?)\}/u)?.[1] ?? "";
