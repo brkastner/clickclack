@@ -68,6 +68,52 @@ test("home conversation popup resend fills its composer without sending", async 
   expect(sentBodies).toEqual([]);
 });
 
+test("home conversation popup pastes and sends attachments", async ({ page }) => {
+  const { workspace, channel } = await createGeneralChannel(page, "Home Attachment");
+  const posted = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: "open the attachment popup" },
+  });
+  expect(posted.ok()).toBe(true);
+
+  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Workspace views" })
+    .getByRole("link", { name: "home" })
+    .click();
+  await page
+    .getByRole("button", { name: /^Open #general/ })
+    .first()
+    .click();
+
+  const modal = page.getByRole("dialog", { name: "#general conversation" });
+  const composer = modal.getByLabel("Message #general");
+  await composer.evaluate((node) => {
+    const bytes = Uint8Array.from(
+      atob(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      ),
+      (character) => character.charCodeAt(0),
+    );
+    const clipboard = new DataTransfer();
+    clipboard.items.add(new File([bytes], "popup-pasted-image.png", { type: "image/png" }));
+    node.dispatchEvent(
+      new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: clipboard }),
+    );
+  });
+
+  await expect(
+    modal.getByLabel("Pending attachments").getByText("popup-pasted-image.png"),
+  ).toBeVisible();
+  await composer.fill("message with popup attachment");
+  await modal.getByRole("button", { name: "Send", exact: true }).click();
+
+  await expect(modal.getByText("message with popup attachment", { exact: true })).toBeVisible();
+  await expect(
+    modal.getByRole("button", { name: "Open image popup-pasted-image.png" }),
+  ).toBeVisible();
+});
+
 test("home activity opens a conversation modal with history and a working composer", async ({
   page,
 }) => {

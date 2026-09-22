@@ -484,6 +484,7 @@
   <ConversationPeekModal
     target={peekTarget}
     href={itemHref(peekItem.routeID)}
+    {workspaceID}
     persona={peekItem.persona}
     channel={peekChannel}
     direct={peekDirect}

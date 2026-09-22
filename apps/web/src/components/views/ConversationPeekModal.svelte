@@ -3,10 +3,14 @@
   import { api, readableAPIError } from "$lib/api";
   import { portal } from "$lib/actions/portal";
   import {
+    appendPendingAttachments,
+    MAX_MESSAGE_ATTACHMENTS,
     mergeUploads,
     pendingAttachmentsForUploads,
     readyUploads,
+    revokePendingAttachmentPreviews,
     uploadsMissingAttachments,
+    withoutPendingAttachmentPreview,
     type PendingAttachment,
   } from "$lib/attachments";
   import { coalesceAgentActivity } from "$lib/chat/agent-activity";
@@ -23,7 +27,7 @@
   } from "$lib/conversation-peek";
   import { messageContentForResend } from "$lib/messageResend";
   import { ReactionController } from "$lib/reactions.svelte";
-  import { uploadURL } from "$lib/uploads";
+  import { fileUploadNonce, uploadURL, uploadWorkspaceFile } from "$lib/uploads";
   import type { ComposerInputElement } from "$lib/chat/typeToFocus";
   import type {
     Channel,
@@ -40,6 +44,7 @@
   type Props = {
     target: ConversationPeekTarget;
     href: string;
+    workspaceID: string;
     persona?: User;
     channel?: Channel;
     direct?: DirectConversation;
@@ -58,6 +63,7 @@
   let {
     target,
     href,
+    workspaceID,
     persona,
     channel,
     direct,
@@ -73,6 +79,7 @@
   }: Props = $props();
 
   const reactionController = new ReactionController(() => currentUserID);
+  const uploadControllers = new Map<string, AbortController>();
 
   let page = $state<MessagePage | undefined>(undefined);
   let loading = $state(true);
@@ -178,7 +185,12 @@
 
   async function send(): Promise<void> {
     const text = body.trim();
-    if (!text || sending || !canSend) return;
+    if (
+      !text ||
+      sending ||
+      !canSend ||
+      pendingAttachments.some((attachment) => attachment.state !== "ready")
+    ) return;
     sending = true;
     sendError = "";
     const uploads = readyUploads(pendingAttachments);
@@ -236,7 +248,95 @@
     void tick().then(() => composerInput?.focus());
   }
 
+  function updatePendingAttachment(
+    key: string,
+    update: (attachment: PendingAttachment) => PendingAttachment,
+  ): void {
+    pendingAttachments = pendingAttachments.map((attachment) =>
+      attachment.key === key ? update(attachment) : attachment,
+    );
+  }
+
+  async function uploadPendingAttachment(key: string): Promise<void> {
+    const pending = pendingAttachments.find((attachment) => attachment.key === key);
+    if (!pending || pending.workspaceID !== workspaceID) return;
+    uploadControllers.get(key)?.abort();
+    const controller = new AbortController();
+    uploadControllers.set(key, controller);
+    const isCurrent = () =>
+      uploadControllers.get(key) === controller &&
+      !controller.signal.aborted &&
+      pending.workspaceID === workspaceID &&
+      pendingAttachments.some((attachment) => attachment.key === key);
+    updatePendingAttachment(key, (attachment) => ({
+      ...attachment,
+      state: "uploading",
+      upload: undefined,
+      error: undefined,
+    }));
+    try {
+      const nonce = await fileUploadNonce(pending.workspaceID, pending.file);
+      const upload = await uploadWorkspaceFile(
+        pending.workspaceID,
+        pending.file,
+        nonce,
+        controller.signal,
+      );
+      if (!isCurrent()) return;
+      updatePendingAttachment(key, (attachment) => ({
+        ...withoutPendingAttachmentPreview(attachment),
+        state: "ready",
+        upload,
+        error: undefined,
+      }));
+    } catch (reason) {
+      if (!isCurrent()) return;
+      updatePendingAttachment(key, (attachment) => ({
+        ...withoutPendingAttachmentPreview(attachment),
+        state: "failed",
+        upload: undefined,
+        error: readableAPIError(reason, "Could not upload file"),
+      }));
+      sendError = `Could not upload ${pending.file.name}. Retry or remove it before sending.`;
+    } finally {
+      if (uploadControllers.get(key) === controller) uploadControllers.delete(key);
+    }
+  }
+
+  async function enqueueFiles(files: File[]): Promise<void> {
+    if (files.length === 0) return;
+    const previousKeys = new Set(pendingAttachments.map((attachment) => attachment.key));
+    const result = appendPendingAttachments(pendingAttachments, files, workspaceID, newNonce);
+    pendingAttachments = result.attachments;
+    if (result.rejectedCount > 0) {
+      sendError = `${result.rejectedCount} attachment${result.rejectedCount === 1 ? " was" : "s were"} not added. A message can contain up to ${MAX_MESSAGE_ATTACHMENTS} attachments.`;
+    }
+    const uploadKeys = result.attachments
+      .filter((attachment) => !previousKeys.has(attachment.key))
+      .map((attachment) => attachment.key);
+    let cursor = 0;
+    async function uploadNext(): Promise<void> {
+      while (cursor < uploadKeys.length) {
+        const key = uploadKeys[cursor];
+        cursor += 1;
+        await uploadPendingAttachment(key);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(2, uploadKeys.length) }, uploadNext));
+  }
+
+  async function uploadFiles(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = [...(input.files || [])];
+    input.value = "";
+    await enqueueFiles(files);
+  }
+
   function removePendingAttachment(key: string): void {
+    uploadControllers.get(key)?.abort();
+    uploadControllers.delete(key);
+    const removed = pendingAttachments.find((attachment) => attachment.key === key);
+    if (removed) revokePendingAttachmentPreviews([removed]);
     pendingAttachments = pendingAttachments.filter((attachment) => attachment.key !== key);
   }
 
@@ -306,6 +406,9 @@
   onDestroy(() => {
     serial++;
     controller?.abort();
+    for (const uploadController of uploadControllers.values()) uploadController.abort();
+    uploadControllers.clear();
+    revokePendingAttachmentPreviews(pendingAttachments);
     reactionController.clear();
   });
 
@@ -423,7 +526,9 @@
         submitLabel="Send"
         disabled={sending || !canSend}
         {pendingAttachments}
+        submitDisabled={pendingAttachments.some((attachment) => attachment.state !== "ready")}
         {replyTarget}
+        showUpload
         showToolbar
         mentionPeople={users}
         onValue={(value) => (body = value)}
@@ -436,7 +541,10 @@
         }}
         onFocus={() => (sendError = "")}
         onInputRef={(node) => (composerInput = node)}
+        onUploadFile={(event) => void uploadFiles(event)}
+        onPasteFiles={(files) => void enqueueFiles(files)}
         onRemoveUpload={removePendingAttachment}
+        onRetryUpload={(key) => void uploadPendingAttachment(key)}
         onClearReply={() => (replyTarget = null)}
       />
     </div>
