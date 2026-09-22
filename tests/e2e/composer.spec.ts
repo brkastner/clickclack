@@ -31,6 +31,30 @@ async function openChannel(page: Page, routeID: string) {
   await expect(page.getByRole("heading", { name: "#editor" })).toBeVisible();
 }
 
+async function selectComposerText(page: Page, startText: string, endText = startText) {
+  await page.getByLabel("Message body").evaluate(
+    (node, selection) => {
+      const textNodes: Text[] = [];
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      for (let current = walker.nextNode(); current; current = walker.nextNode()) {
+        textNodes.push(current as Text);
+      }
+      const startNode = textNodes.find((textNode) => textNode.data.includes(selection.startText));
+      const endNode = textNodes.find((textNode) => textNode.data.includes(selection.endText));
+      if (!startNode || !endNode) throw new Error("Expected composer selection text");
+
+      const range = document.createRange();
+      range.setStart(startNode, startNode.data.indexOf(selection.startText));
+      range.setEnd(endNode, endNode.data.indexOf(selection.endText) + selection.endText.length);
+      const browserSelection = window.getSelection();
+      browserSelection?.removeAllRanges();
+      browserSelection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    },
+    { startText, endText },
+  );
+}
+
 test("offers rich formatting controls and a functional voice control", async ({ page }) => {
   const stamp = Date.now();
   const workspace = await createWorkspace(page, stamp);
@@ -64,6 +88,46 @@ test("offers rich formatting controls and a functional voice control", async ({ 
   const payload = (await created).postDataJSON() as { body: string };
   expect(payload.body).toContain("##");
   expect(payload.body).toContain("**polished composer**");
+});
+
+test("applies block formatting only to selected composer lines", async ({ page }) => {
+  const stamp = Date.now();
+  const workspace = await createWorkspace(page, stamp);
+  await createChannel(page, workspace.id);
+  await openChannel(page, workspace.route_id);
+
+  const editor = page.getByLabel("Message body");
+  const enterLines = async () => {
+    await editor.fill("above");
+    await editor.press("Shift+Enter");
+    await editor.pressSequentially("selected one");
+    await editor.press("Shift+Enter");
+    await editor.pressSequentially("selected two");
+    await editor.press("Shift+Enter");
+    await editor.pressSequentially("below");
+  };
+
+  await enterLines();
+  await selectComposerText(page, "selected one", "selected two");
+  await page.getByRole("button", { name: "Blockquote", exact: true }).click();
+
+  const quote = editor.locator("blockquote");
+  await expect(quote).toContainText("selected one");
+  await expect(quote).toContainText("selected two");
+  await expect(quote).not.toContainText("above");
+  await expect(quote).not.toContainText("below");
+
+  await editor.press("ControlOrMeta+A");
+  await editor.press("Backspace");
+  await enterLines();
+  await selectComposerText(page, "selected one", "selected two");
+  await page.getByRole("button", { name: "Code block", exact: true }).click();
+
+  const code = editor.locator("pre code");
+  await expect(code).toContainText("selected one");
+  await expect(code).toContainText("selected two");
+  await expect(code).not.toContainText("above");
+  await expect(code).not.toContainText("below");
 });
 
 test("keeps multi-character mobile input in one stable draft", async ({ page }) => {

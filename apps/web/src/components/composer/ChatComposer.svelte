@@ -708,6 +708,30 @@
     editorInstance?.commands.clearContent();
   }
 
+  function replaceSelectionWithBlock(action: "blockquote" | "code-block"): boolean {
+    const editor = editorInstance;
+    if (!editor || editor.state.selection.empty) return false;
+
+    const { from, to } = editor.state.selection;
+    const selectedText = editor.state.doc.textBetween(from, to, "\n", "\n");
+    const content = selectedText.split("\n").flatMap((line, index) => {
+      const lineContent: Array<Record<string, unknown>> = [];
+      if (index > 0) lineContent.push({ type: "hardBreak" });
+      if (line) lineContent.push({ type: "text", text: line });
+      return lineContent;
+    });
+    const block =
+      action === "blockquote"
+        ? { type: "blockquote", content: [{ type: "paragraph", content }] }
+        : { type: "codeBlock", content: selectedText ? [{ type: "text", text: selectedText }] : [] };
+
+    return editor
+      .chain()
+      .focus()
+      .insertContentAt({ from, to }, block, { updateSelection: true })
+      .run();
+  }
+
   function applyFormat(action: ComposerFormatAction) {
     if (disabled || voiceMode) return;
     const editor = editorInstance;
@@ -749,10 +773,10 @@
         chain.toggleOrderedList().run();
         break;
       case "blockquote":
-        chain.toggleBlockquote().run();
+        if (!replaceSelectionWithBlock("blockquote")) chain.toggleBlockquote().run();
         break;
       case "code-block":
-        chain.toggleCodeBlock().run();
+        if (!replaceSelectionWithBlock("code-block")) chain.toggleCodeBlock().run();
         break;
       case "horizontal-rule":
         chain.setHorizontalRule().run();
