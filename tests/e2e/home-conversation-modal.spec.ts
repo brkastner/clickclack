@@ -29,6 +29,45 @@ test("home channel context menu dismisses the activity row", async ({ page }) =>
   await expect(row).toHaveCount(0);
 });
 
+test("home conversation popup resend fills its composer without sending", async ({ page }) => {
+  const { workspace, channel } = await createGeneralChannel(page, "Home Resend");
+  const body = "resend from the home popup";
+  const posted = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body },
+  });
+  expect(posted.ok()).toBe(true);
+
+  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Workspace views" })
+    .getByRole("link", { name: "home" })
+    .click();
+  await page
+    .getByRole("button", { name: /^Open #general/ })
+    .first()
+    .click();
+
+  const modal = page.getByRole("dialog", { name: "#general conversation" });
+  await expect(modal.getByText(body, { exact: true })).toBeVisible();
+  await modal.getByText(body, { exact: true }).hover();
+
+  const sentBodies: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() !== "POST" ||
+      !request.url().endsWith(`/api/channels/${channel.id}/messages`)
+    )
+      return;
+    const payload = request.postDataJSON() as { body?: string } | null;
+    if (payload?.body) sentBodies.push(payload.body);
+  });
+
+  await modal.getByRole("button", { name: "Resend message" }).click();
+  await expect(modal.getByLabel("Message #general")).toHaveText(body);
+  expect(sentBodies).toEqual([]);
+});
+
 test("home activity opens a conversation modal with history and a working composer", async ({
   page,
 }) => {

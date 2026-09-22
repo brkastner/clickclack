@@ -2,6 +2,13 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { api, readableAPIError } from "$lib/api";
   import { portal } from "$lib/actions/portal";
+  import {
+    mergeUploads,
+    pendingAttachmentsForUploads,
+    readyUploads,
+    uploadsMissingAttachments,
+    type PendingAttachment,
+  } from "$lib/attachments";
   import { coalesceAgentActivity } from "$lib/chat/agent-activity";
   import { newNonce } from "$lib/chat/messages";
   import { isDeletedBot, userDisplayLabel } from "$lib/chat/people";
@@ -14,6 +21,7 @@
     peekReadThroughSeq,
     type ConversationPeekTarget,
   } from "$lib/conversation-peek";
+  import { messageContentForResend } from "$lib/messageResend";
   import { ReactionController } from "$lib/reactions.svelte";
   import { uploadURL } from "$lib/uploads";
   import type { ComposerInputElement } from "$lib/chat/typeToFocus";
@@ -74,6 +82,7 @@
   let sendError = $state("");
   let sending = $state(false);
   let body = $state("");
+  let pendingAttachments = $state<PendingAttachment[]>([]);
   let replyTarget = $state<Message | null>(null);
   let list = $state<MessageListHandle | null>(null);
   let composerInput = $state<ComposerInputElement | null>(null);
@@ -172,15 +181,38 @@
     if (!text || sending || !canSend) return;
     sending = true;
     sendError = "";
-    const payload: Record<string, unknown> = { body: text, nonce: newNonce() };
+    const uploads = readyUploads(pendingAttachments);
+    const payload: Record<string, unknown> = {
+      body: text,
+      nonce: newNonce(),
+      expected_attachment_count: uploads.length,
+    };
     if (replyTarget) payload.quoted_message_id = replyTarget.id;
+    if (uploads[0]) payload.upload_id = uploads[0].id;
     try {
-      const { message } = await api<{ message: Message }>(peekPath(""), {
+      let { message } = await api<{ message: Message }>(peekPath(""), {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      const attachedUploadIDs = new Set((message.attachments || []).map((upload) => upload.id));
+      let attachmentFailed = false;
+      for (const upload of uploadsMissingAttachments(uploads, attachedUploadIDs)) {
+        try {
+          await api(`/api/messages/${message.id}/attachments`, {
+            method: "POST",
+            body: JSON.stringify({ upload_id: upload.id }),
+          });
+          attachedUploadIDs.add(upload.id);
+        } catch {
+          attachmentFailed = true;
+        }
+      }
+      const attachedUploads = uploads.filter((upload) => attachedUploadIDs.has(upload.id));
+      message = { ...message, attachments: mergeUploads(message.attachments, attachedUploads) };
       body = "";
+      pendingAttachments = [];
       replyTarget = null;
+      if (attachmentFailed) sendError = "Message sent, but some attachments could not be attached.";
       if (page) page = applyPeekMessage(page, message);
       reactionController.seedMessages([message]);
       onSent?.(message);
@@ -192,6 +224,20 @@
       sending = false;
       composerInput?.focus();
     }
+  }
+
+  function resendMessage(message: Message): void {
+    const content = messageContentForResend(message);
+    if (!content) return;
+    body = content.body;
+    pendingAttachments = pendingAttachmentsForUploads(content.uploads, newNonce);
+    replyTarget = null;
+    sendError = "";
+    void tick().then(() => composerInput?.focus());
+  }
+
+  function removePendingAttachment(key: string): void {
+    pendingAttachments = pendingAttachments.filter((attachment) => attachment.key !== key);
   }
 
   const FOCUSABLE =
@@ -358,6 +404,7 @@
         onOpenImage={(url) => openImage(url)}
         onOpenArtifact={(upload: Upload) => openImage(uploadURL(upload))}
         onAddAttachmentToMessage={() => {}}
+        onResend={resendMessage}
         onLoadOlder={() => void loadOlder()}
         onLoadNewer={() => void loadNewer()}
         onReachedBottom={markRead}
@@ -375,6 +422,7 @@
         ariaLabel={`Message ${target.title}`}
         submitLabel="Send"
         disabled={sending || !canSend}
+        {pendingAttachments}
         {replyTarget}
         showToolbar
         mentionPeople={users}
@@ -388,6 +436,7 @@
         }}
         onFocus={() => (sendError = "")}
         onInputRef={(node) => (composerInput = node)}
+        onRemoveUpload={removePendingAttachment}
         onClearReply={() => (replyTarget = null)}
       />
     </div>
