@@ -14,6 +14,7 @@
   let channels = $state<Channel[]>([
     { id: "chn_one", route_id: "r_one", workspace_id: "wsp_one", name: "first", kind: "public", created_at: "2026-01-01", external_managed: false, bot_assignments: [{ channel_id: "chn_one", bot_user_id: "bot_one" }] },
     { id: "chn_two", route_id: "r_two", workspace_id: "wsp_one", name: "second", kind: "public", created_at: "2026-01-01", external_managed: false, unread_count: 2, bot_assignments: [{ channel_id: "chn_two", bot_user_id: "bot_two" }] },
+    { id: "chn_three", route_id: "r_three", workspace_id: "wsp_one", name: "third", kind: "public", created_at: "2026-01-01", external_managed: false, bot_assignments: [{ channel_id: "chn_three", bot_user_id: "bot_two" }] },
   ]);
   const selectChannel = (id: string) => { events.push(`channel:${id}`); selectedChannelID = id; selectedDirectID = ""; };
   const selectDirect = (id: string) => { events.push(`direct:${id}`); selectedDirectID = id; };
@@ -34,7 +35,9 @@
   workingConversationIDs={new Set()} recentPeople={people} profilePeople={people} profileShortcuts={profiles} selectedProfile={null}
   hrefForWorkspace={(id) => `#workspace-${id}`} hrefForChannel={(id) => `#channel-${id}`} hrefForDirect={(id) => `#dm-${id}`}
   onSelectChannel={selectChannel} onSelectDirect={selectDirect} onStartDirect={(id) => events.push(`start:${id}`)}
-  onCreateChannel={(profile) => events.push(`create:${profile?.bot_user_id}`)} onAssignChannelProfile={noop}
+  onCreateChannel={(profile) => events.push(`create:${profile?.bot_user_id}`)}
+  onAssignChannelProfile={(id, profile) => events.push(`assign:${id}:${profile?.bot_user_id ?? "none"}`)}
+  canManageChannels={true} onArchiveChannel={(id) => events.push(`archive:${id}`)}
   onCreateDirect={() => events.push("create-direct")} onHideDirect={noop} onUndoHideDirect={noop}
   onOpenProfile={noop} onOpenSettings={noop} onSelectWorkspace={noop} onToggleWorkspaceCreate={noop}
   onWorkspaceName={noop} onCreateWorkspace={noop} onOpenWorkspaceSettings={noop} />

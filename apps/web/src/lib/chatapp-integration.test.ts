@@ -13,6 +13,15 @@ test("ChatApp compiles the actual legacy application and thread owner bridge", (
   assert.doesNotMatch(chat, /<GuildRail|recoverableDraftMessages|pendingDrafts/);
 });
 
+test("ChatApp resolves channel management permission by workspace id or route id", () => {
+  assert.match(chat, /import \{ currentRole \} from "\.\/lib\/permissions"/u);
+  assert.match(
+    chat,
+    /currentWorkspaceRole = currentRole\(workspaces, selectedWorkspaceID\) \|\| ""/u,
+  );
+  assert.doesNotMatch(chat, /currentWorkspaceRole = selectedWorkspace\?\.role/u);
+});
+
 test("ChatApp retires each attachment upload on removal and workspace change", () => {
   const upload = chat.slice(
     chat.indexOf("async function uploadPendingAttachment"),

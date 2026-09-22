@@ -1,0 +1,1 @@
+var e=new Set([`owner`,`moderator`]);function t(t){return t?e.has(t):!1}function n(e,t){if(t)return e.find(e=>e.id===t||e.route_id===t)?.role}export{t as n,n as t};

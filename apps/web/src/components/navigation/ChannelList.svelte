@@ -258,7 +258,7 @@
     oncontextmenu={(event) => { stopNotepadHover(); void openChannelContextMenu(event, channel); }}
     ondragover={(event) => { if (!draggedChannelID || draggedGroupKey !== groupKey || draggedChannelID === channel.id) return; event.preventDefault(); dropTargetID = channel.id; dropBefore = event.clientY < (event.currentTarget as HTMLElement).getBoundingClientRect().top + (event.currentTarget as HTMLElement).offsetHeight / 2; }}
     ondrop={(event) => { if (draggedGroupKey !== groupKey) return; event.preventDefault(); event.stopPropagation(); moveChannel(draggedChannelID, channel.id, dropBefore); draggedChannelID = ""; dropTargetID = ""; }}>
-    {#if expanded}
+    {#if variant === "active"}
       <button type="button" class="channel-drag-handle" draggable="true" aria-label={`Move #${channelDisplayTitle(channel)}`} aria-describedby={orderInstructionsID} title="Move channel" aria-haspopup="menu" aria-expanded={moveMenuChannelID === channel.id}
         onclick={(event) => void toggleMoveMenu(channel.id, event.currentTarget)}
         ondragstart={(event) => { draggedChannelID = channel.id; draggedGroupKey = groupKey; event.dataTransfer?.setData("text/plain", channel.id); }}

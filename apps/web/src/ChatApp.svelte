@@ -57,6 +57,7 @@
     type ImageViewerItem,
   } from "./lib/uploads";
   import { registerDismissLayer } from "./lib/dismissal";
+  import { currentRole } from "./lib/permissions";
   import { isNativeMobile } from "./lib/native";
   import { onSharedContent, releaseShare, resolveShare } from "./lib/native-share";
   import type { SharedPayload } from "./lib/native-share";
@@ -471,7 +472,7 @@
 
   $: if (notepadPreviewTarget?.workspaceID !== selectedWorkspaceID) notepadPreviewTarget = null;
   $: selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceID);
-  $: currentWorkspaceRole = selectedWorkspace?.role || "";
+  $: currentWorkspaceRole = currentRole(workspaces, selectedWorkspaceID) || "";
   $: canDeleteAnyMessage = currentWorkspaceRole === "owner";
   $: canManageChannels = currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator";
   $: selectedProfileModeration = selectedProfile
