@@ -35,6 +35,8 @@
     onAssignProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
     personaChannelPins: PersonaChannelPins;
     onPinPersonaChannel: (personaID: string, channelID: string) => void;
+    canManageChannels: boolean;
+    onArchiveChannel: (channelID: string) => void;
     onNotepadHover?: (channelID: string, anchor: HTMLElement | null) => void;
   };
 
@@ -43,7 +45,7 @@
     workspaceID, currentUserID, onSelectDirect, onStartDirect, workingConversationIDs, hrefForChannel, onSelectChannel,
     personaExpansion = {}, onTogglePersona,
     onCreateChannel, onToggle, onReorder, onReorderProfiles, onAssignProfile, personaChannelPins,
-    onPinPersonaChannel, onNotepadHover,
+    onPinPersonaChannel, canManageChannels, onArchiveChannel, onNotepadHover,
   }: Props = $props();
 
   let moveMenuChannelID = $state("");
@@ -179,7 +181,7 @@
   }
 
   async function openChannelContextMenu(event: MouseEvent, channel: Channel) {
-    if (variant !== "active" || !assignmentFor(channel)) return;
+    if (variant !== "active") return;
     event.preventDefault();
     moveMenuTrigger = (event.target as HTMLElement | null)?.closest<HTMLElement>("a, button") ?? undefined;
     moveMenuChannelID = channel.id;
@@ -270,7 +272,7 @@
             moveMenuChannelID = "";
           }
         }}>
-        <svg viewBox="0 0 12 16" width="12" height="16" aria-hidden="true"><circle cx="3" cy="4" r="1"/><circle cx="9" cy="4" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="9" cy="8" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="9" cy="12" r="1"/></svg>
+        <span class="sr-only">Move channel</span>
       </button>
       {#if moveMenuChannelID === channel.id}
         <div class="channel-move-menu" role="menu" tabindex="-1" aria-label={`Move #${channelDisplayTitle(channel)}`} bind:this={moveMenuElement}
@@ -284,6 +286,7 @@
             <button type="button" role="menuitem" disabled={assignmentFor(channel)?.bot_user_id === profile.bot_user_id} onclick={() => assign(channel, profile)}>Move under {profile.display_name}</button>
           {/each}
           {#if assignmentFor(channel)}<button type="button" role="menuitem" onclick={() => assign(channel, null)}>Remove bot group</button>{/if}
+          {#if canManageChannels}<button type="button" role="menuitem" onclick={() => { onArchiveChannel(channel.id); void closeMoveMenu(); }}>Archive channel</button>{/if}
         </div>
       {/if}
     {/if}

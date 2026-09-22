@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { waitForAppReady } from "./app-ready";
 
 type Workspace = { id: string; route_id: string };
+type Channel = { id: string; name: string; archived_at?: string };
 
 async function createWorkspaceWithChannels(
   page: Page,
   label: string,
-): Promise<{ workspace: Workspace; names: string[] }> {
+): Promise<{ workspace: Workspace; names: string[]; channels: Channel[] }> {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceResponse = await page.request.post("/api/workspaces", {
     data: { name: `${label} ${suffix}` },
@@ -15,13 +16,16 @@ async function createWorkspaceWithChannels(
   expect(workspaceResponse.ok()).toBe(true);
   const { workspace } = (await workspaceResponse.json()) as { workspace: Workspace };
   const names = [`aa-order-${suffix}`, `mm-order-${suffix}`, `zz-order-${suffix}`];
+  const channels: Channel[] = [];
   for (const name of names) {
     const response = await page.request.post(`/api/workspaces/${workspace.id}/channels`, {
       data: { name, kind: "public" },
     });
     expect(response.ok()).toBe(true);
+    const payload = (await response.json()) as { channel: Channel };
+    channels.push(payload.channel);
   }
-  return { workspace, names };
+  return { workspace, names, channels };
 }
 
 function visibleChannelNames(page: Page) {
@@ -40,7 +44,25 @@ test("channel ordering supports drag, keyboard, touch actions, and collapsed sec
   await expect.poll(() => visibleChannelNames(page)).toEqual(names);
 
   const source = page.getByRole("button", { name: `Move #${names[2]}` });
+  const sourceHash = page.getByRole("link", { name: `# ${names[2]}` }).locator(".hash");
   const target = page.getByRole("link", { name: `# ${names[0]}` }).locator("..");
+  await sourceHash.scrollIntoViewIfNeeded();
+  const sourceHashBox = await sourceHash.boundingBox();
+  expect(sourceHashBox).not.toBeNull();
+  const hashHitTarget = await page.evaluate(
+    ({ x, y }) => {
+      const element = document.elementFromPoint(x, y);
+      return {
+        className: element?.className,
+        draggable: element?.getAttribute("draggable"),
+      };
+    },
+    {
+      x: sourceHashBox!.x + sourceHashBox!.width / 2,
+      y: sourceHashBox!.y + sourceHashBox!.height / 2,
+    },
+  );
+  expect(hashHitTarget).toEqual({ className: "channel-drag-handle", draggable: "true" });
   await source.dragTo(target, { targetPosition: { x: 40, y: 1 } });
   await expect.poll(() => visibleChannelNames(page)).toEqual([names[2], names[0], names[1]]);
 
@@ -83,6 +105,34 @@ test("channel ordering supports drag, keyboard, touch actions, and collapsed sec
   await expect
     .poll(() => visibleChannelNames(page))
     .toEqual([names[2], names[0], names[1], addedName]);
+});
+
+test("channel context menu archives an unassigned channel", async ({ page }) => {
+  const { workspace, names, channels } = await createWorkspaceWithChannels(
+    page,
+    "Channel archive menu",
+  );
+  await page.goto(`/app/${workspace.route_id}`);
+  await waitForAppReady(page);
+
+  const activeChannel = page
+    .locator("#sidebar-channels-list")
+    .getByRole("link", { name: `# ${names[0]}` });
+  await activeChannel.click({ button: "right" });
+  const menu = page.getByRole("menu", { name: `Move #${names[0]}` });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Archive channel" }).click();
+
+  await expect(activeChannel).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`/api/workspaces/${workspace.id}/channels`);
+      const payload = (await response.json()) as { channels: Channel[] };
+      return Boolean(
+        payload.channels.find((channel) => channel.id === channels[0].id)?.archived_at,
+      );
+    })
+    .toBe(true);
 });
 
 test("channel ordering is isolated by workspace", async ({ page }) => {

@@ -473,13 +473,12 @@
   $: selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceID);
   $: currentWorkspaceRole = selectedWorkspace?.role || "";
   $: canDeleteAnyMessage = currentWorkspaceRole === "owner";
+  $: canManageChannels = currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator";
   $: selectedProfileModeration = selectedProfile
     ? moderationMembers.find((member) => member.user.id === selectedProfile?.id)
     : undefined;
   $: selectedChannel = channels.find((channel) => channel.id === selectedChannelID);
-  $: canManageSelectedChannel =
-    Boolean(selectedChannel) &&
-    (currentWorkspaceRole === "owner" || currentWorkspaceRole === "moderator");
+  $: canManageSelectedChannel = Boolean(selectedChannel) && canManageChannels;
   $: eligibleTopics = topicsForChannel(topics, selectedChannelID);
   $: activeTopic = eligibleTopics.find((topic) => topic.id === activeTopicFilterID);
   $: void loadChannelNotifPreference(selectedChannelID, selectedDirectID);
@@ -1221,9 +1220,9 @@
     }
   }
 
-  async function setSelectedChannelArchived(archived: boolean) {
-    const channel = selectedChannel;
-    if (!channel || !canManageSelectedChannel || channelSettingsSaving) return;
+  async function setChannelArchived(channelID: string, archived: boolean) {
+    const channel = channels.find((candidate) => candidate.id === channelID);
+    if (!channel || !canManageChannels || channelSettingsSaving) return;
     channelSettingsSaving = true;
     channelSettingsError = "";
     try {
@@ -1236,13 +1235,20 @@
       );
       channelSettingsOpen = false;
     } catch (error) {
-      channelSettingsError = readableAPIError(
+      const message = readableAPIError(
         error,
         archived ? "Could not archive channel" : "Could not restore channel",
       );
+      channelSettingsError = message;
+      if (!channelSettingsOpen) composerNotice = { kind: "error", text: message };
     } finally {
       channelSettingsSaving = false;
     }
+  }
+
+  async function setSelectedChannelArchived(archived: boolean) {
+    if (!selectedChannel) return;
+    await setChannelArchived(selectedChannel.id, archived);
   }
 
   function handleSettingsUserUpdated(updated: User) {
@@ -5616,6 +5622,8 @@
     onCreateChannel={(profile) => openCreateChannel(profile ?? null)}
     onAssignChannelProfile={(channelID, profile) =>
       void assignChannelProfile(channelID, profile)}
+    {canManageChannels}
+    onArchiveChannel={(channelID) => void setChannelArchived(channelID, true)}
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
     onStartDirect={(memberID) => void startDirectWithUser(memberID)}
     onCreateDirect={openCreateDirect}
