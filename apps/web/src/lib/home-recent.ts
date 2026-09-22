@@ -26,6 +26,21 @@ export type HomePersonaGroup = {
   working: boolean;
 };
 
+export type HomeDismissals = Readonly<Record<string, string>>;
+
+/** Return the stable dismissal key for a home activity row. */
+export function homeRecentItemKey(item: Pick<HomeRecentSource, "id" | "kind">): string {
+  return `${item.kind}:${item.id}`;
+}
+
+/** Hide rows only while their latest visible message matches the dismissed message. */
+export function filterDismissedHomeRecentItems(
+  items: HomeRecentItem[],
+  dismissals: HomeDismissals,
+): HomeRecentItem[] {
+  return items.filter((item) => dismissals[homeRecentItemKey(item)] !== item.message.id);
+}
+
 /** True when a message has visible content and has not been deleted. */
 function isUsefulMessage(message: Message): boolean {
   return !message.deleted_at && Boolean(message.body.trim() || message.attachments?.length);

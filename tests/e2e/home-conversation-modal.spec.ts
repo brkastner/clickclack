@@ -1,6 +1,34 @@
 import { expect, test } from "@playwright/test";
 import { createGeneralChannel } from "./channel-fixture";
 
+test("home channel context menu dismisses the activity row", async ({ page }) => {
+  const { workspace, channel } = await createGeneralChannel(page, "Home Dismiss");
+  const posted = await page.request.post(`/api/channels/${channel.id}/messages`, {
+    data: { body: "dismiss this channel" },
+  });
+  expect(posted.ok()).toBe(true);
+
+  await page.goto(`/app/${workspace.route_id}/${channel.route_id}`);
+  await expect(page.getByRole("heading", { name: "#general" })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Workspace views" })
+    .getByRole("link", { name: "home" })
+    .click();
+
+  const row = page.getByRole("button", { name: /^Open #general/ }).first();
+  await expect(row).toBeVisible();
+  await row.click({ button: "right" });
+
+  const menu = page.getByRole("menu", { name: "#general options" });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Dismiss from view" }).click();
+  await expect(row).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "recent activity" })).toBeVisible();
+  await expect(row).toHaveCount(0);
+});
+
 test("home activity opens a conversation modal with history and a working composer", async ({
   page,
 }) => {

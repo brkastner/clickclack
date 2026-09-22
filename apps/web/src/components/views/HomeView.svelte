@@ -8,6 +8,8 @@
     buildHomeRecentItems,
     channelHomeSource,
     directHomeSource,
+    filterDismissedHomeRecentItems,
+    homeRecentItemKey,
     type HomeRecentItem,
     type HomeRecentSource,
   } from "$lib/home-recent";
@@ -44,6 +46,10 @@
   }: HomeViewProps = $props();
 
   let sources = $state<HomeRecentSource[]>([]);
+  let dismissals = $state<Record<string, string>>({});
+  let dismissalScope = $state("");
+  let contextMenu = $state<{ item: HomeRecentItem; x: number; y: number } | null>(null);
+  let contextMenuElement = $state<HTMLDivElement>();
   let loading = $state(true);
   let refreshing = $state(false);
   let partialFailures = $state(0);
@@ -56,8 +62,12 @@
   let requestSerial = 0;
   let loadController: AbortController | undefined;
 
-  const items = $derived(buildHomeRecentItems(sources, users));
+  const allItems = $derived(buildHomeRecentItems(sources, users));
+  const items = $derived(filterDismissedHomeRecentItems(allItems, dismissals));
   const groups = $derived(buildHomePersonaGroups(items, workingConversationIDs));
+  const dismissalStorageKey = $derived(
+    `clickclack:home-dismissals:v1:${workspaceID}:${currentUserID || "anonymous"}`,
+  );
   const personaGroups = $derived(groups.filter((group) => group.persona));
   const visibleGroups = $derived(
     selectedPersonaID ? groups.filter((group) => group.id === selectedPersonaID) : groups,
@@ -117,6 +127,54 @@
     );
   }
 
+  /** Open the activity-row context menu at a viewport-safe position. */
+  async function openContextMenu(item: HomeRecentItem, x: number, y: number): Promise<void> {
+    contextMenu = {
+      item,
+      x: Math.max(8, Math.min(x, window.innerWidth - 188)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 52)),
+    };
+    await tick();
+    contextMenuElement?.querySelector<HTMLButtonElement>("button")?.focus();
+  }
+
+  function handleRowContextMenu(event: MouseEvent, item: HomeRecentItem): void {
+    if (item.kind !== "channel") return;
+    event.preventDefault();
+    void openContextMenu(item, event.clientX, event.clientY);
+  }
+
+  function handleSummaryKeydown(event: KeyboardEvent, item: HomeRecentItem): void {
+    if (
+      item.kind === "channel" &&
+      (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))
+    ) {
+      event.preventDefault();
+      const bounds = event.currentTarget.getBoundingClientRect();
+      void openContextMenu(item, bounds.left + 24, bounds.top + 24);
+    }
+  }
+
+  function closeContextMenu(): void {
+    contextMenu = null;
+  }
+
+  function dismissItem(item: HomeRecentItem): void {
+    dismissals = { ...dismissals, [homeRecentItemKey(item)]: item.message.id };
+    try {
+      window.localStorage.setItem(dismissalStorageKey, JSON.stringify(dismissals));
+    } catch {
+      // Keep the dismissal for this session when storage is unavailable.
+    }
+    closeContextMenu();
+  }
+
+  function handleWindowPointerDown(event: PointerEvent): void {
+    if (!contextMenu) return;
+    const target = event.target as Node | null;
+    if (!target || !contextMenuElement?.contains(target)) closeContextMenu();
+  }
+
   async function loadRecent(): Promise<void> {
     const serial = ++requestSerial;
     loadController?.abort();
@@ -171,6 +229,23 @@
   }
 
   $effect(() => {
+    if (dismissalScope === dismissalStorageKey) return;
+    dismissalScope = dismissalStorageKey;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(dismissalStorageKey) || "{}");
+      dismissals = stored && typeof stored === "object" && !Array.isArray(stored)
+        ? Object.fromEntries(
+            Object.entries(stored).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string",
+            ),
+          )
+        : {};
+    } catch {
+      dismissals = {};
+    }
+  });
+
+  $effect(() => {
     const signature = [
       workspaceID,
       currentUserID,
@@ -209,7 +284,11 @@
   });
 </script>
 
-<svelte:window onfocus={() => !loading && void loadRecent()} ononline={() => void loadRecent()} />
+<svelte:window
+  onfocus={() => !loading && void loadRecent()}
+  ononline={() => void loadRecent()}
+  onpointerdown={handleWindowPointerDown}
+/>
 
 <section class="home-view">
   <header class="home-view__toolbar">
@@ -331,6 +410,7 @@
                     class="home-activity"
                     class:is-unread={item.unreadCount > 0}
                     class:is-active={active}
+                    oncontextmenu={(event) => handleRowContextMenu(event, item)}
                   >
                     <div class="home-activity__summary">
                       <button
@@ -340,6 +420,7 @@
                         aria-label={`Open ${item.title}: ${item.preview}`}
                         bind:this={activityToggles[item.id]}
                         onclick={() => openPeek(item.id)}
+                        onkeydown={(event) => handleSummaryKeydown(event, item)}
                       ></button>
                       <div class="home-activity__meta">
                         <a href={itemHref(item.routeID)}>{item.title}</a>
@@ -377,6 +458,26 @@
     <HomeDiagnostics {connected} {voiceStatus} />
     </div>
   </div>
+
+  {#if contextMenu}
+    <div
+      class="home-context-menu"
+      role="menu"
+      tabindex="-1"
+      aria-label={`${contextMenu.item.title} options`}
+      style={`left: ${contextMenu.x}px; top: ${contextMenu.y}px;`}
+      bind:this={contextMenuElement}
+      onclick={(event) => event.stopPropagation()}
+      onkeydown={(event) => {
+        if (event.key === "Escape") closeContextMenu();
+        event.stopPropagation();
+      }}
+    >
+      <button type="button" role="menuitem" onclick={() => dismissItem(contextMenu!.item)}>
+        Dismiss from view
+      </button>
+    </div>
+  {/if}
 </section>
 
 {#if peekItem && peekTarget}
@@ -511,6 +612,36 @@
   }
 
   :global(.home-filter__avatar img) { width: 100%; height: 100%; object-fit: cover; }
+
+  .home-context-menu {
+    position: fixed;
+    z-index: 40;
+    min-width: 180px;
+    padding: 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 12px 30px rgb(0 0 0 / .22);
+  }
+
+  .home-context-menu button {
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text);
+    font: 700 13.2px var(--font-display);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .home-context-menu button:hover,
+  .home-context-menu button:focus-visible {
+    outline: 0;
+    background: var(--hover);
+    color: var(--text-strong);
+  }
 
   .home-view__canvas {
     flex: 1 1 auto;

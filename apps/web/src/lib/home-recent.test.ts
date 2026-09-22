@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   buildHomePersonaGroups,
   buildHomeRecentItems,
+  filterDismissedHomeRecentItems,
+  homeRecentItemKey,
   latestUsefulMessage,
   messagePreview,
   recentContextMessages,
@@ -63,6 +65,32 @@ describe("Home recent-message projection", () => {
     assert.deepEqual(
       items.map((item) => item.id),
       ["a", "c", "b"],
+    );
+  });
+
+  it("hides a dismissed row until its latest useful message changes", () => {
+    const first = message("first", "2026-09-17T12:00:00Z");
+    const initialItems = buildHomeRecentItems([source("alpha", [first])], [user("bot-a")]);
+    const item = initialItems[0];
+    assert.ok(item);
+
+    const dismissals = { [homeRecentItemKey(item)]: first.id };
+    assert.deepEqual(filterDismissedHomeRecentItems(initialItems, dismissals), []);
+
+    const nextItems = buildHomeRecentItems(
+      [source("alpha", [first, message("next", "2026-09-17T12:01:00Z")])],
+      [user("bot-a")],
+    );
+    assert.deepEqual(
+      filterDismissedHomeRecentItems(nextItems, dismissals).map((candidate) => candidate.id),
+      ["alpha"],
+    );
+  });
+
+  it("keeps channel and direct dismissal keys separate", () => {
+    assert.notEqual(
+      homeRecentItemKey(source("shared", [])),
+      homeRecentItemKey({ ...source("shared", []), kind: "direct" }),
     );
   });
 
