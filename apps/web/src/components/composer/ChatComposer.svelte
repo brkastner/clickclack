@@ -21,7 +21,7 @@
     type EmojiEntry,
   } from "../../lib/emoji";
   import { gifLibrary } from "../../lib/gifs";
-  import type { BotRuntimeStatusTarget, Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
+  import type { BotRuntimeStatus as RuntimeStatusSnapshot, BotRuntimeStatusTarget, Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
   import type { VoiceInputStatus, VoiceStatus } from "../../lib/voice";
   import VoiceVisualizer from "../VoiceVisualizer.svelte";
   import ComposerToolbar from "./ComposerToolbar.svelte";
@@ -127,6 +127,7 @@
     botCommands?: WorkspaceBotCommand[];
     mentionPeople?: User[];
     runtimeStatusTarget?: BotRuntimeStatusTarget;
+    runtimeStatusUpdate?: RuntimeStatusSnapshot | null;
     disabled?: boolean;
     submitDisabled?: boolean;
     onValue: (value: string) => void;
@@ -173,6 +174,7 @@
     botCommands = [],
     mentionPeople = [],
     runtimeStatusTarget,
+    runtimeStatusUpdate = null,
     disabled = false,
     submitDisabled = false,
     onValue,
@@ -1038,6 +1040,9 @@
         {/if}
       </div>
       <div class="composer-actions">
+        {#if runtimeStatusTarget}
+          <BotRuntimeStatus target={runtimeStatusTarget} update={runtimeStatusUpdate} />
+        {/if}
         {#if showVoice}
           <button
             type="button"
@@ -1076,10 +1081,6 @@
       <div class="composer-voice-inline-error" role="status">{voiceError || "Voice connection failed"}</div>
     {/if}
     </div>
-
-    {#if runtimeStatusTarget}
-      <BotRuntimeStatus target={runtimeStatusTarget} />
-    {/if}
 
     {#if showVoice}
       <section

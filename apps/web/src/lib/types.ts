@@ -360,6 +360,7 @@ export type EventPayload = {
   kind?: Message["kind"];
   turn_id?: string;
   bot_user_id?: string;
+  status?: BotRuntimeStatus;
   display_name?: string;
   former_handle?: string;
   deleted_at?: string;

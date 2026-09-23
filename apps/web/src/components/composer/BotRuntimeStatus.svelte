@@ -3,8 +3,8 @@
   import { api } from "../../lib/api";
   import type { BotRuntimeStatus, BotRuntimeStatusTarget } from "../../lib/types";
 
-  type Props = { target: BotRuntimeStatusTarget };
-  let { target }: Props = $props();
+  type Props = { target: BotRuntimeStatusTarget; update?: BotRuntimeStatus | null };
+  let { target, update = null }: Props = $props();
 
   let status = $state<BotRuntimeStatus | null>(null);
   let loaded = $state(false);
@@ -19,7 +19,8 @@
         `/api/${target.kind}/${encodeURIComponent(target.id)}/bot-runtime-status`,
       );
       if (serial !== requestSerial || key !== targetKey) return;
-      status = result.statuses.find((candidate) => candidate.bot_user_id === target.botUserID) ?? null;
+      const fetched = result.statuses.find((candidate) => candidate.bot_user_id === target.botUserID) ?? null;
+      if (!status || !fetched || Date.parse(fetched.updated_at) >= Date.parse(status.updated_at)) status = fetched;
     } catch {
       if (serial !== requestSerial || key !== targetKey) return;
       status = null;
@@ -37,49 +38,66 @@
     void refresh(key);
   });
 
+  $effect(() => {
+    if (!update || !loaded) return;
+    if (update.bot_user_id !== target.botUserID ||
+      (target.kind === "channels" ? update.channel_id : update.direct_conversation_id) !== target.id) return;
+    ++requestSerial;
+    status = update;
+  });
+
   const interval = setInterval(() => void refresh(targetKey), 30_000);
   onDestroy(() => clearInterval(interval));
 
   let fresh = $derived(Boolean(status && Date.parse(status.expires_at) > Date.now()));
-  let modelText = $derived(fresh && status ? status.model_id : "unavailable");
-  let reasoningText = $derived(fresh && status ? status.reasoning : "unavailable");
 </script>
 
-{#if loaded}
+{#if loaded && fresh && status}
   <div class="bot-runtime-status" aria-label="Bot runtime status" aria-live="polite">
-    <span><strong>Model</strong> <span title={fresh && status ? `${status.model_provider}/${status.model_id}` : undefined}>{modelText}</span></span>
-    <span><strong>Thinking</strong> {reasoningText}{#if fresh && status?.fast_mode === true} <em>fast</em>{/if}</span>
+    <span class="bot-runtime-status__value" title={`${status.model_provider}/${status.model_id}`}>{status.model_id}</span>
+    <span class="bot-runtime-status__separator" aria-hidden="true">•</span>
+    <span class="bot-runtime-status__value">{status.reasoning}</span>
+    {#if status.fast_mode === true}
+      <span class="bot-runtime-status__separator" aria-hidden="true">•</span>
+      <em>fast</em>
+    {/if}
   </div>
 {/if}
 
 <style>
   .bot-runtime-status {
     display: flex;
+    min-width: 0;
+    max-width: min(280px, 34vw);
+    height: 40px;
+    box-sizing: border-box;
+    flex: 0 1 auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.35rem 0.35rem 0;
+    gap: 0.4rem;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--panel) 85%, var(--bg));
     color: var(--muted);
-    font-size: 0.72rem;
-    line-height: 1.3;
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
   }
 
-  .bot-runtime-status strong {
-    color: var(--muted-strong, var(--muted));
-    font-weight: 600;
+  .bot-runtime-status__value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .bot-runtime-status__separator {
+    color: var(--muted-2);
+    font-size: 9px;
   }
 
   .bot-runtime-status em {
     color: var(--accent);
     font-style: normal;
     font-weight: 600;
-  }
-
-  @media (max-width: 520px) {
-    .bot-runtime-status {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 0.15rem;
-    }
   }
 </style>

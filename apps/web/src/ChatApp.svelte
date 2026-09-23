@@ -159,7 +159,7 @@
     type DecisionSound,
   } from "./lib/decisionSound";
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
-  import type { BotRuntimeStatusTarget, Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { BotRuntimeStatus as RuntimeStatusSnapshot, BotRuntimeStatusTarget, Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
   import { findUniqueBotCommand } from "./lib/bot-command-routing";
   import {
@@ -214,6 +214,7 @@
   let selectedChannelID = "";
   let selectedDirectID = "";
   let notepadAvailable = false;
+  let runtimeStatusUpdate: RuntimeStatusSnapshot | null = null;
   let notepadPreviewTarget: { workspaceID: string; channelID: string; anchor: HTMLElement } | null = null;
   const notepadAvailability = createNotepadAvailability(
     { read: (path, signal) => api<{ available: boolean }>(path, { signal }) },
@@ -4429,6 +4430,15 @@
   async function handleEvent(event: RealtimeEvent, isCurrent: () => boolean) {
     await updateConversationWorkingFromEvent(event);
     if (!isCurrent()) return;
+    if (event.type === "bot.runtime_status") {
+      const status = event.payload.status;
+      if (event.workspace_id === selectedWorkspaceID && status &&
+        status.bot_user_id === runtimeStatusTarget?.botUserID &&
+        (runtimeStatusTarget.kind === "channels" ? status.channel_id : status.direct_conversation_id) === runtimeStatusTarget.id) {
+        runtimeStatusUpdate = status;
+      }
+      return;
+    }
     if (
       (event.type === "pin.added" || event.type === "pin.removed") &&
       event.channel_id === selectedChannelID &&
@@ -5891,6 +5901,7 @@
       botCommands={composerBotCommands}
       {mentionPeople}
       {runtimeStatusTarget}
+      runtimeStatusUpdate={runtimeStatusUpdate}
       onValue={(value) => {
         const previous = messageBody;
         messageBody = value;
