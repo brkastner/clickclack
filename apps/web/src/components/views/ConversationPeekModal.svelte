@@ -30,6 +30,7 @@
   import { fileUploadNonce, uploadURL, uploadWorkspaceFile } from "$lib/uploads";
   import type { ComposerInputElement } from "$lib/chat/typeToFocus";
   import type {
+    BotRuntimeStatusTarget,
     Channel,
     DirectConversation,
     Message,
@@ -98,6 +99,18 @@
   let appliedSignal = "";
   let controller: AbortController | undefined;
   let serial = 0;
+  let runtimeBot = $derived(
+    persona?.kind === "bot"
+      ? persona
+      : target.kind === "channel"
+        ? users.find((candidate) => candidate.id === channel?.bot_assignments?.[0]?.bot_user_id)
+        : direct?.members.find((candidate) => candidate.kind === "bot"),
+  );
+  let runtimeStatusTarget = $derived<BotRuntimeStatusTarget | undefined>(
+    runtimeBot
+      ? { kind: target.kind === "direct" ? "dms" : "channels", id: target.id, botUserID: runtimeBot.id }
+      : undefined,
+  );
 
   const messages = $derived(coalesceAgentActivity(
     page?.messages ?? [],
@@ -531,6 +544,7 @@
         showUpload
         showToolbar
         mentionPeople={users}
+        {runtimeStatusTarget}
         onValue={(value) => (body = value)}
         onSubmit={() => void send()}
         onKeydown={(event) => {

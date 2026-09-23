@@ -183,6 +183,42 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/channels/{channel_id}/bot-runtime-status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read current bot runtime statuses for a channel */
+    get: operations["listChannelBotRuntimeStatuses"];
+    /** Publish the authenticated bot's current runtime status */
+    put: operations["publishChannelBotRuntimeStatus"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/dms/{conversation_id}/bot-runtime-status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read current bot runtime statuses for a direct conversation */
+    get: operations["listDirectBotRuntimeStatuses"];
+    /** Publish the authenticated bot's current runtime status */
+    put: operations["publishDirectBotRuntimeStatus"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/healthz": {
     parameters: {
       query?: never;
@@ -1752,6 +1788,34 @@ export interface components {
       steps: components["schemas"]["WorkflowAttempt"][];
       files: components["schemas"]["WorkflowFiles"] | null;
     };
+    BotRuntimeStatusSnapshot: {
+      /** @enum {string} */
+      runtime: "pi" | "openclaw";
+      model_provider: string;
+      model_id: string;
+      reasoning: string;
+      fast_mode: boolean | null;
+    };
+    BotRuntimeStatus: components["schemas"]["BotRuntimeStatusSnapshot"] & {
+      workspace_id: string;
+      channel_id?: string;
+      direct_conversation_id?: string;
+      bot_user_id: string;
+      /** Format: date-time */
+      updated_at: string;
+      /** Format: date-time */
+      expires_at: string;
+    };
+    PublishBotRuntimeStatusRequest: {
+      workspace_id: string;
+      status: components["schemas"]["BotRuntimeStatusSnapshot"];
+    };
+    BotRuntimeStatusResult: {
+      status: components["schemas"]["BotRuntimeStatus"];
+    };
+    BotRuntimeStatusList: {
+      statuses: components["schemas"]["BotRuntimeStatus"][];
+    };
     WorkflowRunRecord: {
       id: string;
       workspace_id: string;
@@ -2977,6 +3041,42 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getChannelNotepad: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Non-cacheable notepad result; ready with null card means no notepad yet */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotepadResult"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   publishChannelNotepad: {
     parameters: {
       query?: never;
@@ -3009,42 +3109,6 @@ export interface operations {
         content?: never;
       };
       /** @description Bot, scope, conversation, or workspace access denied */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getChannelNotepad: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        channel_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Non-cacheable notepad result; ready with null card means no notepad yet */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["NotepadResult"];
-        };
-      };
-      /** @description Authentication required */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Conversation or scope access denied */
       403: {
         headers: {
           [name: string]: unknown;
@@ -3123,6 +3187,42 @@ export interface operations {
       };
     };
   };
+  getDirectNotepad: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Non-cacheable notepad result; ready with null card means no notepad yet */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotepadResult"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conversation or scope access denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   publishDirectNotepad: {
     parameters: {
       query?: never;
@@ -3155,42 +3255,6 @@ export interface operations {
         content?: never;
       };
       /** @description Bot, scope, conversation, or workspace access denied */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  getDirectNotepad: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        conversation_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Non-cacheable notepad result; ready with null card means no notepad yet */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["NotepadResult"];
-        };
-      };
-      /** @description Authentication required */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Conversation or scope access denied */
       403: {
         headers: {
           [name: string]: unknown;
@@ -3362,6 +3426,102 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["WorkflowRunPage"];
+        };
+      };
+    };
+  };
+  listChannelBotRuntimeStatuses: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current bot runtime statuses */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BotRuntimeStatusList"];
+        };
+      };
+    };
+  };
+  publishChannelBotRuntimeStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        channel_id: components["parameters"]["channel_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublishBotRuntimeStatusRequest"];
+      };
+    };
+    responses: {
+      /** @description Published runtime status */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BotRuntimeStatusResult"];
+        };
+      };
+    };
+  };
+  listDirectBotRuntimeStatuses: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current bot runtime statuses */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BotRuntimeStatusList"];
+        };
+      };
+    };
+  };
+  publishDirectBotRuntimeStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: components["parameters"]["conversation_id"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublishBotRuntimeStatusRequest"];
+      };
+    };
+    responses: {
+      /** @description Published runtime status */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BotRuntimeStatusResult"];
         };
       };
     };

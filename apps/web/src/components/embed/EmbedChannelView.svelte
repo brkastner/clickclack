@@ -25,6 +25,7 @@
   import { ReactionController } from "../../lib/reactions.svelte";
   import { connectRealtime, WorkspaceUnavailableError, type RealtimeConnection } from "../../lib/realtime.svelte";
   import type {
+    BotRuntimeStatusTarget,
     Channel,
     Message,
     MessagePage,
@@ -95,6 +96,10 @@
     }
     if (user?.id) people.set(user.id, user);
     return [...people.values()];
+  });
+  const runtimeStatusTarget = $derived.by<BotRuntimeStatusTarget | undefined>(() => {
+    const botUserID = channel?.bot_assignments?.[0]?.bot_user_id;
+    return channel && botUserID ? { kind: "channels", id: channel.id, botUserID } : undefined;
   });
 
   async function loadWorkspaceMembers(workspaceID: string) {
@@ -608,6 +613,7 @@
         replyTarget={replyTarget}
         showToolbar
         {mentionPeople}
+        {runtimeStatusTarget}
         onValue={(value) => {
           if (!messageSubmission) messageBody = value;
         }}

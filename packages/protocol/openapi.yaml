@@ -258,6 +258,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkflowRunPage'
+  /api/channels/{channel_id}/bot-runtime-status:
+    put:
+      operationId: publishChannelBotRuntimeStatus
+      summary: Publish the authenticated bot's current runtime status
+      parameters:
+      - $ref: '#/components/parameters/channel_id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishBotRuntimeStatusRequest'
+      responses:
+        '200':
+          description: Published runtime status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BotRuntimeStatusResult'
+    get:
+      operationId: listChannelBotRuntimeStatuses
+      summary: Read current bot runtime statuses for a channel
+      parameters:
+      - $ref: '#/components/parameters/channel_id'
+      responses:
+        '200':
+          description: Current bot runtime statuses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BotRuntimeStatusList'
+  /api/dms/{conversation_id}/bot-runtime-status:
+    put:
+      operationId: publishDirectBotRuntimeStatus
+      summary: Publish the authenticated bot's current runtime status
+      parameters:
+      - $ref: '#/components/parameters/conversation_id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishBotRuntimeStatusRequest'
+      responses:
+        '200':
+          description: Published runtime status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BotRuntimeStatusResult'
+    get:
+      operationId: listDirectBotRuntimeStatuses
+      summary: Read current bot runtime statuses for a direct conversation
+      parameters:
+      - $ref: '#/components/parameters/conversation_id'
+      responses:
+        '200':
+          description: Current bot runtime statuses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BotRuntimeStatusList'
   /healthz:
     get:
       operationId: getHealth
@@ -2845,6 +2907,86 @@ components:
           - type: 'null'
       description: Host-authored bounded projection, at most 512 KiB serialized. Equal revisions with different canonical typed
         content conflict. files:null means unavailable. Only safe relative file paths; never tool prose or file contents.
+    BotRuntimeStatusSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+      - runtime
+      - model_provider
+      - model_id
+      - reasoning
+      - fast_mode
+      properties:
+        runtime:
+          type: string
+          enum: [pi, openclaw]
+        model_provider:
+          type: string
+          minLength: 1
+          maxLength: 128
+        model_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        reasoning:
+          type: string
+          minLength: 1
+          maxLength: 64
+        fast_mode:
+          type: boolean
+          nullable: true
+    BotRuntimeStatus:
+      allOf:
+      - $ref: '#/components/schemas/BotRuntimeStatusSnapshot'
+      - type: object
+        additionalProperties: false
+        required:
+        - workspace_id
+        - bot_user_id
+        - updated_at
+        - expires_at
+        properties:
+          workspace_id:
+            type: string
+          channel_id:
+            type: string
+          direct_conversation_id:
+            type: string
+          bot_user_id:
+            type: string
+          updated_at:
+            type: string
+            format: date-time
+          expires_at:
+            type: string
+            format: date-time
+    PublishBotRuntimeStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, status]
+      properties:
+        workspace_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        status:
+          $ref: '#/components/schemas/BotRuntimeStatusSnapshot'
+    BotRuntimeStatusResult:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/BotRuntimeStatus'
+    BotRuntimeStatusList:
+      type: object
+      additionalProperties: false
+      required: [statuses]
+      properties:
+        statuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/BotRuntimeStatus'
     WorkflowRunRecord:
       type: object
       additionalProperties: false

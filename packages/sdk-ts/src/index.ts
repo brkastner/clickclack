@@ -10,6 +10,12 @@ export type PublishWorkflowSnapshotRequest =
   components["schemas"]["PublishWorkflowSnapshotRequest"];
 export type PublishWorkflowSnapshotResponse =
   components["schemas"]["PublishWorkflowSnapshotResponse"];
+export type BotRuntimeStatusSnapshot = components["schemas"]["BotRuntimeStatusSnapshot"];
+export type BotRuntimeStatus = components["schemas"]["BotRuntimeStatus"];
+export type PublishBotRuntimeStatusRequest =
+  components["schemas"]["PublishBotRuntimeStatusRequest"];
+export type BotRuntimeStatusResult = components["schemas"]["BotRuntimeStatusResult"];
+export type BotRuntimeStatusList = components["schemas"]["BotRuntimeStatusList"];
 
 export type NotepadCard = components["schemas"]["NotepadCard"];
 export type NotepadResult = components["schemas"]["NotepadResult"];
@@ -1188,6 +1194,20 @@ export class ClickClackClient {
       socket.addEventListener("message", (message) => onChange(JSON.parse(String(message.data))));
       return socket;
     },
+  };
+
+  botRuntimeStatus = {
+    list: (kind: "channels" | "dms", id: string): Promise<BotRuntimeStatusList> =>
+      this.request(`/api/${kind}/${encodeURIComponent(id)}/bot-runtime-status`),
+    publish: (
+      kind: "channels" | "dms",
+      id: string,
+      input: PublishBotRuntimeStatusRequest,
+    ): Promise<BotRuntimeStatusResult> =>
+      this.request(`/api/${kind}/${encodeURIComponent(id)}/bot-runtime-status`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
   };
 
   workflowRuns = {

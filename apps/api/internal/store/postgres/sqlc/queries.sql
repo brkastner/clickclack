@@ -2007,6 +2007,21 @@ WHERE workspace_id = sqlc.arg(workspace_id) AND channel_id = sqlc.arg(channel_id
 AND (CAST(sqlc.arg(cursor_id) AS TEXT) = '' OR id < sqlc.arg(cursor_id))
 ORDER BY id DESC LIMIT sqlc.arg(page_limit);
 
+-- name: UpsertBotRuntimeStatus :exec
+INSERT INTO bot_runtime_statuses (workspace_id, channel_id, direct_conversation_id, bot_user_id, runtime, model_provider, model_id, reasoning, fast_mode, updated_at, expires_at)
+VALUES (sqlc.arg(workspace_id), sqlc.arg(channel_id), sqlc.arg(direct_conversation_id), sqlc.arg(bot_user_id), sqlc.arg(runtime), sqlc.arg(model_provider), sqlc.arg(model_id), sqlc.arg(reasoning), sqlc.arg(fast_mode), sqlc.arg(updated_at), sqlc.arg(expires_at))
+ON CONFLICT (workspace_id, channel_id, direct_conversation_id, bot_user_id)
+DO UPDATE SET runtime = excluded.runtime, model_provider = excluded.model_provider, model_id = excluded.model_id, reasoning = excluded.reasoning, fast_mode = excluded.fast_mode, updated_at = excluded.updated_at, expires_at = excluded.expires_at;
+
+-- name: GetBotRuntimeStatus :one
+SELECT * FROM bot_runtime_statuses
+WHERE workspace_id = sqlc.arg(workspace_id) AND channel_id = sqlc.arg(channel_id) AND direct_conversation_id = sqlc.arg(direct_conversation_id) AND bot_user_id = sqlc.arg(bot_user_id);
+
+-- name: ListBotRuntimeStatuses :many
+SELECT * FROM bot_runtime_statuses
+WHERE workspace_id = sqlc.arg(workspace_id) AND channel_id = sqlc.arg(channel_id) AND direct_conversation_id = sqlc.arg(direct_conversation_id)
+ORDER BY bot_user_id;
+
 -- name: GetOutputBot :one
 SELECT u.id FROM users u
 JOIN workspace_members wm ON wm.user_id = u.id
