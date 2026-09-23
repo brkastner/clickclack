@@ -884,7 +884,7 @@ function createApplicationMenu() {
     {
       label: "File",
       submenu: [
-        { label: "Quick Compose", accelerator: "CmdOrCtrl+Shift+K", click: quickCompose },
+        { label: "Quick Compose", accelerator: "CmdOrCtrl+N", click: quickCompose },
         ...(process.platform === "darwin"
           ? []
           : [
@@ -966,7 +966,7 @@ function updateTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Open ClickClack", click: showMainWindow },
-      { label: "Quick Compose", accelerator: "CmdOrCtrl+Shift+K", click: quickCompose },
+      { label: "Quick Compose", accelerator: "CmdOrCtrl+N", click: quickCompose },
       { type: "separator" },
       { enabled: false, label },
       { label: "Settings…", click: createSettingsWindow },
@@ -994,8 +994,9 @@ function setUnreadCount(next: number) {
   updateTrayMenu();
 }
 
+// Raises the window and focuses the composer. The terminal stays open: quick
+// compose is for jumping to chat while a command runs, not for putting it away.
 function quickCompose() {
-  terminalSurface?.hide();
   showMainWindow();
   applicationView?.webContents.focus();
   applicationView?.webContents.send("desktop:quick-compose");

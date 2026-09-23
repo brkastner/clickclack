@@ -83,12 +83,11 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.isComposing || event.keyCode === 229) return;
-    const emacsNext = event.ctrlKey && !event.metaKey && event.key === "n";
-    const emacsPrevious = event.ctrlKey && !event.metaKey && event.key === "p";
-    if (event.key === "ArrowDown" || emacsNext) {
+    // No Ctrl+N/Ctrl+P aliases: Electron binds Ctrl+N to quick compose.
+    if (event.key === "ArrowDown") {
       event.preventDefault();
       move(1);
-    } else if (event.key === "ArrowUp" || emacsPrevious) {
+    } else if (event.key === "ArrowUp") {
       event.preventDefault();
       move(-1);
     } else if (event.key === "PageDown") {

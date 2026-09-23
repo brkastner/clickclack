@@ -19,8 +19,8 @@ adds operating-system behavior around the existing web app and API.
   overlay, and the tray menu reflect aggregate channel and DM unread counts.
 - **Background presence.** Closing the window can keep the realtime connection
   alive in the tray so notifications still arrive. This behavior is configurable.
-- **Quick compose.** `Cmd/Ctrl+Shift+K` raises ClickClack and focuses the active
-  channel, DM, or thread composer.
+- **Quick compose.** `Cmd/Ctrl+N` raises ClickClack and focuses the active
+  channel, DM, or thread composer. An open terminal stays open.
 - **Deep links.** `clickclack://app/<workspace>/<target>` opens routed workspace,
   channel, DM, and thread URLs in the desktop client.
 - **Native downloads and text editing.** Completed downloads reveal themselves
@@ -165,10 +165,10 @@ or an IDE framework.
   terminal `webContents` focus happens first so main can bound and queue keyboard
   input during renderer startup, then replay it after xterm owns focus. Closing
   restores application focus without terminating the shell.
-- `Cmd/Ctrl+J` or the native View menu toggles the terminal. Quick Compose hides
-  it and focuses the application. Reload, force reload, and zoom menu actions
-  always target the
-  application view.
+- `Cmd/Ctrl+J` or the native View menu toggles the terminal. Quick Compose
+  (`Cmd/Ctrl+N`) leaves the terminal open and moves focus to the application
+  composer, so `Ctrl+N` doesn't reach the shell as next-history. Reload, force
+  reload, and zoom menu actions always target the application view.
 - Terminal copy and paste stay in the local view. Windows and Linux use
   `Ctrl+Shift+C/V`; macOS uses `Cmd+C/V`. Plain `Ctrl+C` remains PTY input.
   Clipboard text and PTY input are bounded.

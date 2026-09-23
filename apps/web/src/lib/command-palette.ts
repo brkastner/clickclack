@@ -273,8 +273,8 @@ export type ShortcutEvent = {
 };
 
 /**
- * Ctrl+K everywhere, and Cmd+K on macOS. Shift is left alone because Electron
- * binds Ctrl+Shift+K to quick compose.
+ * Ctrl+K everywhere, and Cmd+K on macOS. Chords with Shift or Alt are left for
+ * other shortcuts.
  */
 export function isPaletteShortcut(event: ShortcutEvent, mac: boolean): boolean {
   if (event.isComposing || event.altKey || event.shiftKey) return false;

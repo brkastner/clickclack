@@ -149,11 +149,24 @@ test("uses native sibling views and targets application-only menu actions", () =
   assert.match(main, /applicationView\?\.webContents\.reloadIgnoringCache\(\)/u);
   assert.match(main, /accelerator: "CmdOrCtrl\+J"/u);
   assert.match(main, /desktop:terminal-toggle/u);
-  assert.match(
-    main,
-    /terminalSurface\?\.hide\(\);[\s\S]*applicationView\?\.webContents\.focus\(\)/u,
-  );
+  assert.match(main, /terminalSurface\?\.toggle\(\)/u);
   assert.match(main, /window\.on\("closed", \(\) => \{[\s\S]*surface\.dispose\(\)/u);
+});
+
+test("quick compose is Ctrl+N and focuses the composer without closing the terminal", () => {
+  const main = readSource("./main.ts");
+  const quickComposeItems = main.match(/accelerator: "[^"]+", click: quickCompose/gu) ?? [];
+  // Application menu and tray menu.
+  assert.equal(quickComposeItems.length, 2);
+  for (const item of quickComposeItems) assert.match(item, /"CmdOrCtrl\+N"/u);
+
+  const body = main.match(/function quickCompose\(\) \{([\s\S]*?)\n\}/u)?.[1] ?? "";
+  assert.ok(body, "quickCompose should exist");
+  assert.doesNotMatch(body, /terminalSurface/u, "quick compose must leave the terminal as it is");
+  assert.match(
+    body,
+    /showMainWindow\(\);[\s\S]*applicationView\?\.webContents\.focus\(\);[\s\S]*desktop:quick-compose/u,
+  );
 });
 
 test("builds and packages a locked-down local terminal document", () => {
