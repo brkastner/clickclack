@@ -50,6 +50,7 @@
   }: Props = $props();
 
   let moveMenuChannelID = $state("");
+  let moveMenuGroupKey = $state("");
   let moveAnnouncement = $state("");
   let moveMenuElement = $state<HTMLDivElement>();
   let moveMenuTrigger: HTMLElement | undefined;
@@ -173,19 +174,21 @@
     movePersona(moving, targetID, personaDropBefore);
   }
 
-  async function toggleMoveMenu(channelID: string, trigger: HTMLElement) {
-    if (moveMenuChannelID === channelID) { moveMenuChannelID = ""; return; }
+  async function toggleMoveMenu(channelID: string, groupKey: string, trigger: HTMLElement) {
+    if (moveMenuChannelID === channelID && moveMenuGroupKey === groupKey) { moveMenuChannelID = ""; return; }
     moveMenuTrigger = trigger;
     moveMenuChannelID = channelID;
+    moveMenuGroupKey = groupKey;
     await tick();
     moveMenuElement?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }
 
-  async function openChannelContextMenu(event: MouseEvent, channel: Channel) {
+  async function openChannelContextMenu(event: MouseEvent, channel: Channel, groupKey: string) {
     if (variant !== "active") return;
     event.preventDefault();
     moveMenuTrigger = (event.target as HTMLElement | null)?.closest<HTMLElement>("a, button") ?? undefined;
     moveMenuChannelID = channel.id;
+    moveMenuGroupKey = groupKey;
     await tick();
     moveMenuElement?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }
@@ -253,15 +256,15 @@
   {@const unread = channel.unread_count || 0}
   {@const index = scope.findIndex((candidate) => candidate.id === channel.id)}
   {@const assignment = assignmentFor(channel)}
-  <div class="channel-row" class:subdued class:reorderable={expanded} class:menu-open={moveMenuChannelID === channel.id} role="listitem" class:drop-before={dropTargetID === channel.id && dropBefore} class:drop-after={dropTargetID === channel.id && !dropBefore}
+  <div class="channel-row" class:subdued class:reorderable={expanded} class:menu-open={moveMenuChannelID === channel.id && moveMenuGroupKey === groupKey} role="listitem" class:drop-before={dropTargetID === channel.id && dropBefore} class:drop-after={dropTargetID === channel.id && !dropBefore}
     onpointerenter={(event) => startNotepadHover(channel.id, event.currentTarget as HTMLElement)}
     onpointerleave={stopNotepadHover}
-    oncontextmenu={(event) => { stopNotepadHover(); void openChannelContextMenu(event, channel); }}
+    oncontextmenu={(event) => { stopNotepadHover(); void openChannelContextMenu(event, channel, groupKey); }}
     ondragover={(event) => { if (!draggedChannelID || draggedGroupKey !== groupKey || draggedChannelID === channel.id) return; event.preventDefault(); dropTargetID = channel.id; dropBefore = event.clientY < (event.currentTarget as HTMLElement).getBoundingClientRect().top + (event.currentTarget as HTMLElement).offsetHeight / 2; }}
     ondrop={(event) => { if (draggedGroupKey !== groupKey) return; event.preventDefault(); event.stopPropagation(); moveChannel(draggedChannelID, channel.id, dropBefore); draggedChannelID = ""; dropTargetID = ""; }}>
     {#if variant === "active"}
-      <button type="button" class="channel-drag-handle" draggable="true" aria-label={`Move #${channelDisplayTitle(channel)}`} aria-describedby={orderInstructionsID} title="Move channel" aria-haspopup="menu" aria-expanded={moveMenuChannelID === channel.id}
-        onclick={(event) => void toggleMoveMenu(channel.id, event.currentTarget)}
+      <button type="button" class="channel-drag-handle" draggable="true" aria-label={`Move #${channelDisplayTitle(channel)}`} aria-describedby={orderInstructionsID} title="Move channel" aria-haspopup="menu" aria-expanded={moveMenuChannelID === channel.id && moveMenuGroupKey === groupKey}
+        onclick={(event) => void toggleMoveMenu(channel.id, groupKey, event.currentTarget)}
         ondragstart={(event) => { draggedChannelID = channel.id; draggedGroupKey = groupKey; event.dataTransfer?.setData("text/plain", channel.id); }}
         ondragend={() => { draggedChannelID = ""; dropTargetID = ""; }}
         onkeydown={(event) => {
@@ -275,7 +278,7 @@
         }}>
         <span class="sr-only">Move channel</span>
       </button>
-      {#if moveMenuChannelID === channel.id}
+      {#if moveMenuChannelID === channel.id && moveMenuGroupKey === groupKey}
         <div class="channel-move-menu" role="menu" tabindex="-1" aria-label={`Move #${channelDisplayTitle(channel)}`} bind:this={moveMenuElement}
           onkeydown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); void closeMoveMenu(true); } }}>
           {#if assignment}
