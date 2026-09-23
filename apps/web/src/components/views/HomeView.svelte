@@ -68,7 +68,10 @@
   const dismissalStorageKey = $derived(
     `clickclack:home-dismissals:v1:${workspaceID}:${currentUserID || "anonymous"}`,
   );
-  const personaGroups = $derived(groups.filter((group) => group.persona));
+  const personaGroups = $derived(
+    [...new Map(groups.filter((group) => group.persona).map((group) => [group.id, group])).values()],
+  );
+  const activePersonaCount = $derived(new Set(groups.map((group) => group.id)).size);
   const visibleGroups = $derived(
     selectedPersonaID ? groups.filter((group) => group.id === selectedPersonaID) : groups,
   );
@@ -297,7 +300,7 @@
       <span class="home-view__slash" aria-hidden="true">/</span>
       <h1>recent activity</h1>
       <span class="home-view__status" aria-live="polite">
-        {refreshing && !loading ? "updating…" : `${groups.length} active ${groups.length === 1 ? "persona" : "personas"}`}
+        {refreshing && !loading ? "updating…" : `${activePersonaCount} active ${activePersonaCount === 1 ? "persona" : "personas"}`}
       </span>
     </div>
 
@@ -365,9 +368,8 @@
         </div>
       {:else}
         <ol class="home-personas" aria-label="Recent activity grouped by persona">
-          {#each visibleGroups as group (group.id)}
+          {#each visibleGroups as group (group.key)}
             {@const personaName = group.persona ? userDisplayLabel(group.persona) : "Unassigned"}
-            {@const visibleItems = group.items.slice(0, 4)}
             <li class="home-persona" class:is-unread={group.unreadCount > 0}>
               {#if group.persona}
                 <Avatar
@@ -404,7 +406,7 @@
               </header>
 
               <div class="home-persona__activity">
-                {#each visibleItems as item (item.id)}
+                {#each group.items as item (item.id)}
                   {@const active = peekItemID === item.id}
                   <article
                     class="home-activity"
@@ -444,11 +446,6 @@
                 {/each}
               </div>
 
-              {#if group.items.length > visibleItems.length}
-                <p class="home-persona__more">
-                  +{group.items.length - visibleItems.length} more recent {group.items.length - visibleItems.length === 1 ? "conversation" : "conversations"}
-                </p>
-              {/if}
             </li>
           {/each}
         </ol>

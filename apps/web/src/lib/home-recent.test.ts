@@ -123,6 +123,52 @@ describe("Home recent-message projection", () => {
     assert.equal(groups[0]?.working, true);
   });
 
+  it("repeats persona cards only for consecutive runs in newest-first order", () => {
+    const personaA = user("bot-a");
+    const personaB = user("bot-b");
+    const items = buildHomeRecentItems(
+      [
+        source("a-new", [message("m1", "2026-09-17T12:00:00Z", "new", personaA)]),
+        source("a-next", [message("m2", "2026-09-17T11:00:00Z", "next", personaA)]),
+        source("b", [message("m3", "2026-09-17T10:00:00Z", "b", personaB)]),
+        source("a-old", [message("m4", "2026-09-17T09:00:00Z", "old", personaA)]),
+      ],
+      [personaA, personaB],
+    );
+    const groups = buildHomePersonaGroups(items, new Set(["a-old"]));
+
+    assert.deepEqual(
+      groups.map((group) => group.id),
+      ["bot-a", "bot-b", "bot-a"],
+    );
+    assert.deepEqual(
+      groups.map((group) => group.items.map((item) => item.id)),
+      [["a-new", "a-next"], ["b"], ["a-old"]],
+    );
+    assert.equal(groups[0]?.working, false);
+    assert.equal(groups[2]?.working, true);
+    assert.equal(new Set(groups.map((group) => group.key)).size, 3);
+  });
+
+  it("does not drop older activity when recent items span more than twelve cards", () => {
+    const personaA = user("bot-a");
+    const personaB = user("bot-b");
+    const items = buildHomeRecentItems(
+      Array.from({ length: 14 }, (_, index) =>
+        source(`channel-${index}`, [
+          message(
+            `m-${index}`,
+            new Date(Date.UTC(2026, 8, 17, 12, -index)).toISOString(),
+            `row ${index}`,
+            index % 2 ? personaB : personaA,
+          ),
+        ]),
+      ),
+      [personaA, personaB],
+    );
+    assert.equal(buildHomePersonaGroups(items).length, 14);
+  });
+
   it("uses the message author persona before a deterministic assigned fallback", () => {
     const author = user("bot-z");
     const assignedA = user("bot-a");

@@ -19,6 +19,7 @@ export type HomeRecentItem = HomeRecentSource & {
 
 export type HomePersonaGroup = {
   id: string;
+  key: string;
   persona?: User;
   items: HomeRecentItem[];
   latestAt: string;
@@ -120,21 +121,21 @@ export function buildHomeRecentItems(
 export function buildHomePersonaGroups(
   items: HomeRecentItem[],
   workingConversationIDs: ReadonlySet<string> = new Set(),
-  limit = 12,
 ): HomePersonaGroup[] {
-  const groups = new Map<string, HomePersonaGroup>();
+  const groups: HomePersonaGroup[] = [];
 
   for (const item of items) {
     const id = item.persona?.id || `unassigned:${item.message.author_id || item.id}`;
-    const existing = groups.get(id);
-    if (existing) {
-      existing.items.push(item);
-      existing.unreadCount += item.unreadCount;
-      existing.working ||= workingConversationIDs.has(item.id);
+    const previous = groups.at(-1);
+    if (previous?.id === id) {
+      previous.items.push(item);
+      previous.unreadCount += item.unreadCount;
+      previous.working ||= workingConversationIDs.has(item.id);
       continue;
     }
-    groups.set(id, {
+    groups.push({
       id,
+      key: `${id}:${homeRecentItemKey(item)}`,
       persona: item.persona,
       items: [item],
       latestAt: item.message.created_at,
@@ -143,12 +144,7 @@ export function buildHomePersonaGroups(
     });
   }
 
-  return [...groups.values()]
-    .sort((a, b) => {
-      const time = Date.parse(b.latestAt) - Date.parse(a.latestAt);
-      return time || a.id.localeCompare(b.id);
-    })
-    .slice(0, limit);
+  return groups;
 }
 
 export function channelHomeSource(
