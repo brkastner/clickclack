@@ -94,6 +94,25 @@ test("Codex weekly-only primary is not mistaken for a short window", () => {
   );
   assert.equal(result.weekly?.used, 100);
   assert.equal(result.short, null);
+  assert.equal(result.resetsAvailable, null);
+  assert.equal(
+    parseQuota("Codex", { rate_limit_reset_credits: { available_count: 1 } }, now).resetsAvailable,
+    1,
+  );
+  assert.equal(
+    parseQuota("Codex", { rate_limit_reset_credits: { available_count: 0 } }, now).resetsAvailable,
+    0,
+  );
+  assert.equal(
+    parseQuota("Codex", { rate_limit_reset_credits: { available_count: -1 } }, now).resetsAvailable,
+    null,
+  );
+  assert.equal(
+    parseQuota("Codex", { rate_limit_reset_credits: { available_count: "1" } }, now)
+      .resetsAvailable,
+    null,
+  );
+  assert.equal(parseQuota("Claude", { seven_day: { utilization: 20 } }, now).resetsAvailable, null);
   assert.equal(
     parseQuota("Codex", { rate_limit: { primary_window: { used_percent: 3 } } }, now).weekly,
     null,
@@ -136,6 +155,7 @@ test("collector caches, keeps secrets out of output/history and reports stale au
                   reset_at: now / 1000 + 86400,
                 },
               },
+              rate_limit_reset_credits: { available_count: 1 },
               email: "private@example.com",
             })
           : "upstream secret error",
@@ -148,6 +168,7 @@ test("collector caches, keeps secrets out of output/history and reports stale au
     assert.deepEqual(a, b);
     assert.equal(calls, 1);
     assert.equal(a.accounts[0].weekly?.used, 30);
+    assert.equal(a.accounts[0].resetsAvailable, 1);
     assert.equal(a.accounts[0].burnPerDay, null);
     await collector.get();
     assert.equal(calls, 1);
@@ -166,6 +187,7 @@ test("collector caches, keeps secrets out of output/history and reports stale au
     assert.equal(failed.accounts[0].auth, "needs-login");
     assert.equal(failed.accounts[0].status, "stale");
     assert.equal(failed.accounts[0].weekly?.used, 30);
+    assert.equal(failed.accounts[0].resetsAvailable, 1);
     assert.equal(failed.accounts[0].updatedAt, now);
     assert.ok(!JSON.stringify(failed).includes("upstream secret error"));
   } finally {

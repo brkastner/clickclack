@@ -71,6 +71,7 @@
           {#if account.issue}<p class="stale-note">{account.issue}</p>{/if}
           <p class="forecast" class:at-risk={forecast.risk}>{forecast.risk ? "↗" : "↳"} {forecast.text}</p>
           {#if account.short}<p class="stale-note">{account.short.seconds ? `${account.short.seconds / 3600}h window` : "short window"}: {Math.round(100 - account.short.used)}% left{account.short.resetAt ? ` · reset in ${duration(account.short.resetAt - now)}` : ""}</p>{/if}
+          <p class="stale-note">manual resets: {account.resetsAvailable === null ? "not reported" : `${account.resetsAvailable} available${stale ? " (last reading)" : ""}`}</p>
         </summary>
         <div class="account-detail">
           <dl>

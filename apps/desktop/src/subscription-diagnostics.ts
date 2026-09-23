@@ -105,7 +105,7 @@ export function parseQuota(
   provider: "Claude" | "Codex",
   data: unknown,
   now: number,
-): { weekly: QuotaWindow | null; short: QuotaWindow | null } {
+): { weekly: QuotaWindow | null; short: QuotaWindow | null; resetsAvailable: number | null } {
   const value = object(data);
   function window(
     raw: unknown,
@@ -134,8 +134,10 @@ export function parseQuota(
     return {
       weekly: window(value.seven_day, true, 604800),
       short: window(value.five_hour, true, 18000),
+      resetsAvailable: null,
     };
   const bucket = object(value.rate_limit);
+  const resetCount = object(value.rate_limit_reset_credits).available_count;
   const windows = [
     window(bucket.primary_window, false),
     window(bucket.secondary_window, false),
@@ -144,6 +146,8 @@ export function parseQuota(
   return {
     weekly: windows.find((w) => w.seconds === 604800) ?? null,
     short: windows.find((w) => w.seconds !== null && w.seconds < 86400) ?? null,
+    resetsAvailable:
+      finite(resetCount) && Number.isSafeInteger(resetCount) && resetCount >= 0 ? resetCount : null,
   };
 }
 
@@ -294,6 +298,7 @@ export class SubscriptionDiagnostics {
       updatedAt: previous?.updatedAt ?? null,
       weekly: previous?.weekly ?? null,
       short: previous?.short ?? null,
+      resetsAvailable: previous?.resetsAvailable ?? null,
       burnPerDay: null,
       deltaPerDay: null,
     };

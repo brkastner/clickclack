@@ -13,6 +13,7 @@ export type SubscriptionAccount = {
   updatedAt: number | null;
   weekly: QuotaWindow | null;
   short: QuotaWindow | null;
+  resetsAvailable: number | null;
   burnPerDay: number | null;
   deltaPerDay: number | null;
 };
