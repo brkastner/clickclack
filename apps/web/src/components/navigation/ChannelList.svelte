@@ -253,7 +253,7 @@
   {@const unread = channel.unread_count || 0}
   {@const index = scope.findIndex((candidate) => candidate.id === channel.id)}
   {@const assignment = assignmentFor(channel)}
-  <div class="channel-row" class:subdued class:reorderable={expanded} role="listitem" class:drop-before={dropTargetID === channel.id && dropBefore} class:drop-after={dropTargetID === channel.id && !dropBefore}
+  <div class="channel-row" class:subdued class:reorderable={expanded} class:menu-open={moveMenuChannelID === channel.id} role="listitem" class:drop-before={dropTargetID === channel.id && dropBefore} class:drop-after={dropTargetID === channel.id && !dropBefore}
     onpointerenter={(event) => startNotepadHover(channel.id, event.currentTarget as HTMLElement)}
     onpointerleave={stopNotepadHover}
     oncontextmenu={(event) => { stopNotepadHover(); void openChannelContextMenu(event, channel); }}

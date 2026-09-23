@@ -1116,6 +1116,10 @@
   border-radius: var(--radius-sm);
 }
 
+.channel-row.menu-open {
+  z-index: 5;
+}
+
 .channel-row .nav-item {
   flex: 1;
   min-width: 0;
