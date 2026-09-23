@@ -68,7 +68,7 @@
   .bot-runtime-status {
     display: flex;
     min-width: 0;
-    max-width: min(280px, 34vw);
+    max-width: 100%;
     height: 40px;
     box-sizing: border-box;
     flex: 0 1 auto;
@@ -90,12 +90,24 @@
     text-overflow: ellipsis;
   }
 
+  .bot-runtime-status__value:first-child {
+    flex: 1 1 auto;
+    direction: rtl;
+    text-align: left;
+  }
+
+  .bot-runtime-status__value:not(:first-child) {
+    flex: none;
+  }
+
   .bot-runtime-status__separator {
+    flex: none;
     color: var(--muted-2);
     font-size: 9px;
   }
 
   .bot-runtime-status em {
+    flex: none;
     color: var(--accent);
     font-style: normal;
     font-weight: 600;

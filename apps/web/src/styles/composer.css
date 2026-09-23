@@ -1149,7 +1149,13 @@
 }
 
 .composer-actions {
+  min-width: 0;
   gap: 8px;
+}
+
+.composer-actions > .composer-voice-entry,
+.composer-actions > .send {
+  flex-shrink: 0;
 }
 
 .composer-tool {
