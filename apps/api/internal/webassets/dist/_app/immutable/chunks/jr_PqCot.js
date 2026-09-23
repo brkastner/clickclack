@@ -1,1 +1,0 @@
-import{Et as e,G as t,J as n,W as r,Y as i,it as a,tt as o}from"./DaPaBlc-.js";function s(s,c){var l=r,u=t,d=s();let f=e(d,e=>{var c=d!==s(),f,p=t,m=r;i(u),n(l);try{f=o(()=>{a(()=>{let t=s();c&&e(t)})})}finally{i(p),n(m)}return c=!0,f});return c?{set:c,update:e=>c(e(s())),subscribe:f.subscribe}:{subscribe:f.subscribe}}export{s as t};

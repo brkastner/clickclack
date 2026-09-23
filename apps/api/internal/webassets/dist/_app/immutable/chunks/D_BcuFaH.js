@@ -1,0 +1,1 @@
+import{G as e,J as t,W as n,Y as r,at as i,kt as a,nt as o}from"./BkY25Hs-.js";function s(s,c){var l=n,u=e,d=s();let f=a(d,a=>{var c=d!==s(),f,p=e,m=n;r(u),t(l);try{f=o(()=>{i(()=>{let e=s();c&&a(e)})})}finally{r(p),t(m)}return c=!0,f});return c?{set:c,update:e=>c(e(s())),subscribe:f.subscribe}:{subscribe:f.subscribe}}export{s as t};
