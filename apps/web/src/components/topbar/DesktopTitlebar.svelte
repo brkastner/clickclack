@@ -4,6 +4,7 @@
   import { desktop } from "../../lib/desktop";
   import type { ChannelNotificationPreference, Workspace } from "../../lib/types";
   import WorkspaceSwitcher from "../navigation/WorkspaceSwitcher.svelte";
+  import CommandPaletteButton from "../palette/CommandPaletteButton.svelte";
   import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
   import InterfaceScaleControl from "./InterfaceScaleControl.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
@@ -201,6 +202,7 @@
     </form>
 
     <div class="desktop-titlebar-actions" aria-label="Channel tools">
+      <CommandPaletteButton variant="pill" />
       <InterfaceScaleControl />
       <ThemeToggle />
       <AvatarSizeToggle />

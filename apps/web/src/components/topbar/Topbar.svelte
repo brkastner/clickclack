@@ -1,5 +1,6 @@
 <script lang="ts">
   import { dmTitle } from "../../lib/chat/people";
+  import CommandPaletteButton from "../palette/CommandPaletteButton.svelte";
   import { channelDisplayTitle, safeExternalChannelURL } from "../../lib/chat/channels";
   import type { Channel, ChannelNotificationPreference, DirectConversation } from "../../lib/types";
   import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
@@ -100,6 +101,7 @@
     <button type="submit" class="search-submit">Search</button>
   </form>
   <div class="topbar-actions" aria-label="Channel tools">
+    <CommandPaletteButton />
     <InterfaceScaleControl />
     <ThemeToggle />
     <AvatarSizeToggle />

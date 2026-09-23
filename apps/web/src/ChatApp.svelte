@@ -4,6 +4,15 @@
   import { consumeGalleryAttachments, retainGalleryAttachments } from "./lib/gallery-attachment-queue";
 
   import { afterNavigate, goto } from "$app/navigation";
+  import {
+    accountSettingsCommands,
+    channelCommands,
+    directCommands,
+    PALETTE_ICONS,
+    workspaceSettingsCommands,
+  } from "./lib/command-palette-commands";
+  import type { PaletteCommand } from "./lib/command-palette";
+  import { commandPalette, registerPaletteProvider } from "./lib/command-palette-state.svelte";
   import { onDestroy, onMount, tick, type Component } from "svelte";
   import { toStore } from "svelte/store";
   import {
@@ -769,6 +778,7 @@
     // that do not render chat; this only contributes chat's own layers to the
     // shared back-gesture stack.
     const releaseDismissLayer = registerDismissLayer(dismissChatLayer);
+    const releasePaletteProvider = registerPaletteProvider("chat", chatPaletteCommands);
     nativeShell = isNativeMobile();
     const stopNativeSignInStatus = onNativeSignInStatus((status) => {
       nativeAuthStatus = nativeSignInMessage(status);
@@ -782,6 +792,7 @@
       stopDesktopNavigate?.();
       stopDesktopQuickCompose?.();
       releaseDismissLayer();
+      releasePaletteProvider();
       stopNativeSignInStatus();
       stopSharedContent();
     };
@@ -3740,7 +3751,7 @@
   }
 
   function isModalOpen(): boolean {
-    return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || channelSettingsOpen || showCreateChannel || Boolean(renameChannelID) || showCreateDirect;
+    return commandPalette.open || pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || channelSettingsOpen || showCreateChannel || Boolean(renameChannelID) || showCreateDirect;
   }
 
   function activeComposerTarget(): ComposerInputElement | null {
@@ -5461,6 +5472,55 @@
       return;
     }
     sidebarCollapsed = !sidebarCollapsed;
+  }
+
+  function openAccountSettings(section: AccountSettingsSectionId) {
+    if (!user) return;
+    settingsModalSection = section;
+    settingsModalOpen = true;
+  }
+
+  /** Chat's contribution to the command palette, read each time it renders. */
+  function chatPaletteCommands(): PaletteCommand[] {
+    if (!selectedWorkspaceID || authRequired) return [];
+    const navigate = (targetID: string) => navigateToApp(selectedWorkspaceID, targetID);
+    const onConversation = !routeViewSlug;
+    const sidebarLabel = mobileNavViewport
+      ? mobileNavOpen ? "Close navigation" : "Open navigation"
+      : sidebarCollapsed ? "Show sidebar" : "Hide sidebar";
+    const actions: PaletteCommand[] = [
+      {
+        id: "action:new-channel",
+        label: "New channel",
+        group: "actions",
+        keywords: ["create channel"],
+        icon: PALETTE_ICONS.plus,
+        run: () => openCreateChannel(),
+      },
+      {
+        id: "action:new-direct",
+        label: "New direct message",
+        group: "actions",
+        keywords: ["dm", "message someone"],
+        icon: PALETTE_ICONS.message,
+        run: openCreateDirect,
+      },
+      {
+        id: "action:toggle-sidebar",
+        label: sidebarLabel,
+        group: "actions",
+        keywords: ["toggle sidebar", "navigation", "collapse"],
+        icon: PALETTE_ICONS.sidebar,
+        run: handleSidebarCollapse,
+      },
+    ];
+    return [
+      ...actions,
+      ...channelCommands(channels, (channel) => channel.id, onConversation && !selectedDirectID ? selectedChannelID : "", navigate),
+      ...directCommands(directConversations, user?.id ?? "", (conversation) => conversation.id, onConversation ? selectedDirectID : "", navigate),
+      ...workspaceSettingsCommands(routeWorkspaceIDFor(), selectedWorkspace?.role, window.location.pathname, (href) => goto(href)),
+      ...(user ? accountSettingsCommands(openAccountSettings) : []),
+    ];
   }
 </script>
 

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- added a command palette. `ctrl+k`, or `cmd+k` on macOS, opens it from anywhere in a workspace, including the composer and the settings pages, and a button in the desktop title bar and the mobile top bar opens it on touch devices. it jumps to channels, direct messages, home, the gallery, and settings, and runs actions such as creating a channel, starting a direct message, switching the theme, and toggling the sidebar. matching is fuzzy, recently run commands rank first, and the conversation you're already in drops to the bottom. on phones it opens as a sheet that ends above the soft keyboard and closes with the android back gesture. a cold load straight into settings lists channels but not direct messages until chat has loaded.
 - Kept sidebar context stable while work is moving: a collapsed Channels section
   puts its selected, unread, and currently working channels above the persona
   shelf, and the sidebar restores its per-workspace scroll position after an

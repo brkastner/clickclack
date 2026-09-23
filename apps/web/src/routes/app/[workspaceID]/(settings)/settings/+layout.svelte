@@ -7,8 +7,45 @@
     type WorkspaceSettingsSection,
   } from "$lib/settings";
   import { isWorkspaceManager } from "$lib/permissions";
+  import { onMount } from "svelte";
+  import { api } from "$lib/api";
+  import { channelCommands, workspaceSettingsCommands } from "$lib/command-palette-commands";
+  import { commandPalette, hasPaletteProvider, registerPaletteProvider } from "$lib/command-palette-state.svelte";
+  import type { Channel } from "$lib/types";
 
   let { data, children } = $props();
+
+  // Chat isn't mounted on settings pages, so after a cold load straight into
+  // settings the palette has no channel list. Fetch it the first time the
+  // palette opens here. Direct messages aren't listed until chat has loaded.
+  let fallbackChannels = $state<Channel[]>([]);
+  let fallbackChannelsRequested = false;
+
+  $effect(() => {
+    if (!commandPalette.open || fallbackChannelsRequested || hasPaletteProvider("chat")) return;
+    const id = workspace?.id;
+    if (!id) return;
+    fallbackChannelsRequested = true;
+    api<{ channels: Channel[] }>(`/api/workspaces/${encodeURIComponent(id)}/channels`)
+      .then((result) => (fallbackChannels = result.channels ?? []))
+      .catch(() => {
+        fallbackChannelsRequested = false;
+      });
+  });
+
+  onMount(() =>
+    registerPaletteProvider("settings", () => [
+      ...workspaceSettingsCommands(workspaceID, role, page.url.pathname, (href) => goto(href)),
+      ...(hasPaletteProvider("chat")
+        ? []
+        : channelCommands(
+            fallbackChannels,
+            (channel) => `/app/${encodeURIComponent(workspaceID)}/${encodeURIComponent(channel.route_id || channel.id)}`,
+            "",
+            (href) => goto(href),
+          )),
+    ]),
+  );
 
   const workspaceID = $derived(data.workspaceID);
   const workspace = $derived(data.workspace);
@@ -34,6 +71,8 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key !== "Escape") return;
+    // The command palette closes itself on Escape.
+    if (commandPalette.open) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
       return;
