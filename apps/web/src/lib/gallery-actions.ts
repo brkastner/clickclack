@@ -11,7 +11,13 @@ export type GalleryActionSchema = {
   preview?: string;
 };
 export type GalleryActionValues = Record<string, boolean | number | string | string[]>;
-export const galleryActionLimits = { actions: 32, fields: 16, choices: 100, label: 100 } as const;
+export const galleryActionLimits = {
+  actions: 32,
+  fields: 16,
+  choices: 100,
+  dynamicChoices: 500,
+  label: 100,
+} as const;
 const idPattern = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
 const mediaPattern = /^[a-z]+\/[a-z0-9.+-]+$/;
 const object = (v: unknown): Record<string, unknown> | undefined =>
@@ -31,8 +37,12 @@ const aligned = (v: number, min: number, step?: number) =>
 export function mediaTypeMatches(accepted: string, actual: string) {
   return accepted === actual;
 }
-function choices(raw: unknown, authorized: ReadonlySet<string>): GalleryActionChoice[] | undefined {
-  if (!Array.isArray(raw) || raw.length > 100) return;
+function choices(
+  raw: unknown,
+  authorized: ReadonlySet<string>,
+  limit = 100,
+): GalleryActionChoice[] | undefined {
+  if (!Array.isArray(raw) || raw.length > limit) return;
   const seen = new Set<string>();
   const out: GalleryActionChoice[] = [];
   for (const item of raw) {
@@ -100,7 +110,13 @@ export function validateGalleryActionSchema(
     } else if (f.kind === "select" || f.kind === "images") {
       if (!keys(f, [...base, "choices", ...(f.kind === "images" ? ["min", "max", "dynamic"] : [])]))
         return;
-      const list = choices(f.choices, authorized);
+      const list = choices(
+        f.choices,
+        authorized,
+        f.kind === "images" && f.dynamic === true
+          ? galleryActionLimits.dynamicChoices
+          : galleryActionLimits.choices,
+      );
       if (!list || (f.kind === "select" && !list.length)) return;
       if (
         f.kind === "images" &&

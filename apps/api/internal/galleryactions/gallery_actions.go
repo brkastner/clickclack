@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	ProtocolVersion = 1
-	MaxActions      = 32
-	MaxFields       = 16
-	MaxChoices      = 100
+	ProtocolVersion   = 1
+	MaxActions        = 32
+	MaxFields         = 16
+	MaxChoices        = 100
+	MaxDynamicChoices = 500
 )
 
 var actionID = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
@@ -117,7 +118,11 @@ func ValidateDescriptors(descriptors []Descriptor) error {
 			if f.Min != nil && f.Max != nil && *f.Min > *f.Max {
 				return fmt.Errorf("actions[%d].fields[%d]: invalid bounds", i, j)
 			}
-			if len(f.Choices) > MaxChoices || (f.Kind == "select" && len(f.Choices) == 0) {
+			limit := MaxChoices
+			if f.Kind == "images" && f.Dynamic {
+				limit = MaxDynamicChoices
+			}
+			if len(f.Choices) > limit || (f.Kind == "select" && len(f.Choices) == 0) {
 				return fmt.Errorf("actions[%d].fields[%d]: invalid choices", i, j)
 			}
 			choices := map[string]bool{}

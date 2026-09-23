@@ -2,6 +2,7 @@ package galleryactions
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -29,6 +30,21 @@ func TestValidateDescriptors(t *testing.T) {
 				t.Fatal("accepted unsafe descriptor")
 			}
 		})
+	}
+}
+func TestDynamicImageChoicesCanGrowPastOnePage(t *testing.T) {
+	d := valid()
+	choices := make([]Choice, 229)
+	for i := range choices {
+		choices[i] = Choice{ID: fmt.Sprintf("choice-%d", i), Label: "Reference"}
+	}
+	d[0].Fields = []Field{{ID: "references", Kind: "images", Label: "References", Min: ptr(0), Max: ptr(4), Dynamic: true, Choices: choices}}
+	if err := ValidateDescriptors(d); err != nil {
+		t.Fatal(err)
+	}
+	d[0].Fields[0].Dynamic = false
+	if err := ValidateDescriptors(d); err == nil {
+		t.Fatal("accepted too many static choices")
 	}
 }
 func TestValidateDescriptorsRejectsBoundariesAndInvalidFieldCombinations(t *testing.T) {
