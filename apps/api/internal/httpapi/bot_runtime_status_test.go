@@ -94,6 +94,22 @@ func TestBotRuntimeStatusAPI(t *testing.T) {
 			}
 			expectStatusAsUser(t, owner.ID, http.MethodGet, server.URL+"/api/channels/missing/bot-runtime-status", nil, http.StatusBadRequest)
 
+			otherWorkspace, err := st.CreateWorkspace(ctx, store.CreateWorkspaceInput{Name: "Other Runtime Workspace"}, owner.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			otherChannel, _, err := st.CreateChannel(ctx, store.CreateChannelInput{WorkspaceID: otherWorkspace.ID, UserID: owner.ID, Name: "other-runtime"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.AddWorkspaceMember(ctx, otherWorkspace.ID, bot.ID, store.WorkspaceRoleBot); err != nil {
+				t.Fatal(err)
+			}
+			otherEndpoint := server.URL + "/api/channels/" + otherChannel.ID + "/bot-runtime-status"
+			otherBody := map[string]any{"workspace_id": otherWorkspace.ID, "status": validBody["status"]}
+			expectStatusWithBearer(t, token.Token, http.MethodPut, otherEndpoint, strings.NewReader(encode(otherBody)), http.StatusForbidden)
+			expectStatusWithBearer(t, token.Token, http.MethodGet, otherEndpoint, nil, http.StatusForbidden)
+
 			dm, err := st.CreateDirectConversation(ctx, store.CreateDirectConversationInput{
 				WorkspaceID: ws.ID,
 				UserID:      owner.ID,

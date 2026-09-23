@@ -1796,11 +1796,17 @@ export interface components {
       reasoning: string;
       fast_mode: boolean | null;
     };
-    BotRuntimeStatus: components["schemas"]["BotRuntimeStatusSnapshot"] & {
+    BotRuntimeStatus: {
       workspace_id: string;
       channel_id?: string;
       direct_conversation_id?: string;
       bot_user_id: string;
+      /** @enum {string} */
+      runtime: "pi" | "openclaw";
+      model_provider: string;
+      model_id: string;
+      reasoning: string;
+      fast_mode: boolean | null;
       /** Format: date-time */
       updated_at: string;
       /** Format: date-time */

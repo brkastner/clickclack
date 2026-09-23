@@ -49,6 +49,10 @@ func (s *Server) publishBotRuntimeStatus(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	if err := act.requireWorkspace(body.WorkspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
 	var recipients []string
 	if dmID != "" {
 		dm, err := s.store.GetDirectConversation(r.Context(), dmID, act.user.ID)
@@ -107,6 +111,10 @@ func (s *Server) listBotRuntimeStatuses(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		workspaceID = dm.WorkspaceID
+	}
+	if err := act.requireWorkspace(workspaceID); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
 	}
 	statuses, err := s.store.ListBotRuntimeStatuses(r.Context(), workspaceID, channelID, dmID, act.user.ID)
 	writeResult(w, map[string]any{"statuses": statuses}, err)

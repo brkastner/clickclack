@@ -2933,33 +2933,56 @@ components:
           minLength: 1
           maxLength: 64
         fast_mode:
-          type: boolean
-          nullable: true
+          anyOf:
+          - type: boolean
+          - type: 'null'
     BotRuntimeStatus:
-      allOf:
-      - $ref: '#/components/schemas/BotRuntimeStatusSnapshot'
-      - type: object
-        additionalProperties: false
-        required:
-        - workspace_id
-        - bot_user_id
-        - updated_at
-        - expires_at
-        properties:
-          workspace_id:
-            type: string
-          channel_id:
-            type: string
-          direct_conversation_id:
-            type: string
-          bot_user_id:
-            type: string
-          updated_at:
-            type: string
-            format: date-time
-          expires_at:
-            type: string
-            format: date-time
+      type: object
+      additionalProperties: false
+      required:
+      - workspace_id
+      - bot_user_id
+      - runtime
+      - model_provider
+      - model_id
+      - reasoning
+      - fast_mode
+      - updated_at
+      - expires_at
+      properties:
+        workspace_id:
+          type: string
+        channel_id:
+          type: string
+        direct_conversation_id:
+          type: string
+        bot_user_id:
+          type: string
+        runtime:
+          type: string
+          enum: [pi, openclaw]
+        model_provider:
+          type: string
+          minLength: 1
+          maxLength: 128
+        model_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        reasoning:
+          type: string
+          minLength: 1
+          maxLength: 64
+        fast_mode:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+        updated_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
     PublishBotRuntimeStatusRequest:
       type: object
       additionalProperties: false
