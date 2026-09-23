@@ -5544,6 +5544,8 @@
       pinsAvailable={Boolean(selectedChannel)}
       channelSettingsAvailable={canManageSelectedChannel}
       {connected}
+      voiceStatus={voiceState.status}
+      navigationKey={`${selectedWorkspaceID}:${routeViewSlug}:${viewKey}:${selectedChannelID}:${selectedDirectID}`}
       platform={desktop.platform}
       {searchQuery}
       {sidebarCollapsed}

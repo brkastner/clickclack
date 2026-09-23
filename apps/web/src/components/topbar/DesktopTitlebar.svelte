@@ -7,6 +7,7 @@
   import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
   import InterfaceScaleControl from "./InterfaceScaleControl.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
+  import UsagePeek from "./UsagePeek.svelte";
 
   type Props = {
     channelNotifPreference?: ChannelNotificationPreference | null;
@@ -22,6 +23,8 @@
     runWaiting?: boolean;
     externalURL?: string;
     connected: boolean;
+    voiceStatus: string;
+    navigationKey: string;
     mobileNavigation: boolean;
     mobileNavOpen: boolean;
     platform: string;
@@ -68,6 +71,8 @@
     runWaiting = false,
     externalURL,
     connected,
+    voiceStatus,
+    navigationKey,
     mobileNavigation,
     mobileNavOpen,
     platform,
@@ -199,6 +204,7 @@
       <InterfaceScaleControl />
       <ThemeToggle />
       <AvatarSizeToggle />
+      <UsagePeek {connected} {voiceStatus} {navigationKey} />
       {#if runAvailable}
         <button
           type="button"
