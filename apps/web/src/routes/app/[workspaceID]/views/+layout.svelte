@@ -13,7 +13,8 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (activeSlug === "home" || event.key !== "Escape") return;
+    if (activeSlug === "home" || event.key !== "Escape" || event.defaultPrevented) return;
+    if (document.querySelector('dialog[open], [aria-modal="true"]')) return;
     const target = event.target as HTMLElement | null;
     if (
       target &&

@@ -5280,6 +5280,9 @@
     if (event.defaultPrevented) return;
     if (handleVoiceKeyboardShortcut(event)) return;
     if (event.key === "Escape") {
+      // Native dialogs handle Escape through their cancel event. This capture
+      // handler runs first, so don't jump to chat while one is open.
+      if (document.querySelector('dialog[open]')) return;
       if (
         event.target instanceof Element &&
         event.target.closest("[data-handles-escape]")

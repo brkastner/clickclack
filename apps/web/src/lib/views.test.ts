@@ -72,6 +72,22 @@ test("the view shell lists the registry rather than hardcoding entries", () => {
   assert.match(layout, /#each WORKSPACE_VIEWS as view/u);
   assert.match(layout, /workspaceViewsPath\(workspaceID, view\.slug\)/u);
   assert.match(layout, /Escape/u, "Escape should return to chat, matching workspace settings");
+  assert.match(
+    layout,
+    /event\.defaultPrevented/u,
+    "Escape already handled by an overlay must not leave the view",
+  );
+  assert.match(
+    layout,
+    /dialog\[open\]/u,
+    "Escape must dismiss an open action dialog without leaving Gallery",
+  );
+  const chatApp = readSource("../ChatApp.svelte");
+  assert.match(
+    chatApp,
+    /event\.key === "Escape"[\s\S]*?dialog\[open\][\s\S]*?jumpToLiveChat\(\)/u,
+    "the capture-phase chat shortcut must leave native dialogs to their own Escape handler",
+  );
 });
 
 test("mobile full-screen routes and overlays respect every safe-area edge", () => {
