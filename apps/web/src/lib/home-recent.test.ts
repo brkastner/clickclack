@@ -137,10 +137,14 @@ describe("Home recent-message projection", () => {
     );
     const groups = buildHomePersonaGroups(items, new Set(["a-old"]));
 
-    assert.deepEqual(groups.map((group) => group.id), ["bot-a", "bot-b", "bot-a"]);
-    assert.deepEqual(groups.map((group) => group.items.map((item) => item.id)), [
-      ["a-new", "a-next"], ["b"], ["a-old"],
-    ]);
+    assert.deepEqual(
+      groups.map((group) => group.id),
+      ["bot-a", "bot-b", "bot-a"],
+    );
+    assert.deepEqual(
+      groups.map((group) => group.items.map((item) => item.id)),
+      [["a-new", "a-next"], ["b"], ["a-old"]],
+    );
     assert.equal(groups[0]?.working, false);
     assert.equal(groups[2]?.working, true);
     assert.equal(new Set(groups.map((group) => group.key)).size, 3);
@@ -151,7 +155,14 @@ describe("Home recent-message projection", () => {
     const personaB = user("bot-b");
     const items = buildHomeRecentItems(
       Array.from({ length: 14 }, (_, index) =>
-        source(`channel-${index}`, [message(`m-${index}`, new Date(Date.UTC(2026, 8, 17, 12, -index)).toISOString(), `row ${index}`, index % 2 ? personaB : personaA)]),
+        source(`channel-${index}`, [
+          message(
+            `m-${index}`,
+            new Date(Date.UTC(2026, 8, 17, 12, -index)).toISOString(),
+            `row ${index}`,
+            index % 2 ? personaB : personaA,
+          ),
+        ]),
       ),
       [personaA, personaB],
     );
