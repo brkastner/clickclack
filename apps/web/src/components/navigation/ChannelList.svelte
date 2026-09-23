@@ -37,6 +37,7 @@
     onPinPersonaChannel: (personaID: string, channelID: string) => void;
     canManageChannels: boolean;
     onArchiveChannel: (channelID: string) => void;
+    onRenameChannel: (channelID: string) => void;
     onNotepadHover?: (channelID: string, anchor: HTMLElement | null) => void;
   };
 
@@ -45,7 +46,7 @@
     workspaceID, currentUserID, onSelectDirect, onStartDirect, workingConversationIDs, hrefForChannel, onSelectChannel,
     personaExpansion = {}, onTogglePersona,
     onCreateChannel, onToggle, onReorder, onReorderProfiles, onAssignProfile, personaChannelPins,
-    onPinPersonaChannel, canManageChannels, onArchiveChannel, onNotepadHover,
+    onPinPersonaChannel, canManageChannels, onArchiveChannel, onRenameChannel, onNotepadHover,
   }: Props = $props();
 
   let moveMenuChannelID = $state("");
@@ -286,7 +287,10 @@
             <button type="button" role="menuitem" disabled={assignmentFor(channel)?.bot_user_id === profile.bot_user_id} onclick={() => assign(channel, profile)}>Move under {profile.display_name}</button>
           {/each}
           {#if assignmentFor(channel)}<button type="button" role="menuitem" onclick={() => assign(channel, null)}>Remove bot group</button>{/if}
-          {#if canManageChannels}<button type="button" role="menuitem" onclick={() => { onArchiveChannel(channel.id); void closeMoveMenu(); }}>Archive channel</button>{/if}
+          {#if canManageChannels}
+            <button type="button" role="menuitem" onclick={() => { onRenameChannel(channel.id); void closeMoveMenu(); }}>Rename channel</button>
+            <button type="button" role="menuitem" onclick={() => { onArchiveChannel(channel.id); void closeMoveMenu(); }}>Archive channel</button>
+          {/if}
         </div>
       {/if}
     {/if}

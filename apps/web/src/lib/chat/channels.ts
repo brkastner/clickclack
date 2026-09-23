@@ -4,6 +4,13 @@ export function channelDisplayTitle(channel: Pick<Channel, "name" | "display_tit
   return channel.display_title?.trim() || channel.name;
 }
 
+export function channelTitleAvailable(channels: Pick<Channel, "id" | "name" | "display_title">[], channelID: string, title: string): boolean {
+  const normalized = title.trim().toLocaleLowerCase();
+  return Boolean(normalized) && !channels.some((channel) =>
+    channel.id !== channelID && channelDisplayTitle(channel).toLocaleLowerCase() === normalized,
+  );
+}
+
 export function safeExternalChannelURL(value?: string): string {
   const trimmed = value?.trim();
   if (!trimmed) return "";

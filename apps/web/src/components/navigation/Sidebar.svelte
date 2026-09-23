@@ -50,6 +50,7 @@
     onAssignChannelProfile: (channelID: string, profile: ChannelProfileShortcut | null) => void;
     canManageChannels: boolean;
     onArchiveChannel: (channelID: string) => void;
+    onRenameChannel: (channelID: string) => void;
     onSelectDirect: (conversationID: string) => void;
     onStartDirect: (memberID: string) => void;
     onCreateDirect: () => void;
@@ -95,6 +96,7 @@
     onAssignChannelProfile,
     canManageChannels,
     onArchiveChannel,
+    onRenameChannel,
     onSelectDirect,
     onStartDirect,
     onCreateDirect,
@@ -549,6 +551,7 @@
       onPinPersonaChannel={pinPersonaChannel}
       {canManageChannels}
       {onArchiveChannel}
+      {onRenameChannel}
       {onNotepadHover}
     />
 
@@ -592,6 +595,7 @@
       onPinPersonaChannel={pinPersonaChannel}
       {canManageChannels}
       {onArchiveChannel}
+      {onRenameChannel}
       {onNotepadHover}
     />
 

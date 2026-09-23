@@ -2067,6 +2067,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrSetupNonceConflict):
 		writeError(w, http.StatusConflict, err)
+	case errors.Is(err, store.ErrChannelTitleTaken):
+		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrAlreadyPinned):
 		writeError(w, http.StatusConflict, err)
 	case errors.Is(err, store.ErrPinnedMessageLimit):

@@ -92,7 +92,7 @@
   import { newNonce } from "./lib/chat/messages";
   import { MessageRequests, type AuthorUpdate } from "./lib/chat/messageRequests";
   import { mergeMessageUpdate, type MessageUpdate } from "./lib/chat/messageUpdates";
-  import { channelDisplayTitle } from "./lib/chat/channels";
+  import { channelDisplayTitle, channelTitleAvailable } from "./lib/chat/channels";
   import {
     redirectTypingToComposer,
     rememberTypeToFocusPointer,
@@ -122,6 +122,7 @@
   import { AGENT_PROGRESS_TTL_MS, type AgentProgressTurn } from "./components/messages/AgentProgress.svelte";
   import AgentResponding from "./components/messages/AgentResponding.svelte";
   import CreateChannelModal from "./components/navigation/CreateChannelModal.svelte";
+  import RenameChannelModal from "./components/navigation/RenameChannelModal.svelte";
   import CreateDirectModal from "./components/navigation/CreateDirectModal.svelte";
   import Sidebar from "./components/navigation/Sidebar.svelte";
   import ProfilePane from "./components/profile/ProfilePane.svelte";
@@ -352,6 +353,10 @@
   let channelSettingsSaving = false;
   let channelSettingsError = "";
   let showCreateChannel = false;
+  let renameChannelID = "";
+  let renameChannelName = "";
+  let renameChannelPending = false;
+  let renameChannelError = "";
   let createChannelProfile: ChannelProfileShortcut | null = null;
   let showCreateDirect = false;
   let browserNotificationsEnabled = false;
@@ -1941,6 +1946,37 @@
       data.member,
     ];
     await loadChannels(false, false, false);
+  }
+
+  function openRenameChannel(channelID: string) {
+    const channel = channels.find((candidate) => candidate.id === channelID);
+    if (!channel || !canManageChannels) return;
+    renameChannelID = channelID;
+    renameChannelName = channelDisplayTitle(channel);
+    renameChannelError = "";
+  }
+
+  async function renameChannel() {
+    const channelID = renameChannelID;
+    const workspaceID = selectedWorkspaceID;
+    const title = renameChannelName.trim();
+    if (renameChannelPending || !channelTitleAvailable(channels, channelID, title) || !workspaceID) return;
+    renameChannelPending = true;
+    renameChannelError = "";
+    try {
+      const data = await api<{ channel: Channel }>(`/api/channels/${channelID}`, {
+        method: "PATCH",
+        body: JSON.stringify({ display_title: title }),
+      });
+      if (workspaceID === selectedWorkspaceID) {
+        channels = channels.map((channel) => channel.id === channelID ? data.channel : channel);
+      }
+      if (renameChannelID === channelID) renameChannelID = "";
+    } catch (error) {
+      if (renameChannelID === channelID) renameChannelError = readableAPIError(error, "Could not rename channel");
+    } finally {
+      renameChannelPending = false;
+    }
   }
 
   function openCreateChannel(profile: ChannelProfileShortcut | null = null) {
@@ -3704,7 +3740,7 @@
   }
 
   function isModalOpen(): boolean {
-    return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || channelSettingsOpen || showCreateChannel || showCreateDirect;
+    return pendingDeleteMessage !== null || selectedImage !== null || settingsModalOpen || channelSettingsOpen || showCreateChannel || Boolean(renameChannelID) || showCreateDirect;
   }
 
   function activeComposerTarget(): ComposerInputElement | null {
@@ -5313,7 +5349,8 @@
 
   function closeModal() {
     if (pendingDeleteMessage && deletingMessageIDs.has(pendingDeleteMessage.id)) return;
-    if (channelSettingsSaving) return;
+    if (channelSettingsSaving || renameChannelPending) return;
+    renameChannelID = "";
     resetCreateActions();
     pendingDeleteMessage = null;
     deleteMessageError = "";
@@ -5640,6 +5677,7 @@
       void assignChannelProfile(channelID, profile)}
     {canManageChannels}
     onArchiveChannel={(channelID) => void setChannelArchived(channelID, true)}
+    onRenameChannel={openRenameChannel}
     onSelectDirect={(conversationID) => void selectDirectConversation(conversationID)}
     onStartDirect={(memberID) => void startDirectWithUser(memberID)}
     onCreateDirect={openCreateDirect}
@@ -6105,6 +6143,17 @@
     onChannelName={(value) => (channelName = value)}
     onClose={closeModal}
     onCreate={() => void createChannel()}
+  />
+{/if}
+{#if renameChannelID}
+  <RenameChannelModal
+    name={renameChannelName}
+    pending={renameChannelPending}
+    error={renameChannelError}
+    available={channelTitleAvailable(channels, renameChannelID, renameChannelName)}
+    onName={(value) => { renameChannelName = value; renameChannelError = ""; }}
+    onClose={closeModal}
+    onRename={() => void renameChannel()}
   />
 {/if}
 {#if showCreateDirect}

@@ -242,6 +242,18 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	displayTitle := ch.DisplayTitle
 	if input.DisplayTitle != nil {
 		displayTitle = normalizedDisplayTitle(*input.DisplayTitle)
+		candidate := name
+		if displayTitle != nil {
+			candidate = *displayTitle
+		}
+		var taken bool
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM channels WHERE workspace_id = ? AND id != ? AND LOWER(COALESCE(NULLIF(TRIM(display_title), ''), name)) = LOWER(?))`, ch.WorkspaceID, ch.ID, candidate).Scan(&taken)
+		if err != nil {
+			return store.Channel{}, store.Event{}, err
+		}
+		if taken {
+			return store.Channel{}, store.Event{}, store.ErrChannelTitleTaken
+		}
 	}
 	kind := strings.TrimSpace(input.Kind)
 	if kind == "" {

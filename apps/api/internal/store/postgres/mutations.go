@@ -244,6 +244,16 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	}
 	defer tx.Rollback()
 	qtx := s.q.WithTx(tx)
+	// Serialize title checks across channels in the workspace before reading the channel.
+	if input.DisplayTitle != nil {
+		var workspaceID string
+		if err := tx.QueryRowContext(ctx, `SELECT workspace_id FROM channels WHERE id = $1`, input.ChannelID).Scan(&workspaceID); err != nil {
+			return store.Channel{}, store.Event{}, err
+		}
+		if err := qtx.LockWorkspaceForUpdate(ctx, workspaceID); err != nil {
+			return store.Channel{}, store.Event{}, err
+		}
+	}
 	// Merge omitted fields only after earlier channel writers have committed.
 	if _, err := qtx.LockChannelForUpdate(ctx, input.ChannelID); err != nil {
 		return store.Channel{}, store.Event{}, err
@@ -269,6 +279,18 @@ func (s *Store) UpdateChannel(ctx context.Context, input store.UpdateChannelInpu
 	displayTitle := ch.DisplayTitle
 	if input.DisplayTitle != nil {
 		displayTitle = normalizedDisplayTitle(*input.DisplayTitle)
+		candidate := name
+		if displayTitle != nil {
+			candidate = *displayTitle
+		}
+		var taken bool
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM channels WHERE workspace_id = $1 AND id != $2 AND LOWER(COALESCE(NULLIF(TRIM(display_title), ''), name)) = LOWER($3))`, ch.WorkspaceID, ch.ID, candidate).Scan(&taken)
+		if err != nil {
+			return store.Channel{}, store.Event{}, err
+		}
+		if taken {
+			return store.Channel{}, store.Event{}, store.ErrChannelTitleTaken
+		}
 	}
 	kind := strings.TrimSpace(input.Kind)
 	if kind == "" {
