@@ -54,6 +54,20 @@ type BotCommand struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type BotRuntimeStatus struct {
+	WorkspaceID          string        `json:"workspace_id"`
+	ChannelID            string        `json:"channel_id"`
+	DirectConversationID string        `json:"direct_conversation_id"`
+	BotUserID            string        `json:"bot_user_id"`
+	Runtime              string        `json:"runtime"`
+	ModelProvider        string        `json:"model_provider"`
+	ModelID              string        `json:"model_id"`
+	Reasoning            string        `json:"reasoning"`
+	FastMode             sql.NullInt64 `json:"fast_mode"`
+	UpdatedAt            string        `json:"updated_at"`
+	ExpiresAt            string        `json:"expires_at"`
+}
+
 type BotSetupCode struct {
 	ID             string         `json:"id"`
 	CodeHash       string         `json:"code_hash"`

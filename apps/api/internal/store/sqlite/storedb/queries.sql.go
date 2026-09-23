@@ -1161,6 +1161,42 @@ func (q *Queries) GetAvailableTopic(ctx context.Context, topicID string) (GetAva
 	return i, err
 }
 
+const getBotRuntimeStatus = `-- name: GetBotRuntimeStatus :one
+SELECT workspace_id, channel_id, direct_conversation_id, bot_user_id, runtime, model_provider, model_id, reasoning, fast_mode, updated_at, expires_at FROM bot_runtime_statuses
+WHERE workspace_id = ?1 AND channel_id = ?2 AND direct_conversation_id = ?3 AND bot_user_id = ?4
+`
+
+type GetBotRuntimeStatusParams struct {
+	WorkspaceID          string `json:"workspace_id"`
+	ChannelID            string `json:"channel_id"`
+	DirectConversationID string `json:"direct_conversation_id"`
+	BotUserID            string `json:"bot_user_id"`
+}
+
+func (q *Queries) GetBotRuntimeStatus(ctx context.Context, arg GetBotRuntimeStatusParams) (BotRuntimeStatus, error) {
+	row := q.db.QueryRowContext(ctx, getBotRuntimeStatus,
+		arg.WorkspaceID,
+		arg.ChannelID,
+		arg.DirectConversationID,
+		arg.BotUserID,
+	)
+	var i BotRuntimeStatus
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.ChannelID,
+		&i.DirectConversationID,
+		&i.BotUserID,
+		&i.Runtime,
+		&i.ModelProvider,
+		&i.ModelID,
+		&i.Reasoning,
+		&i.FastMode,
+		&i.UpdatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getBotSetupCodeByHash = `-- name: GetBotSetupCodeByHash :one
 SELECT id, code_hash, workspace_id, bot_user_id, token_name, scopes_json, defaults_json, created_by, created_at, expires_at, claimed_at, claimed_token_id
 FROM bot_setup_codes
@@ -3551,6 +3587,53 @@ func (q *Queries) ListBotHistoricalWorkspaces(ctx context.Context, botUserID str
 			return nil, err
 		}
 		items = append(items, workspace_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBotRuntimeStatuses = `-- name: ListBotRuntimeStatuses :many
+SELECT workspace_id, channel_id, direct_conversation_id, bot_user_id, runtime, model_provider, model_id, reasoning, fast_mode, updated_at, expires_at FROM bot_runtime_statuses
+WHERE workspace_id = ?1 AND channel_id = ?2 AND direct_conversation_id = ?3
+ORDER BY bot_user_id
+`
+
+type ListBotRuntimeStatusesParams struct {
+	WorkspaceID          string `json:"workspace_id"`
+	ChannelID            string `json:"channel_id"`
+	DirectConversationID string `json:"direct_conversation_id"`
+}
+
+func (q *Queries) ListBotRuntimeStatuses(ctx context.Context, arg ListBotRuntimeStatusesParams) ([]BotRuntimeStatus, error) {
+	rows, err := q.db.QueryContext(ctx, listBotRuntimeStatuses, arg.WorkspaceID, arg.ChannelID, arg.DirectConversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BotRuntimeStatus
+	for rows.Next() {
+		var i BotRuntimeStatus
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.ChannelID,
+			&i.DirectConversationID,
+			&i.BotUserID,
+			&i.Runtime,
+			&i.ModelProvider,
+			&i.ModelID,
+			&i.Reasoning,
+			&i.FastMode,
+			&i.UpdatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -6812,6 +6895,44 @@ func (q *Queries) UploadHasOtherDirectMessageAttachment(ctx context.Context, arg
 	var has_other_direct_message_attachment bool
 	err := row.Scan(&has_other_direct_message_attachment)
 	return has_other_direct_message_attachment, err
+}
+
+const upsertBotRuntimeStatus = `-- name: UpsertBotRuntimeStatus :exec
+INSERT INTO bot_runtime_statuses (workspace_id, channel_id, direct_conversation_id, bot_user_id, runtime, model_provider, model_id, reasoning, fast_mode, updated_at, expires_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+ON CONFLICT (workspace_id, channel_id, direct_conversation_id, bot_user_id)
+DO UPDATE SET runtime = excluded.runtime, model_provider = excluded.model_provider, model_id = excluded.model_id, reasoning = excluded.reasoning, fast_mode = excluded.fast_mode, updated_at = excluded.updated_at, expires_at = excluded.expires_at
+`
+
+type UpsertBotRuntimeStatusParams struct {
+	WorkspaceID          string        `json:"workspace_id"`
+	ChannelID            string        `json:"channel_id"`
+	DirectConversationID string        `json:"direct_conversation_id"`
+	BotUserID            string        `json:"bot_user_id"`
+	Runtime              string        `json:"runtime"`
+	ModelProvider        string        `json:"model_provider"`
+	ModelID              string        `json:"model_id"`
+	Reasoning            string        `json:"reasoning"`
+	FastMode             sql.NullInt64 `json:"fast_mode"`
+	UpdatedAt            string        `json:"updated_at"`
+	ExpiresAt            string        `json:"expires_at"`
+}
+
+func (q *Queries) UpsertBotRuntimeStatus(ctx context.Context, arg UpsertBotRuntimeStatusParams) error {
+	_, err := q.db.ExecContext(ctx, upsertBotRuntimeStatus,
+		arg.WorkspaceID,
+		arg.ChannelID,
+		arg.DirectConversationID,
+		arg.BotUserID,
+		arg.Runtime,
+		arg.ModelProvider,
+		arg.ModelID,
+		arg.Reasoning,
+		arg.FastMode,
+		arg.UpdatedAt,
+		arg.ExpiresAt,
+	)
+	return err
 }
 
 const upsertChannelBotAssignment = `-- name: UpsertChannelBotAssignment :one

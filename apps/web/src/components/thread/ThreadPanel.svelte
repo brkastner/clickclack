@@ -20,7 +20,7 @@
   import { recentAutoLoadAttachmentIDs } from "../../lib/media-loading";
   import { uploadURL } from "../../lib/uploads";
   import type { ReactionController } from "../../lib/reactions.svelte";
-  import type { Channel, Message, ThreadState, Upload, User } from "../../lib/types";
+  import type { BotRuntimeStatusTarget, Channel, Message, ThreadState, Upload, User } from "../../lib/types";
   import ChatComposer from "../composer/ChatComposer.svelte";
   import MediaAttachment from "../MediaAttachment.svelte";
   import MessageEditor from "../messages/MessageEditor.svelte";
@@ -43,6 +43,7 @@
     reactionController: ReactionController;
     reactionsDisabled?: boolean;
     mentionPeople?: User[];
+    runtimeStatusTarget?: BotRuntimeStatusTarget;
     mentionAttentionUserID?: string;
     agentResponding?: boolean;
     respondingAgentNames?: string[];
@@ -90,6 +91,7 @@
     reactionController,
     reactionsDisabled = false,
     mentionPeople = [],
+    runtimeStatusTarget,
     mentionAttentionUserID,
     agentResponding = false,
     respondingAgentNames = [],
@@ -986,6 +988,7 @@
   disabled={replyDisabled || replySending}
   replyTarget={replyTarget}
   {mentionPeople}
+  {runtimeStatusTarget}
   onValue={onReplyBody}
   onSubmit={onSubmitReply}
   onKeydown={onReplyKeydown}

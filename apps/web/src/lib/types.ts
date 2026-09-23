@@ -1,3 +1,23 @@
+export type BotRuntimeStatus = {
+  workspace_id: string;
+  channel_id?: string;
+  direct_conversation_id?: string;
+  bot_user_id: string;
+  runtime: "pi" | "openclaw";
+  model_provider: string;
+  model_id: string;
+  reasoning: string;
+  fast_mode: boolean | null;
+  updated_at: string;
+  expires_at: string;
+};
+
+export type BotRuntimeStatusTarget = {
+  kind: "channels" | "dms";
+  id: string;
+  botUserID: string;
+};
+
 export type User = {
   id: string;
   kind: "human" | "bot";

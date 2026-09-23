@@ -1318,6 +1318,8 @@ type Store interface {
 	GalleryStore
 	PublishWorkflowSnapshot(ctx context.Context, input PublishWorkflowSnapshotInput) (WorkflowRunRecord, bool, error)
 	ListWorkflowSnapshots(ctx context.Context, workspaceID, channelID, directConversationID, requesterID, cursor string, limit int) (WorkflowRunPage, error)
+	PublishBotRuntimeStatus(ctx context.Context, input PublishBotRuntimeStatusInput) (BotRuntimeStatus, error)
+	ListBotRuntimeStatuses(ctx context.Context, workspaceID, channelID, directConversationID, requesterID string) ([]BotRuntimeStatus, error)
 	Close() error
 	Ping(ctx context.Context) error
 	Migrate(ctx context.Context) error

@@ -21,13 +21,14 @@
     type EmojiEntry,
   } from "../../lib/emoji";
   import { gifLibrary } from "../../lib/gifs";
-  import type { Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
+  import type { BotRuntimeStatusTarget, Message, SlashCommand, User, WorkspaceBotCommand } from "../../lib/types";
   import type { VoiceInputStatus, VoiceStatus } from "../../lib/voice";
   import VoiceVisualizer from "../VoiceVisualizer.svelte";
   import ComposerToolbar from "./ComposerToolbar.svelte";
   import EmojiPickerPanel from "./EmojiPickerPanel.svelte";
   import GifPicker from "./GifPicker.svelte";
   import ReplyPreview from "./ReplyPreview.svelte";
+  import BotRuntimeStatus from "./BotRuntimeStatus.svelte";
 
   type ActiveToken = {
     kind: "slash" | "mention" | "emoji";
@@ -125,6 +126,7 @@
     slashCommands?: SlashCommand[];
     botCommands?: WorkspaceBotCommand[];
     mentionPeople?: User[];
+    runtimeStatusTarget?: BotRuntimeStatusTarget;
     disabled?: boolean;
     submitDisabled?: boolean;
     onValue: (value: string) => void;
@@ -170,6 +172,7 @@
     slashCommands = [],
     botCommands = [],
     mentionPeople = [],
+    runtimeStatusTarget,
     disabled = false,
     submitDisabled = false,
     onValue,
@@ -1073,6 +1076,10 @@
       <div class="composer-voice-inline-error" role="status">{voiceError || "Voice connection failed"}</div>
     {/if}
     </div>
+
+    {#if runtimeStatusTarget}
+      <BotRuntimeStatus target={runtimeStatusTarget} />
+    {/if}
 
     {#if showVoice}
       <section

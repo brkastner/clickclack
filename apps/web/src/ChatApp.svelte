@@ -159,7 +159,7 @@
     type DecisionSound,
   } from "./lib/decisionSound";
   import { listAllWorkspaceMembers, memberLoadErrorMessage } from "./lib/workspace-members";
-  import type { Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
+  import type { BotRuntimeStatusTarget, Channel, ChannelNotificationPreference, DirectConversation, MemberModeration, Message, MessagePage, RealtimeEvent, RouteTarget, SearchResult, SearchScope, SearchSession, SlashCommand, ThreadPage, Topic, Upload, User, Workspace, WorkspaceBotCommand } from "./lib/types";
   import { dispatchSlashCommand, findRegisteredCommand, listBotCommands, splitSlashDraft } from "./lib/commands";
   import { findUniqueBotCommand } from "./lib/bot-command-routing";
   import {
@@ -497,6 +497,9 @@
       ? lookupUser(selectedChannel.bot_assignments[0]?.bot_user_id || "")
       : undefined;
   $: activePortraitSource = activePortraitUser?.avatar_url || activePortraitUser?.avatar_url_light || "";
+  $: runtimeStatusTarget = activePortraitUser?.kind === "bot" && (selectedDirectID || selectedChannelID)
+    ? ({ kind: selectedDirectID ? "dms" : "channels", id: selectedDirectID || selectedChannelID, botUserID: activePortraitUser.id } satisfies BotRuntimeStatusTarget)
+    : undefined;
   $: selectedDirectWritable = selectedDirect?.can_send ?? true;
   $: activeConversationKey = selectedDirectID || selectedChannelID || "";
   $: syncVoiceDestinationWithFocus(
@@ -5887,6 +5890,7 @@
       slashCommands={selectedChannelID ? slashCommands : []}
       botCommands={composerBotCommands}
       {mentionPeople}
+      {runtimeStatusTarget}
       onValue={(value) => {
         const previous = messageBody;
         messageBody = value;
@@ -5984,6 +5988,7 @@
         replyError={$threadView.draft?.error || $threadView.error}
         replySending={$threadView.draft?.sending ?? false}
         {mentionPeople}
+        {runtimeStatusTarget}
         {mentionAttentionUserID}
         {agentResponding}
         respondingAgentNames={activeRespondingAgentNames}
