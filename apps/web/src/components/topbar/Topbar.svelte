@@ -6,6 +6,7 @@
   import AvatarSizeToggle from "./AvatarSizeToggle.svelte";
   import InterfaceScaleControl from "./InterfaceScaleControl.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
+  import TopbarMenu from "./TopbarMenu.svelte";
 
   type Props = {
     selectedDirect?: DirectConversation;
@@ -64,6 +65,19 @@
   }: Props = $props();
 
   const externalHref = $derived(selectedDirect ? undefined : safeExternalChannelURL(selectedChannel?.external_url));
+
+  // Matches the breakpoint where the sidebar becomes a drawer. Below it the
+  // tools fold into one menu so the conversation title keeps its width.
+  const COMPACT_MEDIA_QUERY = "(max-width: 820px)";
+  let compact = $state(typeof window !== "undefined" && window.matchMedia(COMPACT_MEDIA_QUERY).matches);
+
+  $effect(() => {
+    const media = window.matchMedia(COMPACT_MEDIA_QUERY);
+    const sync = () => (compact = media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  });
 </script>
 
 <header class="topbar">
@@ -102,6 +116,25 @@
   </form>
   <div class="topbar-actions" aria-label="Channel tools">
     <CommandPaletteButton />
+    {#if compact}
+      <TopbarMenu
+        {threadOpen}
+        pinsAvailable={Boolean(selectedChannel)}
+        {pinnedOpen}
+        {runAvailable}
+        {runOpen}
+        {runWaiting}
+        {externalHref}
+        {channelNotifPreference}
+        {channelNotifSaving}
+        channelSettingsAvailable={Boolean(selectedChannel) && channelSettingsAvailable}
+        {onToggleThread}
+        {onPinnedItems}
+        {onToggleRun}
+        {onOpenChannelSettings}
+        {onToggleChannelNotifications}
+      />
+    {:else}
     <InterfaceScaleControl />
     <ThemeToggle />
     <AvatarSizeToggle />
@@ -183,6 +216,7 @@
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.38.35.73.6 1 .3.3.68.48 1.1.5h.1v4h-.1A1.7 1.7 0 0 0 19.4 15Z" />
         </svg>
       </button>
+    {/if}
     {/if}
   </div>
 </header>

@@ -632,6 +632,13 @@
   z-index: 1;
 }
 
+/* Flex items take z-index without being positioned, so the top bar is its own
+   stacking context. Lift it over the message list so its tools menu isn't
+   painted under the conversation. */
+.timeline > .topbar {
+  z-index: 2;
+}
+
 .chat-portrait-bleed {
   position: absolute;
   z-index: 0;
