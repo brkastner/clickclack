@@ -118,6 +118,55 @@ test("keeps concurrent pending sends and agent turns independent", () => {
   });
 });
 
+test("pi progress joins a pending send by source message ID and clears it on final reply", () => {
+  let work = reduceConversationAgentWork(undefined, {
+    type: "pending.start", sendID: "nonce", agentIDs: ["bot-a"],
+  });
+  work = reduceConversationAgentWork(work, {
+    type: "pending.replace", sendID: "nonce", replacementID: "msg-source",
+  });
+  work = reduceConversationAgentWork(work, {
+    type: "progress.start",
+    turn: { ...turn("bot-a", "turn-pi"), sourceMessageID: "msg-source" },
+  });
+  assert.equal(work?.pendingSends[0]?.correlated, true);
+  work = reduceConversationAgentWork(work, {
+    type: "response.final", turnID: "turn-pi", userID: "bot-a",
+  });
+  assert.deepEqual(work, {
+    pendingSends: [], turns: [], completedTurns: [{ turnID: "turn-pi", userID: "bot-a", sourceMessageID: "msg-source" }],
+  });
+  work = reduceConversationAgentWork(work, {
+    type: "progress.start",
+    turn: { ...turn("bot-a", "turn-pi"), sourceMessageID: "msg-source" },
+  });
+  assert.equal(work?.turns.length, 0);
+});
+
+test("pi clear joins a pending send when it arrives before the final reply", () => {
+  let work = reduceConversationAgentWork(undefined, {
+    type: "pending.start", sendID: "nonce", agentIDs: ["bot-a"],
+  });
+  const progress = { ...turn("bot-a", "turn-pi"), sourceMessageID: "msg-source" };
+  work = reduceConversationAgentWork(work, { type: "progress.start", turn: progress });
+  work = reduceConversationAgentWork(work, {
+    type: "pending.replace", sendID: "nonce", replacementID: "msg-source",
+  });
+  assert.equal(work?.pendingSends[0]?.correlated, true);
+  work = reduceConversationAgentWork(work, { type: "progress.stop", turn: progress });
+  assert.equal(work?.pendingSends.length, 0);
+  assert.equal(work?.turns.length, 0);
+  work = reduceConversationAgentWork(undefined, {
+    type: "pending.start", sendID: "nonce", agentIDs: ["bot-a"],
+  });
+  work = reduceConversationAgentWork(work, { type: "progress.start", turn: progress });
+  work = reduceConversationAgentWork(work, { type: "progress.stop", turn: progress });
+  work = reduceConversationAgentWork(work, {
+    type: "pending.replace", sendID: "nonce", replacementID: "msg-source",
+  });
+  assert.equal(work?.pendingSends.length, 0);
+});
+
 test("unrelated progress and bot responses do not consume a correlated pending send", () => {
   let work = reduceConversationAgentWork(undefined, {
     type: "pending.start",

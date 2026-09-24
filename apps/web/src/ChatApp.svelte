@@ -2882,6 +2882,7 @@
     if (progressSignal) {
       const turnID = typeof payload.turn_id === "string" ? payload.turn_id : "";
       const userID = typeof payload.user_id === "string" ? payload.user_id : "";
+      const sourceMessageID = typeof payload.source_message_id === "string" ? payload.source_message_id : "";
       if (!turnID) return;
       updateConversationAgentWork(conversationID, {
         type: progressSignal === "start" ? "progress.start" : "progress.stop",
@@ -2889,6 +2890,7 @@
           key: agentProgressTurnKey(userID, turnID),
           turnID,
           userID,
+          ...(sourceMessageID ? { sourceMessageID } : {}),
         },
       });
       return;

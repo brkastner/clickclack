@@ -6,6 +6,7 @@ export type AgentWorkingTurn = {
   key: string;
   turnID: string;
   userID: string;
+  sourceMessageID?: string;
 };
 
 export type PendingAgentSend = {
@@ -17,6 +18,7 @@ export type PendingAgentSend = {
 export type CompletedAgentTurn = {
   turnID: string;
   userID: string;
+  sourceMessageID?: string;
 };
 
 export type ConversationAgentWork = {
@@ -86,7 +88,8 @@ export function reduceConversationAgentWork(
     case "pending.replace": {
       const pending = pendingSends.find((send) => send.id === action.sendID);
       const completed = completedTurns.find(
-        (turn) => turn.turnID === action.replacementID && pending?.agentIDs.includes(turn.userID),
+        (turn) => (turn.turnID === action.replacementID || turn.sourceMessageID === action.replacementID)
+          && pending?.agentIDs.includes(turn.userID),
       );
       if (completed) {
         removePendingSend(pendingSends, action.sendID);
@@ -95,7 +98,8 @@ export function reduceConversationAgentWork(
       if (pending) {
         pending.id = action.replacementID;
         pending.correlated ||= turns.some(
-          (turn) => turn.turnID === action.replacementID && pending.agentIDs.includes(turn.userID),
+          (turn) => (turn.turnID === action.replacementID || turn.sourceMessageID === action.replacementID)
+            && pending.agentIDs.includes(turn.userID),
         );
       }
       break;
@@ -106,7 +110,7 @@ export function reduceConversationAgentWork(
     case "progress.start": {
       if (hasCompletedTurn(completedTurns, action.turn.turnID, action.turn.userID)) break;
       if (!turns.some((turn) => turn.key === action.turn.key)) turns.push(action.turn);
-      const pending = pendingSends.find((send) => send.id === action.turn.turnID);
+      const pending = pendingSends.find((send) => send.id === (action.turn.sourceMessageID || action.turn.turnID));
       if (pending && pending.agentIDs.includes(action.turn.userID)) pending.correlated = true;
       break;
     }
@@ -116,12 +120,12 @@ export function reduceConversationAgentWork(
       // that exact correlation exists; an unrelated bot turn must not clear it.
       const removedPending = removePendingSendForAgent(
         pendingSends,
-        action.turn.turnID,
+        action.turn.sourceMessageID || action.turn.turnID,
         action.turn.userID,
       );
       const expectedRace = pendingSends.some((send) => send.agentIDs.includes(action.turn.userID));
       if (removedTurn || removedPending || expectedRace) {
-        rememberCompletedTurn(completedTurns, action.turn.turnID, action.turn.userID);
+        rememberCompletedTurn(completedTurns, action.turn.turnID, action.turn.userID, action.turn.sourceMessageID);
       }
       break;
     }
@@ -130,12 +134,12 @@ export function reduceConversationAgentWork(
         const removedTurn = removeResponseTurn(turns, action.userID, action.turnID);
         const removedPending = removePendingSendForAgent(
           pendingSends,
-          action.turnID,
+          removedTurn?.sourceMessageID || action.turnID,
           action.userID,
         );
         const expectedRace = pendingSends.some((send) => send.agentIDs.includes(action.userID));
         if (removedTurn || removedPending || expectedRace) {
-          rememberCompletedTurn(completedTurns, action.turnID, action.userID);
+          rememberCompletedTurn(completedTurns, action.turnID, action.userID, removedTurn?.sourceMessageID);
         }
         break;
       }
@@ -208,8 +212,9 @@ function rememberCompletedTurn(
   completedTurns: CompletedAgentTurn[],
   turnID: string,
   userID: string,
+  sourceMessageID?: string,
 ): void {
   if (!turnID || !userID || hasCompletedTurn(completedTurns, turnID, userID)) return;
-  completedTurns.push({ turnID, userID });
+  completedTurns.push({ turnID, userID, ...(sourceMessageID ? { sourceMessageID } : {}) });
   if (completedTurns.length > 32) completedTurns.splice(0, completedTurns.length - 32);
 }

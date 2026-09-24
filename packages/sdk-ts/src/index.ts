@@ -176,6 +176,7 @@ export type AgentProgressLine = {
 
 export type AgentProgressPayload = {
   turn_id: string;
+  source_message_id?: string;
   seq?: number;
 } & (
   | { op: "append" | "update" | "finalize"; line: AgentProgressLine }
