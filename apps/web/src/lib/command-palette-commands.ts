@@ -28,6 +28,12 @@ export const PALETTE_ICONS = {
   ],
   moon: ["M21 12.8A8.5 8.5 0 1 1 11.2 3 6.7 6.7 0 0 0 21 12.8Z"],
   user: ["M20 21a8 8 0 0 0-16 0", "M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"],
+  tangent: [
+    "M6 3v12",
+    "M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+    "M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+    "M18 9a9 9 0 0 1-9 9",
+  ],
 };
 
 /** Home, gallery, and any other registered workspace view. */

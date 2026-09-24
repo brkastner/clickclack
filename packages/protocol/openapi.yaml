@@ -1920,6 +1920,104 @@ paths:
       responses:
         "202":
           description: Ephemeral event accepted
+  /api/tangents:
+    post:
+      operationId: createTangent
+      summary: Open a private tangent with a bot from a shared channel or DM
+      description: Human sessions only. The bot must be able to see the source conversation. Tangents live in server memory and are never persisted, replayed, or delivered to event subscriptions. Opening a fourth tangent closes the owner's oldest one with reason replaced.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTangentRequest"
+      responses:
+        "201":
+          description: Tangent opened; tangent.opened is sent to the owner and the bot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tangent]
+                properties:
+                  tangent: { $ref: "#/components/schemas/Tangent" }
+  /api/tangents/{tangent_id}:
+    parameters:
+      - name: tangent_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getTangent
+      summary: Read a tangent the caller owns or answers
+      responses:
+        "200":
+          description: Tangent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tangent]
+                properties:
+                  tangent: { $ref: "#/components/schemas/Tangent" }
+        "404":
+          description: Unknown, closed, or not a participant
+    delete:
+      operationId: deleteTangent
+      summary: Close a tangent (owner only); tangent.closed is sent with reason closed
+      responses:
+        "204":
+          description: Closed
+  /api/tangents/{tangent_id}/messages:
+    parameters:
+      - name: tangent_id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postTangentMessage
+      summary: Send a tangent message as its owner or bot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 32000 }
+                client_id: { type: string, maxLength: 128 }
+      responses:
+        "201":
+          description: Sent; tangent.message is sent to the owner and the bot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { $ref: "#/components/schemas/TangentMessage" }
+  /api/tangents/{tangent_id}/activity:
+    parameters:
+      - name: tangent_id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: postTangentActivity
+      summary: Report whether the tangent's bot is working on a reply (bot only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state: { type: string, enum: [working, idle] }
+      responses:
+        "202":
+          description: tangent.activity sent to the owner
   /api/realtime/ws:
     get:
       operationId: realtimeWebSocket
@@ -5434,6 +5532,36 @@ components:
           type: array
           items:
             type: string
+    CreateTangentRequest:
+      type: object
+      required: [workspace_id, bot_user_id]
+      description: Exactly one of channel_id or direct_conversation_id.
+      properties:
+        workspace_id: { type: string }
+        channel_id: { type: string }
+        direct_conversation_id: { type: string }
+        bot_user_id: { type: string }
+    Tangent:
+      type: object
+      required: [id, workspace_id, owner_user_id, bot_user_id, created_at]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        channel_id: { type: string }
+        direct_conversation_id: { type: string }
+        owner_user_id: { type: string }
+        bot_user_id: { type: string }
+        created_at: { type: string, format: date-time }
+    TangentMessage:
+      type: object
+      required: [id, tangent_id, author_id, body, created_at]
+      properties:
+        id: { type: string }
+        tangent_id: { type: string }
+        author_id: { type: string }
+        body: { type: string }
+        client_id: { type: string }
+        created_at: { type: string, format: date-time }
     EphemeralEventRequest:
       type: object
       required: [workspace_id, type]

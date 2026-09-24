@@ -35,6 +35,7 @@ type Server struct {
 	avatarPacksDir             string
 	store                      store.Store
 	hub                        *realtime.Hub
+	tangents                   *tangentRegistry
 	uploadDir                  string
 	uploadStorage              uploadstore.Store
 	githubOAuth                GitHubOAuthConfig
@@ -164,6 +165,7 @@ func New(st store.Store, hub *realtime.Hub, options Options) *Server {
 		store:                      st,
 		avatarPacksDir:             options.AvatarPacksDir,
 		hub:                        hub,
+		tangents:                   newTangentRegistry(),
 		uploadDir:                  options.UploadDir,
 		uploadStorage:              uploadStorage,
 		githubOAuth:                options.GitHubOAuth.withDefaults(),
@@ -312,6 +314,11 @@ func (s *Server) Handler() http.Handler {
 		r.Put("/dms/{conversation_id}/bot-runtime-status", s.publishBotRuntimeStatus)
 		r.Get("/dms/{conversation_id}/bot-runtime-status", s.listBotRuntimeStatuses)
 		r.Get("/realtime/ws", s.websocket)
+		r.Post("/tangents", s.createTangent)
+		r.Get("/tangents/{tangent_id}", s.getTangent)
+		r.Delete("/tangents/{tangent_id}", s.deleteTangent)
+		r.Post("/tangents/{tangent_id}/messages", s.postTangentMessage)
+		r.Post("/tangents/{tangent_id}/activity", s.postTangentActivity)
 		r.Get("/channels/{channel_id}/notepad", s.getNotepad)
 		r.Put("/channels/{channel_id}/notepad", s.publishNotepad)
 		r.Get("/dms/{conversation_id}/notepad", s.getNotepad)
