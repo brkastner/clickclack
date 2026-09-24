@@ -68,7 +68,7 @@ test("ctrl+l opens a private tangent that survives hiding, asks before replacing
   await page.getByLabel("Message body").click();
   const firstID = await openedTangentID(page, () => page.keyboard.press("Control+l"));
   await expect(panel).toBeVisible();
-  await expect(panel.getByText(`Tangent with ${fixture.bot.display_name}`)).toBeVisible();
+  await expect(panel.getByText(`tangent with ${fixture.bot.display_name}`)).toBeVisible();
   await expect(tangentInput).toBeFocused();
 
   await tangentInput.fill("side question: what's the plan?");
@@ -101,9 +101,9 @@ test("ctrl+l opens a private tangent that survives hiding, asks before replacing
   await page.keyboard.press("Control+k");
   await page.getByRole("combobox", { name: "Search commands" }).fill("new tangent");
   await page.keyboard.press("Enter");
-  await expect(panel.getByText("You already have a tangent")).toBeVisible();
-  await panel.getByRole("button", { name: "Open existing" }).click();
-  await expect(panel.getByText("You already have a tangent")).toHaveCount(0);
+  await expect(panel.getByText("you already have a tangent")).toBeVisible();
+  await panel.getByRole("button", { name: "open existing" }).click();
+  await expect(panel.getByText("you already have a tangent")).toHaveCount(0);
   await expect(panel.locator(".tangent-message")).toHaveCount(2);
 
   // Replace starts a fresh fork and closes the old one on the server.
@@ -111,7 +111,7 @@ test("ctrl+l opens a private tangent that survives hiding, asks before replacing
   await page.getByRole("combobox", { name: "Search commands" }).fill("new tangent");
   await page.keyboard.press("Enter");
   const secondID = await openedTangentID(page, () =>
-    panel.getByRole("button", { name: "Replace" }).click(),
+    panel.getByRole("button", { name: "replace" }).click(),
   );
   expect(secondID).not.toBe(firstID);
   await expect(panel.locator(".tangent-message")).toHaveCount(0);

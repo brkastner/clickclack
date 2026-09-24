@@ -19,8 +19,9 @@
     handleTangentEvent,
     hideTangent,
     requestTangent,
+    selectTangentContext,
     showTangent,
-    tangentChat,
+    tangentStore,
   } from "./lib/tangent-state.svelte";
   import { onDestroy, onMount, tick, type Component } from "svelte";
   import { toStore } from "svelte/store";
@@ -243,8 +244,14 @@
   const thread = new ThreadController(() => `${selectedWorkspaceID}:${currentConversationKey()}`, reconcileThread);
   // This legacy component consumes the rune-based owner through a reactive store.
   // The tangent lives in module state; mirror the bits chat layout reacts to.
-  const tangentVisible = toStore(() => tangentChat.visible);
-  const tangentWorkspaceID = toStore(() => tangentChat.tangent?.workspace_id ?? "");
+  const tangentVisible = toStore(() => tangentStore.current.visible);
+  // Resolve identity from route state, never from a previously opened panel.
+  $: selectTangentContext(
+    selectedWorkspaceID && !routeViewSlug && (selectedDirectID || selectedChannelID)
+      ? { workspaceID: selectedWorkspaceID, directID: selectedDirectID || undefined, channelID: selectedChannelID || undefined, label: "" }
+      : null,
+    user?.id ?? "",
+  );
   const threadView = toStore(() => ({
     root: thread.root,
     selection: thread.selection,
@@ -728,8 +735,6 @@
   // Primitive keys keep unrelated thread-store updates from firing this.
   $: tangentYieldKey = [$threadView.selection?.messageID ?? "", pinnedPanelOpen, runPanelOpen, selectedProfile?.id ?? "", selectedArtifact?.id ?? ""].join("|");
   $: if (tangentYieldKey.replace(/[|]|false/g, "")) yieldTangentToPane(tangentYieldKey);
-  // A tangent belongs to one workspace; leaving it discards the tangent.
-  $: if ($tangentWorkspaceID && selectedWorkspaceID && $tangentWorkspaceID !== selectedWorkspaceID) discardTangent();
   // The shared right-pane slot renders search or thread, never both.
   $: searchPaneVisible = searchSession !== null && !searchThreadDetour;
   $: if (selectedArtifact && artifactConversationKey && artifactConversationKey !== activeConversationKey) {
@@ -1164,6 +1169,7 @@
   }
 
   onDestroy(() => {
+    hideTangent();
     persistComposerDraft();
     galleryRevealSerial++;
     galleryRevealAbort?.abort();
@@ -3843,7 +3849,7 @@
     const query = searchQuery.trim();
     // Search takes over the shared right pane: retire whatever occupies it.
     if (selectedArtifact) closeArtifactViewer();
-    if (tangentChat.visible) hideTangent();
+    if (tangentStore.current.visible) hideTangent();
     if (thread.root || selectedProfile) closeSidePanel();
     const requestID = ++searchRequestID;
     const scope: SearchScope =
@@ -5166,7 +5172,7 @@
       closeArtifactViewer();
       return;
     }
-    if (tangentChat.visible) {
+    if (tangentStore.current.visible) {
       hideTangent();
       return;
     }
@@ -5425,7 +5431,7 @@
       closeMobileNav();
       return true;
     }
-    if (tangentChat.visible) {
+    if (tangentStore.current.visible) {
       hideTangent();
       return true;
     }
@@ -5549,7 +5555,7 @@
       showTangent();
       return;
     }
-    const preferred = candidates.find((bot) => bot.id === tangentChat.bot?.id);
+    const preferred = candidates.find((bot) => bot.id === tangentStore.current.bot?.id);
     if (candidates.length > 1 && !preferred) {
       openCommandPalette();
       return;
@@ -5558,8 +5564,10 @@
   }
 
   function toggleTangentFromShortcut() {
-    if (tangentChat.tangent || tangentChat.opening || tangentChat.pendingStart) {
-      if (tangentChat.visible) {
+    // Synchronize immediately too, in case a key arrives before the reactive flush.
+    selectTangentContext(currentTangentSource(), user?.id ?? "");
+    if (tangentStore.current.tangent || tangentStore.current.opening || tangentStore.current.pendingStart) {
+      if (tangentStore.current.visible) {
         hideTangent();
         focusActiveComposer();
       } else {
@@ -5567,7 +5575,7 @@
       }
       return;
     }
-    if (tangentChat.visible) {
+    if (tangentStore.current.visible) {
       hideTangent();
       focusActiveComposer();
       return;
@@ -5576,7 +5584,7 @@
   }
 
   function yieldTangentToPane(_key: string) {
-    if (tangentChat.visible) hideTangent();
+    if (tangentStore.current.visible) hideTangent();
   }
 
   function tangentPaletteCommands(): PaletteCommand[] {
@@ -5590,23 +5598,23 @@
         label: candidates.length > 1 ? `New tangent with ${name}` : "New tangent",
         group: "actions",
         keywords: ["tangent", "quick chat", "side question", "fork", "ask", name],
-        hint: index === 0 && !tangentChat.tangent ? "Ctrl+L" : undefined,
+        hint: index === 0 && !tangentStore.current.tangent ? "Ctrl+L" : undefined,
         icon: PALETTE_ICONS.tangent,
         run: () => {
           if (source) void requestTangent(source, bot);
         },
       });
     }
-    if (tangentChat.tangent) {
+    if (tangentStore.current.tangent) {
       commands.push(
         {
           id: "action:tangent-toggle",
-          label: tangentChat.visible ? "Hide tangent" : "Show tangent",
+          label: tangentStore.current.visible ? "Hide tangent" : "Show tangent",
           group: "actions",
           keywords: ["tangent", "quick chat", "side question", "panel"],
           hint: "Ctrl+L",
           icon: PALETTE_ICONS.tangent,
-          run: () => (tangentChat.visible ? hideTangent() : showTangent()),
+          run: () => (tangentStore.current.visible ? hideTangent() : showTangent()),
         },
         {
           id: "action:tangent-discard",
@@ -6308,8 +6316,9 @@
     {/if}
   </aside>
   {/if}
-  {#if tangentChat.tangent || tangentChat.visible || tangentChat.opening}
+  {#if tangentStore.current.tangent || tangentStore.current.visible || tangentStore.current.opening}
     <TangentPanel
+      currentUser={user}
       onStartNew={currentTangentCandidates().length > 0 ? () => startTangentFromHere(true) : undefined}
       onHidden={focusActiveComposer}
     />

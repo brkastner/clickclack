@@ -69,37 +69,52 @@
   list-style: none;
 }
 
-.tangent-message {
-  display: grid;
-  gap: 4px;
+/* Use the timeline's avatar/name/timestamp/body hierarchy. Only the gutter
+   shrinks for a side panel; colors, type and alignment come from messages.css. */
+:root .tangent-panel .tangent-message.message-group {
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 0;
   max-width: 100%;
 }
 
-.tangent-message.mine {
-  justify-items: end;
+:root .tangent-panel .tangent-message.message-group::after {
+  display: none;
 }
 
-.tangent-message__author {
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+:root .tangent-panel .tangent-message > .avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  position: static;
+  font-size: 18px;
+}
+
+:root .tangent-panel .tangent-message.is-self {
+  grid-template-columns: minmax(0, 1fr) 48px;
+}
+
+:root[data-user-align="left"] .tangent-panel .tangent-message.is-self {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+:root[data-other-align="right"] .tangent-panel .tangent-message.is-agent {
+  grid-template-columns: minmax(0, 1fr) 48px;
+}
+
+.tangent-panel .tangent-message .group-body > header {
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .tangent-message__body {
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
-  font-size: 14px;
-  line-height: 1.5;
 }
 
-.tangent-message.mine .tangent-message__body {
-  padding: 8px 12px;
-  border-radius: 12px 12px 4px 12px;
-  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+.tangent-panel .tangent-message .message-content {
+  max-width: 100%;
 }
 
 .tangent-message__body > :first-child {
@@ -124,7 +139,38 @@
 }
 
 .tangent-panel .agent-responding {
-  padding: 0;
+  padding: 8px 0 8px 60px;
+}
+
+.tangent-panel > header p {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tangent-panel > header strong {
+  font-size: 16px;
+}
+
+.tangent-panel__actions .ghost-action {
+  border-radius: 6px;
+}
+
+.tangent-panel__composer .tangent-send {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.tangent-panel__composer .tangent-send:enabled:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .tangent-panel__composer {
