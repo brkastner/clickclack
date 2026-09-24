@@ -5,6 +5,7 @@ import {
   accountSettingsCommands,
   channelCommands,
   directCommands,
+  renameChannelCommands,
   themeCommand,
   viewCommands,
   workspaceSettingsCommands,
@@ -51,6 +52,30 @@ test("channel commands skip archived channels and route through the caller", () 
   assert.deepEqual(commands[1]?.keywords, ["ops"]);
   void commands[1]?.run();
   assert.deepEqual(visited, ["/app/w/c3"]);
+});
+
+test("rename channel opens the current channel's existing rename flow", () => {
+  const renamed: string[] = [];
+  const [command] = renameChannelCommands(
+    channel("c3", "ops", { display_title: "operations" }),
+    true,
+    (id) => {
+      renamed.push(id);
+    },
+  );
+  assert.equal(command?.id, "action:rename-channel");
+  assert.equal(command?.label, "rename channel");
+  assert.equal(command?.hint, "#operations");
+  assert.ok(command?.keywords?.includes("ops"));
+  assert.ok(command?.keywords?.includes("operations"));
+  void command?.run();
+  assert.deepEqual(renamed, ["c3"]);
+});
+
+test("rename channel is absent without an active channel or manage permission", () => {
+  const open = () => assert.fail("must not open rename");
+  assert.deepEqual(renameChannelCommands(undefined, true, open), []);
+  assert.deepEqual(renameChannelCommands(channel("c1", "general"), false, open), []);
 });
 
 test("direct message commands are labelled by the other members", () => {

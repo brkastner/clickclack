@@ -118,6 +118,30 @@ export function channelCommands(
     });
 }
 
+export function renameChannelCommands(
+  channel: Channel | undefined,
+  canManageChannels: boolean,
+  openRename: (channelID: string) => void,
+): PaletteCommand[] {
+  if (!channel || !canManageChannels) return [];
+  return [
+    {
+      id: "action:rename-channel",
+      label: "rename channel",
+      group: "actions",
+      keywords: [
+        "edit channel name",
+        "change channel title",
+        channel.name,
+        channelDisplayTitle(channel),
+      ],
+      hint: `#${channelDisplayTitle(channel)}`,
+      glyph: "#",
+      run: () => openRename(channel.id),
+    },
+  ];
+}
+
 export function directCommands(
   conversations: DirectConversation[],
   currentUserID: string,

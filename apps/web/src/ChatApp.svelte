@@ -8,6 +8,7 @@
     accountSettingsCommands,
     channelCommands,
     directCommands,
+    renameChannelCommands,
     PALETTE_ICONS,
     workspaceSettingsCommands,
   } from "./lib/command-palette-commands";
@@ -5664,6 +5665,7 @@
     ];
     return [
       ...actions,
+      ...renameChannelCommands(onConversation && !selectedDirectID ? selectedChannel : undefined, canManageChannels, openRenameChannel),
       ...tangentPaletteCommands(),
       ...channelCommands(channels, (channel) => channel.id, onConversation && !selectedDirectID ? selectedChannelID : "", navigate),
       ...directCommands(directConversations, user?.id ?? "", (conversation) => conversation.id, onConversation ? selectedDirectID : "", navigate),

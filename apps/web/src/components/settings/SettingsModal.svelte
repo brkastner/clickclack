@@ -4,6 +4,7 @@
   import ProfileSettingsForm from "../profile/ProfileSettingsForm.svelte";
   import NotificationSettingsForm from "../profile/NotificationSettingsForm.svelte";
   import MyBotsSection from "./MyBotsSection.svelte";
+  import PiModelsSection from "./PiModelsSection.svelte";
   import ChangePasswordSection from "./ChangePasswordSection.svelte";
   import AppearanceSection from "./AppearanceSection.svelte";
   import { APIError, api, authMethods, readableAPIError } from "../../lib/api";
@@ -295,6 +296,7 @@
         />
       {:else if activeSection === "bots"}
         <MyBotsSection {onClose} />
+        <PiModelsSection />
       {/if}
     </main>
   </div>
